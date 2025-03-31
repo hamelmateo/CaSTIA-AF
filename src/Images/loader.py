@@ -17,9 +17,11 @@ def load_images(dir: Path) -> np.ndarray:
     if not images:
         raise FileNotFoundError(f"No .tif images found in {dir}")
     
-    loaded_images = cv2.imread(str(images))
+    print(f"[INFO] Number of images found: {len(images)}")  # Print the number of images found
 
-    if loaded_images is None:
-        raise ValueError(f"Could not load image: {images}")
+    loaded_images = [cv2.imread(str(image), cv2.IMREAD_UNCHANGED) for image in images]
 
-    return loaded_images
+    if any(img is None for img in loaded_images):
+        raise ValueError(f"Could not load one or more images from {dir}")
+
+    return np.array(loaded_images)
