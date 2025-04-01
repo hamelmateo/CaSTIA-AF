@@ -1,5 +1,5 @@
 from pathlib import Path
-import cv2
+import tifffile
 import numpy as np
 
 
@@ -21,7 +21,7 @@ def load_and_crop_images(dir: Path, roi_scale: float) -> np.ndarray:
     
     print(f"[INFO] Number of images found: {len(images)}")  # Print the number of images found
 
-    loaded_images = [cv2.imread(str(image), cv2.IMREAD_UNCHANGED) for image in images]
+    loaded_images = [tifffile.imread(str(image)) for image in images]
 
     if any(img is None for img in loaded_images):
         raise ValueError(f"Could not load one or more images from {dir}")
