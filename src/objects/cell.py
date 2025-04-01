@@ -36,7 +36,6 @@ class Cell:
         intensities = [image[y, x] for y, x in self.pixel_coords]
         mean_intensity = int(np.mean(intensities))
 
-        print(f"[DEBUG] Appending mean intensity: {mean_intensity}")
         self.intensity_trace.append(mean_intensity)
 
 

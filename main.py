@@ -1,5 +1,5 @@
 from src.images.loader import load_and_crop_images
-from src.config import DATA_DIR, OUTPUT_DIR, ROI_SCALE
+from src.config import DATA_DIR, OUTPUT_DIR, ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING
 from src.objects.segmentation import segmented
 from src.objects.cell import Cell
 import numpy as np
@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     load_existing_cells=True  # Set this flag to True if you want to load existing cells from a file
     cells_file_path = OUTPUT_DIR / "cells.pkl"
-    
+
     if load_existing_cells and cells_file_path.exists():
         print("[DEBUG] Loading existing cells from file...")
         with open(cells_file_path, "rb") as f:
@@ -33,7 +33,7 @@ if __name__ == "__main__":
             nuclei_mask = tifffile.imread(nuclei_mask_path)
         else:
             print("[DEBUG 3] Loading Hoechst images...")
-            nucleis_imgs = load_and_crop_images(DATA_DIR / "HOECHST", ROI_SCALE)
+            nucleis_imgs = load_and_crop_images(DATA_DIR / "HOECHST", ROI_SCALE, HOECHST_FILE_PATTERN,PADDING)
 
             overlay_path = OUTPUT_DIR / "overlay.png"
 
@@ -45,7 +45,7 @@ if __name__ == "__main__":
             )
 
             print("[DEBUG 5] Saving nuclei mask...")
-            tifffile.imwrite(nuclei_mask_path, nuclei_mask)
+            tifffile.imwrite(nuclei_mask_path, nuclei_mask.astype(np.uint16), photometric='minisblack',imagej=True)
             print(f"[INFO] Nuclei mask saved to {nuclei_mask_path}")
 
 
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     # Load FITC images (if any) and add timepoints to each cell
     print("[DEBUG 9] Loading FITC images...")
-    calcium_imgs = load_and_crop_images(DATA_DIR / "FITC_temp", ROI_SCALE)
+    calcium_imgs = load_and_crop_images(DATA_DIR / "FITC_temp", ROI_SCALE, FITC_FILE_PATTERN, PADDING)
     if calcium_imgs.size > 0:
         print("[DEBUG 10] Adding timepoints to cells...")
         for idx, img in enumerate(calcium_imgs):
