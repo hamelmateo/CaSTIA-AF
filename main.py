@@ -1,7 +1,7 @@
-from src.images.loader import load_and_crop_images
-from src.config import DATA_DIR, OUTPUT_DIR, ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING
-from src.objects.segmentation import segmented
-from src.objects.cell import Cell
+from src.io.loader import load_and_crop_images
+from src.config.config import DATA_DIR, OUTPUT_DIR, ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING
+from src.core.segmentation import segmented
+from src.core.cell import Cell
 import numpy as np
 import tifffile
 import time
