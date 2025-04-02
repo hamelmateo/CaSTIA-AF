@@ -1,3 +1,4 @@
+# python -m src.gui
 from PyQt5.QtWidgets import QApplication
 import sys
 from src.gui.viewer import OverlayViewer

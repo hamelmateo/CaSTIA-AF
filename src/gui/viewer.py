@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMainWindow
-from PyQt5.QtGui import QPixmap, QImage, QPen
-from PyQt5.QtCore import Qt, QRectF
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMainWindow, QGraphicsTextItem, QLabel
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush
+from PyQt5.QtCore import Qt, QRectF, QPointF
 from src.io.loader import load_existing_cells
 from src.config.config import CELLS_FILE_PATH, OVERLAY_PATH
 from src.core.cell import Cell
@@ -25,10 +25,16 @@ class OverlayViewer(QMainWindow):
         self.pixmap_item = QGraphicsPixmapItem(QPixmap.fromImage(self.to_qimage(self.overlay_img)))
         self.scene.addItem(self.pixmap_item)
 
-        self.highlight_pen = QPen(Qt.red)
-        self.highlight_pen.setWidth(2)
+        self.valid_pen = QPen(Qt.green)
+        self.invalid_pen = QPen(Qt.red)
+        self.valid_pen.setWidth(2)
+        self.invalid_pen.setWidth(2)
+        self.centroid_brush = QBrush(Qt.red)
 
         self.current_highlight = None
+        self.current_centroid = None
+        self.current_label = None
+
         self.view.setMouseTracking(True)
         self.view.viewport().installEventFilter(self)
 
@@ -69,17 +75,35 @@ class OverlayViewer(QMainWindow):
         return None
 
     def highlight_cell(self, cell):
-        if self.current_highlight:
-            self.scene.removeItem(self.current_highlight)
+        self.clear_highlight()
 
         min_yx = cell.pixel_coords.min(axis=0)
         max_yx = cell.pixel_coords.max(axis=0)
         top_left = min_yx[::-1]
         bottom_right = max_yx[::-1]
         rect = QRectF(top_left[0], top_left[1], bottom_right[0] - top_left[0], bottom_right[1] - top_left[1])
-        self.current_highlight = self.scene.addRect(rect, self.highlight_pen)
+
+        pen = self.valid_pen if cell.is_valid else self.invalid_pen
+        self.current_highlight = self.scene.addRect(rect, pen)
+
+        # Add centroid marker
+        cx, cy = cell.centroid[1], cell.centroid[0]  # (x, y)
+        self.current_centroid = self.scene.addEllipse(cx - 2, cy - 2, 4, 4, pen, self.centroid_brush)
+
+        # Add label
+        label_text = f"ID: {cell.label} ({cx}, {cy})"
+        self.current_label = QGraphicsTextItem(label_text)
+        self.current_label.setDefaultTextColor(Qt.white)
+        self.current_label.setPos(cx + 5, cy - 15)
+        self.scene.addItem(self.current_label)
 
     def clear_highlight(self):
         if self.current_highlight:
             self.scene.removeItem(self.current_highlight)
             self.current_highlight = None
+        if self.current_centroid:
+            self.scene.removeItem(self.current_centroid)
+            self.current_centroid = None
+        if self.current_label:
+            self.scene.removeItem(self.current_label)
+            self.current_label = None

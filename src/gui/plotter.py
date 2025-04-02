@@ -7,7 +7,7 @@ def show_cell_plot(cell: Cell):
         return
 
     fig, ax = plt.subplots()
-    ax.plot(cell.intensity_trace, label=f"Cell {cell.label}")
+    ax.plot(cell.intensity_trace, label=f"Cell {cell.label} ({cell.centroid[1]}, {cell.centroid[0]})")
     ax.set_title(f"Intensity Profile for Cell {cell.label}")
     ax.set_xlabel("Timepoint")
     ax.set_ylabel("Mean Intensity")
