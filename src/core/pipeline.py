@@ -8,8 +8,8 @@ from typing import List
 from src.io.loader import rename_files_with_padding, crop_image
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
-from tqdm import tqdm  # For progress tracking
-
+from tqdm import tqdm
+import os
 
 
 
@@ -115,7 +115,8 @@ def get_cells_intensity_profiles(cells: list[Cell], input_dir: Path, roi_scale: 
 
 
 def compute_intensity_for_image(image_path, cell_coords, roi_scale) -> List[float]:
-    img = tifffile.imread(str(image_path))
+    
+    img = tifffile.imread(str(image_path)) 
     crop_image(img, roi_scale)  # stream from disk
     mean_intensity = []
     for coords in cell_coords:
@@ -149,7 +150,8 @@ def get_cells_intensity_profiles_parallelized(cells, input_dir, pattern, padding
     print(f"[DEBUG] Partial function created with input directory")
 
     # Use tqdm to track progress
-    with ProcessPoolExecutor(max_workers=16) as executor:
+
+    with ProcessPoolExecutor(max_workers= os.cpu_count()) as executor:
         # Wrap the executor.map with tqdm for progress tracking
         results = list(tqdm(executor.map(func, image_paths), total=len(image_paths), desc="Processing Images"))
 
