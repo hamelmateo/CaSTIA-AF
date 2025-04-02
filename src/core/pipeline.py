@@ -103,11 +103,6 @@ def get_cells_intensity_profiles(cells: list[Cell], input_dir: Path, roi_scale: 
     else:
         print("[INFO] No FITC images found.")
 
-    # Plot the intensity traces of the first 5 active cells
-    active_cells = [cell for cell in cells if cell.is_valid]
-    for i, cell in enumerate(active_cells[200:205]):
-        print(f"[INFO] Plotting intensity profile for Cell {cell.label}...")
-        cell.plot_intensity_profile()
 
 
 
