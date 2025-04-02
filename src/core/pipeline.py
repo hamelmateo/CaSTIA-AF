@@ -43,13 +43,12 @@ def cells_segmentation(input_dir: Path, roi_scale: float, file_pattern: str, pad
 
 
 
-def convert_mask_to_cells(nuclei_mask: np.ndarray, output_file_path: Path) -> list[Cell]:
+def convert_mask_to_cells(nuclei_mask: np.ndarray) -> list[Cell]:
     """
     Convert a labeled nuclei mask into a list of Cell objects and save them to a file.
 
     Parameters:
         nuclei_mask (np.ndarray): The labeled mask of nuclei.
-        output_file (Path): Path to save the list of Cell objects.
 
     Returns:
         list[Cell]: A list of Cell objects representing the detected cells.
@@ -76,8 +75,6 @@ def convert_mask_to_cells(nuclei_mask: np.ndarray, output_file_path: Path) -> li
             cells.append(cell)
         
         label += 1
-
-    save_pickle_file(cells, output_file_path)
 
     return cells
 

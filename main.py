@@ -1,4 +1,4 @@
-from src.io.loader import load_existing_cells, load_existing_nuclei_mask
+from src.io.loader import load_existing_cells, load_existing_nuclei_mask, save_pickle_file
 from src.config.config import ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING, CELLS_FILE_PATH, NUCLEI_MASK_PATH, OVERLAY_PATH, EXISTING_CELLS, EXISTING_MASK, SAVE_OVERLAY, HOECHST_IMG_PATH, FITC_IMG_PATH, PARALLELELIZE
 from src.core.pipeline import cells_segmentation
 from src.core.pipeline import convert_mask_to_cells, get_cells_intensity_profiles, get_cells_intensity_profiles_parallelized
@@ -25,8 +25,8 @@ if __name__ == "__main__":
             nuclei_mask = load_existing_nuclei_mask(NUCLEI_MASK_PATH)
 
         # Convert from labeled mask to list of Cell objects
-        cells = convert_mask_to_cells(nuclei_mask, CELLS_FILE_PATH)
-
+        cells = convert_mask_to_cells(nuclei_mask)
+        save_pickle_file(cells, CELLS_FILE_PATH)
     else:
         cells = load_existing_cells(CELLS_FILE_PATH, EXISTING_CELLS)
 
@@ -47,6 +47,9 @@ if __name__ == "__main__":
         print("[DEBUG] Running in parallelized mode for intensity profile computation...")
         get_cells_intensity_profiles_parallelized(active_cells, FITC_IMG_PATH, FITC_FILE_PATTERN, PADDING, ROI_SCALE)
 
+    # Save the updated cells with intensity profiles
+    save_pickle_file(active_cells, CELLS_FILE_PATH)
+    
     print("[INFO] Pipeline completed successfully.")
     end = time.time()
     print(f"[INFO] Total time taken: {end - start:.2f} seconds")
