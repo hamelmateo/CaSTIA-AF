@@ -1,7 +1,7 @@
 from src.io.loader import load_existing_cells, load_existing_nuclei_mask
-from src.config.config import DATA_DIR, OUTPUT_DIR, ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING, CELLS_FILE_PATH, NUCLEI_MASK_PATH, OVERLAY_PATH, EXISTING_CELLS, EXISTING_MASK, SAVE_OVERLAY, HOECHST_IMG_PATH, FITC_IMG_PATH
+from src.config.config import ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING, CELLS_FILE_PATH, NUCLEI_MASK_PATH, OVERLAY_PATH, EXISTING_CELLS, EXISTING_MASK, SAVE_OVERLAY, HOECHST_IMG_PATH, FITC_IMG_PATH, PARALLELELIZE
 from src.core.pipeline import cells_segmentation
-from src.core.pipeline import convert_mask_to_cells, get_cells_intensity_profiles
+from src.core.pipeline import convert_mask_to_cells, get_cells_intensity_profiles, get_cells_intensity_profiles_parallelized
 
 import numpy as np
 import time
@@ -41,7 +41,11 @@ if __name__ == "__main__":
 
 
     # Load FITC images (if any) and add timepoints to each cell
-    get_cells_intensity_profiles(active_cells, FITC_IMG_PATH, ROI_SCALE, FITC_FILE_PATTERN, PADDING)
+    if not PARALLELELIZE:
+        get_cells_intensity_profiles(active_cells, FITC_IMG_PATH, ROI_SCALE, FITC_FILE_PATTERN, PADDING)
+    else:
+        print("[DEBUG] Running in parallelized mode for intensity profile computation...")
+        get_cells_intensity_profiles_parallelized(active_cells, FITC_IMG_PATH, FITC_FILE_PATTERN, PADDING, ROI_SCALE)
 
     print("[INFO] Pipeline completed successfully.")
     end = time.time()

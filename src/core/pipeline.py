@@ -3,6 +3,12 @@ from pathlib import Path
 from src.core.cell import Cell
 from src.io.loader import save_pickle_file, load_and_crop_images, save_tif_image
 from src.core.segmentation import segmented
+import tifffile
+from typing import List
+from src.io.loader import rename_files_with_padding, crop_image
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
+from tqdm import tqdm  # For progress tracking
 
 
 
@@ -105,3 +111,52 @@ def get_cells_intensity_profiles(cells: list[Cell], input_dir: Path, roi_scale: 
     for i, cell in enumerate(active_cells[200:205]):
         print(f"[INFO] Plotting intensity profile for Cell {cell.label}...")
         cell.plot_intensity_profile()
+
+
+
+def compute_intensity_for_image(image_path, cell_coords, roi_scale) -> List[float]:
+    img = tifffile.imread(str(image_path))
+    crop_image(img, roi_scale)  # stream from disk
+    mean_intensity = []
+    for coords in cell_coords:
+        intensities = [img[y, x] for y, x in coords]
+        mean_intensity.append(float(np.mean(intensities)))
+    return mean_intensity
+
+
+
+def get_cells_intensity_profiles_parallelized(cells, input_dir, pattern, padding, roi_scale):
+    """
+    Calculate the intensity profiles for each cell using parallel processing.
+
+    Parameters:
+        cells (list[Cell]): List of Cell objects to process.
+        input_dir (Path): Path to the directory containing FITC images.
+        pattern (str): File pattern to match FITC images.
+        padding (int): Padding for filenames.
+        roi_scale (float): Scale factor for cropping the images.
+    """
+    # Get list of image paths only (don’t load yet)
+    rename_files_with_padding(input_dir, pattern, padding)
+    image_paths = sorted(input_dir.glob("*.TIF"))
+    print("[DEBUG] Sorted image paths")
+
+    # Only send coordinates to workers
+    cell_coords = [cell.pixel_coords for cell in cells]
+
+    # Create a partial function for parallel execution
+    func = partial(compute_intensity_for_image, cell_coords=cell_coords, roi_scale=roi_scale)
+    print(f"[DEBUG] Partial function created with input directory")
+
+    # Use tqdm to track progress
+    with ProcessPoolExecutor(max_workers=16) as executor:
+        # Wrap the executor.map with tqdm for progress tracking
+        results = list(tqdm(executor.map(func, image_paths), total=len(image_paths), desc="Processing Images"))
+
+    print("[DEBUG] Executor map completed. Results collected.")
+
+    # Reconstruct full trace for each cell
+    results_per_cell = list(zip(*results))  # shape: [num_cells][num_timepoints]
+    for cell, trace in zip(cells, results_per_cell):
+        cell.intensity_trace = list(map(int, trace))
+    print("[INFO] Intensity traces reconstructed for all cells.")
