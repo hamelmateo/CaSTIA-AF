@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from src.core.cell import Cell
-from src.io.loader import save_pickle_file, load_and_crop_images, save_tif_image
+from src.io.loader import save_pickle_file, load_and_crop_images, save_tif_image, plot_image_histogram
 from src.core.segmentation import segmented
 import tifffile
 from typing import List

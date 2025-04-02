@@ -1,4 +1,4 @@
-from src.io.loader import load_existing_cells, load_existing_nuclei_mask, save_pickle_file
+from src.io.loader import load_existing_cells, load_existing_img, save_pickle_file
 from src.config.config import ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING, CELLS_FILE_PATH, CELLS_TEMP_FILE_PATH, NUCLEI_MASK_PATH, OVERLAY_PATH, EXISTING_CELLS, EXISTING_MASK, SAVE_OVERLAY, HOECHST_IMG_PATH, FITC_IMG_PATH, PARALLELELIZE, EXISTING_INTENSITY_PROFILE
 from src.core.pipeline import cells_segmentation
 from src.core.pipeline import convert_mask_to_cells, get_cells_intensity_profiles, get_cells_intensity_profiles_parallelized
@@ -22,7 +22,7 @@ if __name__ == "__main__":
         if not EXISTING_MASK or not NUCLEI_MASK_PATH.exists():
             nuclei_mask = cells_segmentation(HOECHST_IMG_PATH, ROI_SCALE, HOECHST_FILE_PATTERN, PADDING, OVERLAY_PATH, SAVE_OVERLAY, NUCLEI_MASK_PATH)
         else:
-            nuclei_mask = load_existing_nuclei_mask(NUCLEI_MASK_PATH)
+            nuclei_mask = load_existing_img(NUCLEI_MASK_PATH)
 
         # Convert from labeled mask to list of Cell objects
         cells = convert_mask_to_cells(nuclei_mask)

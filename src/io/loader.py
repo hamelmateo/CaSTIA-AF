@@ -4,6 +4,7 @@ import tifffile
 import numpy as np
 import re
 import pickle
+import matplotlib.pyplot as plt
 
 
 def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
@@ -103,11 +104,12 @@ def load_existing_cells(file_path: str, load: bool = False) -> list[Cell]:
 
 
 
-def load_existing_nuclei_mask(nuclei_mask_path: str) -> np.ndarray:
-    """Load an existing nuclei mask from a file."""
+def load_existing_img(img_path: str) -> np.ndarray:
+    """Load an existing 16bits grayscale image from a .tif file."""
 
-    print("[DEBUG] Loading existing nuclei mask from file.")
-    return tifffile.imread(nuclei_mask_path)
+    print(f"[DEBUG] Loading existing image from file: {img_path}")
+    img = tifffile.imread(img_path)
+    return img
 
 
 
@@ -137,3 +139,38 @@ def save_pickle_file(data: object, file_path: Path) -> None:
     with open(file_path, "wb") as f:
         pickle.dump(data, f)
     print(f"[INFO] Data saved to {file_path}")
+
+
+
+def plot_image_histogram(img_path, title="Pixel Intensity Histogram", bins=65536):
+    """
+    Plot the pixel intensity histogram of a 16-bit grayscale image or list of images.
+
+    Parameters:
+        img_path (Union[np.ndarray, Path, list[np.ndarray]]): 
+            - A single image as a NumPy array
+            - A Path to a .tif file
+            - A list or array of images
+        title (str): Title of the plot.
+        bins (int): Number of histogram bins (default 256).
+    """
+    if isinstance(img_path, Path):
+        img = tifffile.imread(str(img_path))
+        print(f"[DEBUG] Image dtype: {img.dtype}, min: {img.min()}, max: {img.max()}, mean: {img.mean():.2f}")
+    elif isinstance(img_path, np.ndarray):
+        img = img_path
+    elif isinstance(img_path, (list, tuple, np.ndarray)) and isinstance(img_path[0], np.ndarray):
+        img = np.stack(img_path)
+    else:
+        raise ValueError("Unsupported input type for img_path.")
+
+    flattened = img.ravel()
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(flattened, bins=bins, color='gray')
+    plt.title(title)
+    plt.xlabel("Pixel Intensity")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
