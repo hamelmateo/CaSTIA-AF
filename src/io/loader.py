@@ -1,7 +1,9 @@
 from pathlib import Path
+from src.core.cell import Cell
 import tifffile
 import numpy as np
 import re
+import pickle
 
 
 def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
@@ -39,6 +41,7 @@ def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int
     return np.array(cropped_images)
 
 
+
 def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     """
     Crop the image based on the ROI scale.
@@ -54,6 +57,7 @@ def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     crop_h, crop_w = int(height * scale), int(width * scale)
     start_h, start_w = (height - crop_h) // 2, (width - crop_w) // 2
     return image[start_h:start_h + crop_h, start_w:start_w + crop_w]
+
 
 
 def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -> None:
@@ -75,7 +79,6 @@ def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -
             
             # Skip renaming if the number is already padded
             if len(number) >= padding:
-                print(f"[INFO] Skipping already padded file: {file.name}")
                 continue
 
             # Add leading zeros to the number
@@ -86,3 +89,51 @@ def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -
             # Rename the file
             file.rename(new_path)
             print(f"[INFO] Renamed: {file.name} -> {new_name}")
+
+
+
+def load_existing_cells(file_path: str, load: bool = False) -> list[Cell]:
+    """Load cells from a pickle file."""
+    
+    if load and file_path.exists():
+        with open(file_path, "rb") as f:
+            cells = pickle.load(f)
+        print(f"[INFO] Loaded {len(cells)} cells from {file_path}")
+        return cells
+
+
+
+def load_existing_nuclei_mask(nuclei_mask_path: str) -> np.ndarray:
+    """Load an existing nuclei mask from a file."""
+
+    print("[DEBUG] Loading existing nuclei mask from file.")
+    return tifffile.imread(nuclei_mask_path)
+
+
+
+def save_tif_image(image: np.ndarray, file_path: Path, photometric: str = 'minisblack', imagej: bool = True) -> None:
+    """
+    Save a NumPy array as a .TIF image.
+
+    Parameters:
+        image (np.ndarray): The image to save.
+        file_path (Path): Path to save the .TIF image.
+        photometric (str): Photometric interpretation ('minisblack' for grayscale, etc.).
+        imagej (bool): Whether to save the image in ImageJ-compatible format.
+    """
+    tifffile.imwrite(file_path, image.astype(np.uint16), photometric=photometric, imagej=imagej)
+    print(f"[INFO] Image saved to {file_path}")
+
+
+
+def save_pickle_file(data: object, file_path: Path) -> None:
+    """
+    Save a Python object to a pickle file.
+
+    Parameters:
+        data (object): The Python object to save (e.g., list of cells).
+        file_path (Path): Path to save the pickle file.
+    """
+    with open(file_path, "wb") as f:
+        pickle.dump(data, f)
+    print(f"[INFO] Data saved to {file_path}")

@@ -1,5 +1,5 @@
 import numpy as np
-from src.config import SMALL_OBJECT_THRESHOLD
+from src.config.config import SMALL_OBJECT_THRESHOLD
 import matplotlib.pyplot as plt
 
 

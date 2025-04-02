@@ -1,18 +1,21 @@
 from deepcell.applications import Mesmer
 from deepcell.utils.plot_utils import make_outline_overlay
 import numpy as np
-from matplotlib import pyplot as plt
+from src.io.loader import save_tif_image
+from pathlib import Path
 
 
 
-def segmented(images: np.ndarray = None, output_path: str = "overlay.png", save_overlay: bool = True) -> np.ndarray:
+
+
+def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.ndarray:
     """
     Perform nuclear segmentation on 16-bit grayscale Hoechst images using the Mesmer model.
 
     Args:
         images (np.ndarray): 2D NumPy array representing a single-channel (grayscale) image
                              with dtype=np.uint16. Required shape: (H, W).
-        output_path (str): Path to save the overlay image. Default is "overlay.png".
+        output_path (str): Path to save the overlay image. Default is "overlay.TIF".
         save_overlay (bool): Whether to generate and save a colored overlay of segmentation.
 
     Returns:
@@ -37,8 +40,8 @@ def segmented(images: np.ndarray = None, output_path: str = "overlay.png", save_
         raise ValueError(f"Expected dtype=np.uint16 for 16-bit grayscale image, got {images.dtype}.")
 
     # --- Prepare image for Mesmer ---
-    images_hd = np.stack((images, np.zeros_like(images)), axis=-1)  # shape: (H, W, 2)
-    #images_4d = np.expand_dims(images_4d, axis=0)  # shape: (1, H, W, 2)
+    images_hd = np.stack((images, np.zeros_like(images)), axis=-1)  # shape: (2, H, W, 2)
+#images_4d = np.expand_dims(images_4d, axis=0)  # no need to add an axis because we already have a batch dimension
 
     print(f"[INFO] Image shape after stacking: {images_hd.shape}")
 
@@ -67,13 +70,7 @@ def segmented(images: np.ndarray = None, output_path: str = "overlay.png", save_
     # --- Save overlay if needed ---
     if save_overlay:
         overlay_image = make_outline_overlay(images_hd, nuclei_mask[np.newaxis, ..., np.newaxis])
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(overlay_image[0, ..., 0])
-        ax.set_title("Nuclear Segmentation Overlay")
-        ax.axis("off")
-        fig.savefig(output_path)
-        plt.close(fig)
-        print(f"[INFO] Overlay image saved to {output_path}")
+        save_tif_image(overlay_image[0, ..., 0], output_path)
 
     return nuclei_mask
 
