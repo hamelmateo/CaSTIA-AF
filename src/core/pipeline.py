@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 from src.core.cell import Cell
-from src.io.loader import save_pickle_file, load_and_crop_images, save_tif_image, plot_image_histogram
+from src.io.loader import save_pickle_file, load_and_crop_images, save_tif_image, save_image_histogram
 from src.core.segmentation import segmented
 import tifffile
 from typing import List
@@ -10,6 +10,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
 import os
+from src.config.config import OUTPUT_DIR
 
 
 
@@ -41,8 +42,6 @@ def cells_segmentation(input_dir: Path, roi_scale: float, file_pattern: str, pad
 
 
 
-
-
 def convert_mask_to_cells(nuclei_mask: np.ndarray) -> list[Cell]:
     """
     Convert a labeled nuclei mask into a list of Cell objects and save them to a file.
@@ -56,7 +55,7 @@ def convert_mask_to_cells(nuclei_mask: np.ndarray) -> list[Cell]:
 
     print("[DEBUG] Converting labeled mask to Cell objects...")
     cells = []
-    label = 0
+    label = 1
     while np.any(nuclei_mask == label):
         # Get the coordinates of all pixels with the current label
         pixel_coords = np.argwhere(nuclei_mask == label)
@@ -109,7 +108,7 @@ def get_cells_intensity_profiles(cells: list[Cell], input_dir: Path, roi_scale: 
 def compute_intensity_for_image(image_path, cell_coords, roi_scale) -> List[float]:
     
     img = tifffile.imread(str(image_path)) 
-    crop_image(img, roi_scale)  # stream from disk
+    img = crop_image(img, roi_scale)
     mean_intensity = []
     for coords in cell_coords:
         intensities = [img[y, x] for y, x in coords]
@@ -134,6 +133,8 @@ def get_cells_intensity_profiles_parallelized(cells, input_dir, pattern, padding
     image_paths = sorted(input_dir.glob("*.TIF"))
     print("[DEBUG] Sorted image paths")
 
+    #save_image_histogram(image_paths[150], Path(OUTPUT_DIR / "histogram.png"))
+    
     # Only send coordinates to workers
     cell_coords = [cell.pixel_coords for cell in cells]
 

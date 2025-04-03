@@ -2,21 +2,24 @@ from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, 
 from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush
 from PyQt5.QtCore import Qt, QRectF, QPointF
 from src.io.loader import load_existing_cells
-from src.config.config import CELLS_FILE_PATH, OVERLAY_PATH
-from src.core.cell import Cell
 from src.gui.plotter import show_cell_plot
 import tifffile
 import numpy as np
+from pathlib import Path
 
 
 class OverlayViewer(QMainWindow):
-    def __init__(self):
+    def __init__(self, folder_path: Path):
         super().__init__()
         self.setWindowTitle("Cell Viewer")
         self.setGeometry(100, 100, 1000, 1000)
 
-        self.cells = load_existing_cells(CELLS_FILE_PATH, True)
-        self.overlay_img = tifffile.imread(str(OVERLAY_PATH))
+        self.folder = folder_path
+        self.cells_file = self.folder / "active_cells.pkl"
+        self.overlay_file = self.folder / "overlay.TIF"
+
+        self.cells = load_existing_cells(self.cells_file, True)
+        self.overlay_img = tifffile.imread(str(self.overlay_file))
 
         self.scene = QGraphicsScene(self)
         self.view = QGraphicsView(self.scene, self)

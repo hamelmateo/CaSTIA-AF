@@ -5,6 +5,7 @@ import numpy as np
 import re
 import pickle
 import matplotlib.pyplot as plt
+import random
 
 
 def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
@@ -57,6 +58,7 @@ def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     height, width = image.shape[:2]
     crop_h, crop_w = int(height * scale), int(width * scale)
     start_h, start_w = (height - crop_h) // 2, (width - crop_w) // 2
+
     return image[start_h:start_h + crop_h, start_w:start_w + crop_w]
 
 
@@ -142,35 +144,49 @@ def save_pickle_file(data: object, file_path: Path) -> None:
 
 
 
-def plot_image_histogram(img_path, title="Pixel Intensity Histogram", bins=65536):
+def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Intensity Histogram", bins=65536):
     """
-    Plot the pixel intensity histogram of a 16-bit grayscale image or list of images.
+    Save a histogram of a 16-bit grayscale image to a file.
 
-    Parameters:
-        img_path (Union[np.ndarray, Path, list[np.ndarray]]): 
-            - A single image as a NumPy array
-            - A Path to a .tif file
-            - A list or array of images
-        title (str): Title of the plot.
-        bins (int): Number of histogram bins (default 256).
+    Args:
+        image_path (Path): Path to the FITC .tif image.
+        output_path (Path): Path to save the histogram PNG.
+        title (str): Plot title.
+        bins (int): Number of bins for histogram.
     """
-    if isinstance(img_path, Path):
-        img = tifffile.imread(str(img_path))
-        print(f"[DEBUG] Image dtype: {img.dtype}, min: {img.min()}, max: {img.max()}, mean: {img.mean():.2f}")
-    elif isinstance(img_path, np.ndarray):
-        img = img_path
-    elif isinstance(img_path, (list, tuple, np.ndarray)) and isinstance(img_path[0], np.ndarray):
-        img = np.stack(img_path)
-    else:
-        raise ValueError("Unsupported input type for img_path.")
-
+    img = tifffile.imread(str(image_path))
     flattened = img.ravel()
 
     plt.figure(figsize=(10, 6))
-    plt.hist(flattened, bins=bins, color='gray')
+    plt.hist(flattened, bins=bins, color='green')
     plt.title(title)
     plt.xlabel("Pixel Intensity")
     plt.ylabel("Frequency")
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    plt.savefig(output_path)
+    plt.close()
+
+    print(f"[INFO] Histogram saved to {output_path}")
+
+
+
+def generate_random_cell_overlay(cells: list, output_path):
+    """
+    Create a grayscale image where each cell is assigned a random intensity for visualization.
+
+    Args:
+        cells (list[Cell]): List of Cell objects.
+        output_path (Path): Path to save the .tif file.
+    """
+    overlay = np.zeros((1536, 1536), dtype=np.uint16)
+
+    for cell in cells:
+        if not cell.pixel_coords.size:
+            continue
+        val = random.randint(10_000, 60_000)
+        for y, x in cell.pixel_coords:
+            overlay[y, x] = val
+
+    save_tif_image(overlay, output_path)
+    print(f"[INFO] Debug overlay saved at: {output_path}")
