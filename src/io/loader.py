@@ -1,158 +1,155 @@
 from pathlib import Path
-from src.core.cell import Cell
 import tifffile
 import numpy as np
 import re
 import pickle
 import matplotlib.pyplot as plt
 import random
+import logging
+from typing import List
+
+from src.core.cell import Cell
+
+logger = logging.getLogger(__name__)
+
 
 
 def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
     """
-    Load .tif images in the folder (16-bit grayscale), rename them with padded numbers, 
-    and crop them to a specific ROI.
+    Load .tif images from a directory, rename them with padded numbers, and crop to ROI.
 
-    Parameters:
+    Args:
         dir (Path): Path to folder.
-        roi_scale (float): Scale factor for cropping (e.g., 0.75 for 75%).
-        pattern (str): Regex pattern to match filenames (e.g., "20250326_w3FITC_t(\d+).TIF").
-        padding (int): Number of digits to pad the numbers to (default is 5).
-    
-    Returns:
-        (np.ndarray): An array of cropped images from the folder.
-    """
-    # Rename files with padded numbers
-    rename_files_with_padding(dir, pattern, padding)
+        roi_scale (float): Scale factor for cropping (e.g., 0.75).
+        pattern (str): Regex pattern to match filenames.
+        padding (int): Padding digits for filename numbering.
 
-    # Load images after renaming
+    Returns:
+        np.ndarray: Array of cropped images.
+
+    Raises:
+        FileNotFoundError: If no .tif images are found.
+        ValueError: If any image failed to load.
+    """
+    rename_files_with_padding(dir, pattern, padding)
     images = list(dir.glob("*.TIF"))
     if not images:
         raise FileNotFoundError(f"No .tif images found in {dir}")
-    
-    print(f"[INFO] Number of images found: {len(images)}")  # Print the number of images found
 
+    logger.info(f"Found {len(images)} images in directory: {dir}")
     loaded_images = [tifffile.imread(str(image)) for image in images]
 
     if any(img is None for img in loaded_images):
         raise ValueError(f"Could not load one or more images from {dir}")
 
-    # Crop images to the specified ROI scale
     cropped_images = [crop_image(img, roi_scale) for img in loaded_images]
-
     return np.array(cropped_images)
-
-
 
 def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     """
     Crop the image based on the ROI scale.
 
-    Parameters:
+    Args:
         image (np.ndarray): The input image to crop.
-        scale (float): The scale factor for cropping (e.g., 0.75 for 75%).
+        scale (float): Scale factor for cropping.
 
     Returns:
-        np.ndarray: The cropped image.
+        np.ndarray: Cropped image.
     """
     height, width = image.shape[:2]
     crop_h, crop_w = int(height * scale), int(width * scale)
     start_h, start_w = (height - crop_h) // 2, (width - crop_w) // 2
-
     return image[start_h:start_h + crop_h, start_w:start_w + crop_w]
-
-
 
 def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -> None:
     """
-    Rename files in the directory by adding leading zeros to numbers in filenames.
+    Rename files in a directory to pad numeric portions with leading zeros.
 
-    Parameters:
-        directory (Path): Path to the directory containing the files.
-        pattern (str): Regex pattern to match filenames (e.g., "20250326_w3FITC_t(\d+).TIF").
-        padding (int): Number of digits to pad the numbers to (default is 5).
+    Args:
+        directory (Path): Path to files.
+        pattern (str): Regex pattern with numeric group.
+        padding (int): Digits to pad to.
     """
-    files = list(directory.glob("*.TIF"))
     regex = re.compile(pattern)
-
-    for file in files:
+    for file in directory.glob("*.TIF"):
         match = regex.search(file.name)
         if match:
             number = match.group(1)
-            
-            # Skip renaming if the number is already padded
             if len(number) >= padding:
                 continue
-
-            # Add leading zeros to the number
             padded_number = number.zfill(padding)
             new_name = file.name.replace(f"t{number}", f"t{padded_number}")
             new_path = directory / new_name
-
-            # Rename the file
             file.rename(new_path)
-            print(f"[INFO] Renamed: {file.name} -> {new_name}")
+            logger.info(f"Renamed: {file.name} -> {new_name}")
 
+def load_existing_cells(file_path: Path, load: bool = False) -> List[Cell]:
+    """
+    Load cells from a pickle file.
 
+    Args:
+        file_path (Path): Path to the pickle file.
+        load (bool): Whether to actually load the file (useful for toggling).
 
-def load_existing_cells(file_path: str, load: bool = False) -> list[Cell]:
-    """Load cells from a pickle file."""
-    
+    Returns:
+        List[Cell]: List of Cell objects.
+    """
     if load and file_path.exists():
         with open(file_path, "rb") as f:
             cells = pickle.load(f)
-        print(f"[INFO] Loaded {len(cells)} cells from {file_path}")
+        logger.info(f"Loaded {len(cells)} cells from {file_path}")
         return cells
+    else:
+        logger.warning(f"File {file_path} not loaded (missing or load=False). Returning empty list.")
+        return []
 
+def load_existing_img(img_path: Path) -> np.ndarray:
+    """
+    Load a 16-bit grayscale image from a .tif file.
 
+    Args:
+        img_path (Path): Path to the .tif file.
 
-def load_existing_img(img_path: str) -> np.ndarray:
-    """Load an existing 16bits grayscale image from a .tif file."""
-
-    print(f"[DEBUG] Loading existing image from file: {img_path}")
-    img = tifffile.imread(img_path)
-    return img
-
-
+    Returns:
+        np.ndarray: Loaded image.
+    """
+    logger.debug(f"Loading image from: {img_path}")
+    return tifffile.imread(str(img_path))
 
 def save_tif_image(image: np.ndarray, file_path: Path, photometric: str = 'minisblack', imagej: bool = True) -> None:
     """
-    Save a NumPy array as a .TIF image.
+    Save an image as .TIF.
 
-    Parameters:
-        image (np.ndarray): The image to save.
-        file_path (Path): Path to save the .TIF image.
-        photometric (str): Photometric interpretation ('minisblack' for grayscale, etc.).
-        imagej (bool): Whether to save the image in ImageJ-compatible format.
+    Args:
+        image (np.ndarray): Image data.
+        file_path (Path): Save path.
+        photometric (str): Interpretation mode.
+        imagej (bool): Save in ImageJ-compatible format.
     """
     tifffile.imwrite(file_path, image.astype(np.uint16), photometric=photometric, imagej=imagej)
-    print(f"[INFO] Image saved to {file_path}")
-
-
+    logger.info(f"Saved .tif image to: {file_path}")
 
 def save_pickle_file(data: object, file_path: Path) -> None:
     """
-    Save a Python object to a pickle file.
+    Save a Python object using pickle.
 
-    Parameters:
-        data (object): The Python object to save (e.g., list of cells).
-        file_path (Path): Path to save the pickle file.
+    Args:
+        data (object): Python object to save.
+        file_path (Path): Save path.
     """
     with open(file_path, "wb") as f:
         pickle.dump(data, f)
-    print(f"[INFO] Data saved to {file_path}")
+    logger.info(f"Pickle saved to: {file_path}")
 
-
-
-def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Intensity Histogram", bins=65536):
+def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Intensity Histogram", bins=65536) -> None:
     """
-    Save a histogram of a 16-bit grayscale image to a file.
+    Save a histogram plot of 16-bit grayscale image intensities.
 
     Args:
-        image_path (Path): Path to the FITC .tif image.
-        output_path (Path): Path to save the histogram PNG.
+        image_path (Path): Path to the input image.
+        output_path (Path): Path to save PNG.
         title (str): Plot title.
-        bins (int): Number of bins for histogram.
+        bins (int): Number of bins.
     """
     img = tifffile.imread(str(image_path))
     flattened = img.ravel()
@@ -166,27 +163,22 @@ def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Inten
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close()
+    logger.info(f"Histogram saved to {output_path}")
 
-    print(f"[INFO] Histogram saved to {output_path}")
-
-
-
-def generate_random_cell_overlay(cells: list, output_path):
+def generate_random_cell_overlay(cells: List[Cell], output_path: Path) -> None:
     """
-    Create a grayscale image where each cell is assigned a random intensity for visualization.
+    Generate a grayscale image with random intensities assigned per cell.
 
     Args:
-        cells (list[Cell]): List of Cell objects.
-        output_path (Path): Path to save the .tif file.
+        cells (List[Cell]): List of Cell objects.
+        output_path (Path): Save path.
     """
     overlay = np.zeros((1536, 1536), dtype=np.uint16)
-
     for cell in cells:
         if not cell.pixel_coords.size:
             continue
         val = random.randint(10_000, 60_000)
         for y, x in cell.pixel_coords:
             overlay[y, x] = val
-
     save_tif_image(overlay, output_path)
-    print(f"[INFO] Debug overlay saved at: {output_path}")
+    logger.info(f"Random cell overlay saved at: {output_path}")

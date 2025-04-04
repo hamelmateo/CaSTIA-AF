@@ -1,16 +1,28 @@
 import matplotlib.pyplot as plt
+import logging
 from src.core.cell import Cell
 
-def show_cell_plot(cell: Cell):
-    if len(cell.intensity_trace) == 0:
-        print(f"[INFO] Cell {cell.label} has no intensity data to plot.")
+logger = logging.getLogger(__name__)
+
+def show_cell_plot(cell: Cell) -> None:
+    """
+    Plot the intensity trace of a single cell.
+
+    Args:
+        cell (Cell): The cell object whose intensity trace will be plotted.
+    """
+    if not cell.intensity_trace:
+        logger.info(f"Cell {cell.label} has no intensity data to plot.")
         return
 
-    fig, ax = plt.subplots()
-    ax.plot(cell.intensity_trace, label=f"Cell {cell.label} ({cell.centroid[1]}, {cell.centroid[0]})")
-    ax.set_title(f"Intensity Profile for Cell {cell.label}")
-    ax.set_xlabel("Timepoint")
-    ax.set_ylabel("Mean Intensity")
-    ax.legend()
-    ax.grid(True)
-    plt.show(block=False)
+    try:
+        fig, ax = plt.subplots()
+        ax.plot(cell.intensity_trace, label=f"Cell {cell.label} ({cell.centroid[1]}, {cell.centroid[0]})")
+        ax.set_title(f"Intensity Profile for Cell {cell.label}")
+        ax.set_xlabel("Timepoint")
+        ax.set_ylabel("Mean Intensity")
+        ax.legend()
+        ax.grid(True)
+        plt.show(block=False)
+    except Exception as e:
+        logger.error(f"Failed to plot intensity profile for cell {cell.label}: {e}")

@@ -3,19 +3,47 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
+import logging
+
+from src.core.cell import Cell
+from typing import List, Tuple
+
+logger = logging.getLogger(__name__)
 
 
-def run_umap_on_cells(active_cells, n_neighbors, min_dist, n_components, normalize):
-    
+def run_umap_on_cells(
+    active_cells: List[Cell],
+    n_neighbors: int,
+    min_dist: float,
+    n_components: int,
+    normalize: bool
+) -> np.ndarray:
+    """
+    Run UMAP dimensionality reduction on active cell intensity traces.
+
+    Args:
+        active_cells (List[Cell]): List of valid Cell objects with intensity traces.
+        n_neighbors (int): Number of neighbors for UMAP.
+        min_dist (float): Minimum distance parameter for UMAP.
+        n_components (int): Target dimensionality.
+        normalize (bool): Whether to standardize the data before UMAP.
+
+    Returns:
+        np.ndarray: 2D array representing UMAP embedding.
+    """
     traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
-    
+
     if normalize:
         traces = StandardScaler().fit_transform(traces)
     else:
         traces = np.array(traces)
 
-    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
-    embedding = reducer.fit_transform(traces)
+    try:
+        reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+        embedding = reducer.fit_transform(traces)
+    except Exception as e:
+        logger.error(f"UMAP failed: {e}")
+        raise
 
     plt.figure(figsize=(8, 6))
     plt.scatter(embedding[:, 0], embedding[:, 1], s=10, c='blue', alpha=0.6)
@@ -24,7 +52,6 @@ def run_umap_on_cells(active_cells, n_neighbors, min_dist, n_components, normali
     plt.ylabel("UMAP-2")
     plt.grid(True)
 
-    # Add UMAP parameters as legend-like textbox
     param_text = (
         f"UMAP Params:\n"
         f"n_neighbors = {n_neighbors}\n"
@@ -33,34 +60,59 @@ def run_umap_on_cells(active_cells, n_neighbors, min_dist, n_components, normali
         f"normalized = {normalize}"
     )
     plt.gca().text(0.95, 0.95, param_text, transform=plt.gca().transAxes,
-                    fontsize=9, verticalalignment='top', horizontalalignment='right',
-                    bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8))
+                   fontsize=9, verticalalignment='top', horizontalalignment='right',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8))
 
     plt.tight_layout()
     plt.show()
 
     return embedding
 
+def run_umap_with_clustering(
+    active_cells: List[Cell],
+    n_neighbors: int,
+    min_dist: float,
+    n_components: int,
+    normalize: bool,
+    eps: float,
+    min_samples: int
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Perform UMAP followed by DBSCAN clustering on active cells.
 
+    Args:
+        active_cells (List[Cell]): List of valid Cell objects with intensity traces.
+        n_neighbors (int): Number of neighbors for UMAP.
+        min_dist (float): Minimum distance for UMAP.
+        n_components (int): Target dimensionality.
+        normalize (bool): Whether to standardize the traces.
+        eps (float): DBSCAN epsilon radius.
+        min_samples (int): Minimum samples per cluster for DBSCAN.
 
-def run_umap_with_clustering(active_cells, n_neighbors, min_dist, n_components, normalize, eps, min_samples):
-    
-
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: UMAP embeddings and DBSCAN cluster labels.
+    """
     traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
-    
+
     if normalize:
         traces = StandardScaler().fit_transform(traces)
     else:
         traces = np.array(traces)
 
-    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
-    embedding = reducer.fit_transform(traces)
+    try:
+        reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+        embedding = reducer.fit_transform(traces)
+    except Exception as e:
+        logger.error(f"UMAP failed: {e}")
+        raise
 
-    # Run DBSCAN on UMAP embedding
-    clustering = DBSCAN(eps=eps, min_samples=min_samples)
-    labels = clustering.fit_predict(embedding)
+    try:
+        clustering = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = clustering.fit_predict(embedding)
+    except Exception as e:
+        logger.error(f"DBSCAN failed: {e}")
+        raise
 
-    # Plot
     plt.figure(figsize=(8, 6))
     num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
     noise_points = list(labels).count(-1)
@@ -70,7 +122,6 @@ def run_umap_with_clustering(active_cells, n_neighbors, min_dist, n_components, 
     plt.xlabel("UMAP-1")
     plt.ylabel("UMAP-2")
 
-    # UMAP + Clustering parameters
     param_text = (
         f"UMAP:\n  neighbors={n_neighbors}\n  min_dist={min_dist}\n  normalized={normalize}\n"
         f"DBSCAN:\n  eps={eps}\n  min_samples={min_samples}"
