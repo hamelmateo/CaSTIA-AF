@@ -2,10 +2,9 @@ from src.io.loader import load_existing_cells, load_existing_img, save_pickle_fi
 from src.config.config import ROI_SCALE, FITC_FILE_PATTERN, HOECHST_FILE_PATTERN, PADDING, ACTIVE_CELLS_FILE_PATH, CELLS_FILE_PATH, TEMP_OVERLAY_PATH, NUCLEI_MASK_PATH, OVERLAY_PATH, EXISTING_CELLS, EXISTING_MASK, SAVE_OVERLAY, HOECHST_IMG_PATH, FITC_IMG_PATH, PARALLELELIZE, EXISTING_INTENSITY_PROFILE
 from src.core.pipeline import cells_segmentation
 from src.core.pipeline import convert_mask_to_cells, get_cells_intensity_profiles, get_cells_intensity_profiles_parallelized
+from src.analysis.umap_analysis import run_umap_on_cells, run_umap_with_clustering
 
-import numpy as np
 import time
-from pathlib import Path
 
 
 
@@ -54,8 +53,13 @@ if __name__ == "__main__":
 
 
     # Generate random cell overlay
-    overlay = generate_random_cell_overlay(active_cells, TEMP_OVERLAY_PATH)
+    # overlay = generate_random_cell_overlay(active_cells, TEMP_OVERLAY_PATH)
 
+    # Run UMAP analysis on active cells
+    print("[INFO] Running UMAP analysis...")
+    #run_umap_on_cells(active_cells, n_neighbors=100, min_dist=0.5, n_components=2, normalize=True)
+    
+    run_umap_with_clustering(active_cells, n_neighbors=5, min_dist=1, n_components=2, normalize=True, eps=0.5, min_samples=5)
 
     print("[INFO] Pipeline completed successfully.")
     end = time.time()

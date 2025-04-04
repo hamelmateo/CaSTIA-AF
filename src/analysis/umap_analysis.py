@@ -1,0 +1,86 @@
+import umap
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import DBSCAN
+
+
+def run_umap_on_cells(active_cells, n_neighbors, min_dist, n_components, normalize):
+    
+    traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
+    
+    if normalize:
+        traces = StandardScaler().fit_transform(traces)
+    else:
+        traces = np.array(traces)
+
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+    embedding = reducer.fit_transform(traces)
+
+    plt.figure(figsize=(8, 6))
+    plt.scatter(embedding[:, 0], embedding[:, 1], s=10, c='blue', alpha=0.6)
+    plt.title("UMAP Projection of Calcium Time Series")
+    plt.xlabel("UMAP-1")
+    plt.ylabel("UMAP-2")
+    plt.grid(True)
+
+    # Add UMAP parameters as legend-like textbox
+    param_text = (
+        f"UMAP Params:\n"
+        f"n_neighbors = {n_neighbors}\n"
+        f"min_dist = {min_dist}\n"
+        f"n_components = {n_components}\n"
+        f"normalized = {normalize}"
+    )
+    plt.gca().text(0.95, 0.95, param_text, transform=plt.gca().transAxes,
+                    fontsize=9, verticalalignment='top', horizontalalignment='right',
+                    bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8))
+
+    plt.tight_layout()
+    plt.show()
+
+    return embedding
+
+
+
+def run_umap_with_clustering(active_cells, n_neighbors, min_dist, n_components, normalize, eps, min_samples):
+    
+
+    traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
+    
+    if normalize:
+        traces = StandardScaler().fit_transform(traces)
+    else:
+        traces = np.array(traces)
+
+    reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+    embedding = reducer.fit_transform(traces)
+
+    # Run DBSCAN on UMAP embedding
+    clustering = DBSCAN(eps=eps, min_samples=min_samples)
+    labels = clustering.fit_predict(embedding)
+
+    # Plot
+    plt.figure(figsize=(8, 6))
+    num_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    noise_points = list(labels).count(-1)
+
+    scatter = plt.scatter(embedding[:, 0], embedding[:, 1], c=labels, cmap='tab10', s=10, alpha=0.7)
+    plt.title(f"UMAP + DBSCAN Clustering\n{num_clusters} clusters, {noise_points} noise points")
+    plt.xlabel("UMAP-1")
+    plt.ylabel("UMAP-2")
+
+    # UMAP + Clustering parameters
+    param_text = (
+        f"UMAP:\n  neighbors={n_neighbors}\n  min_dist={min_dist}\n  normalized={normalize}\n"
+        f"DBSCAN:\n  eps={eps}\n  min_samples={min_samples}"
+    )
+    plt.gca().text(0.97, 0.97, param_text, transform=plt.gca().transAxes,
+                   fontsize=9, verticalalignment='top', horizontalalignment='right',
+                   bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8))
+
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    return embedding, labels
