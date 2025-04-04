@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from src.config.config import SMALL_OBJECT_THRESHOLD
 import logging
 from typing import Optional
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import butter, filtfilt
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +62,40 @@ class Cell:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+    def get_processed_trace(self, sigma: float = 2.0, cutoff: float = 0.01, fs: float = 1.0, order: int = 2) -> np.ndarray:
+        """
+        Return the processed intensity trace:
+        1. High-pass filter to remove photobleaching
+        2. Gaussian smoothing to reduce noise
+        3. Normalization to [0, 1] range with baseline = 0
+
+        Args:
+            sigma (float): Standard deviation for Gaussian smoothing.
+            cutoff (float): High-pass filter cutoff frequency (Hz).
+            fs (float): Sampling frequency (Hz).
+            order (int): Filter order.
+
+        Returns:
+            np.ndarray: Normalized and denoised trace.
+        """
+        if not self.intensity_trace:
+            return np.array([])
+
+        raw = np.array(self.intensity_trace)
+
+        # Step 1: High-pass filter (remove low-frequency drift)
+        nyquist = 0.5 * fs
+        norm_cutoff = cutoff / nyquist
+        b, a = butter(order, norm_cutoff, btype='high', analog=False)
+        detrended = filtfilt(b, a, raw)
+
+        # Step 2: Gaussian smoothing
+        smoothed = gaussian_filter1d(detrended, sigma=sigma)
+
+        # Step 3: Normalize to [0, 1]
+        baseline = np.percentile(smoothed, 10)
+        peak = np.max(smoothed)
+        normalized = (smoothed - baseline) / (peak - baseline + 1e-8)
+
+        return normalized

@@ -10,16 +10,17 @@ from tqdm import tqdm
 
 from src.core.cell import Cell
 from src.io.loader import (
+    save_pickle_file,
     load_and_crop_images,
     save_tif_image,
+    save_image_histogram,
     rename_files_with_padding,
     crop_image,
 )
 from src.core.segmentation import segmented
+from src.config.config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
-
-
 
 def cells_segmentation(
     input_dir: Path,
@@ -131,10 +132,15 @@ def get_cells_intensity_profiles_parallelized(
     input_dir: Path,
     pattern: str,
     padding: int,
-    roi_scale: float
+    roi_scale: float,
+    gaussian_sigma: float, 
+    hpf_cutoff: float, 
+    sampling_freq: float, 
+    order: int
 ) -> None:
     """
-    Calculate the intensity profiles for each cell using parallel processing.
+    Calculate the intensity profiles for each cell using parallel processing
+    and update each cell with its processed trace.
 
     Args:
         cells (List[Cell]): List of Cell objects to process.
@@ -161,4 +167,8 @@ def get_cells_intensity_profiles_parallelized(
     results_per_cell = list(zip(*results))
     for cell, trace in zip(cells, results_per_cell):
         cell.intensity_trace = list(map(int, trace))
-    logger.info("Intensity traces reconstructed for all cells.")
+        # Overwrite with processed trace directly
+        processed = cell.get_processed_trace(gaussian_sigma, hpf_cutoff, sampling_freq, order)
+        cell.intensity_trace = list(map(float, processed))
+
+    logger.info("Processed intensity traces set for all cells.")
