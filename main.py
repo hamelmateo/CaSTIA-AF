@@ -29,7 +29,7 @@ from src.core.pipeline import (
     get_cells_intensity_profiles,
     get_cells_intensity_profiles_parallelized,
 )
-from src.analysis.umap_analysis import run_umap_with_clustering
+from src.analysis.umap_analysis import run_umap_with_clustering, run_umap_on_cells
 from src.analysis.tuning import explore_processing_parameters
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
@@ -140,20 +140,20 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     #    explore_processing_parameters(example_cell, sigmas, cutoffs)
 
 
-    #logger.info("Running UMAP + DBSCAN clustering...")
-    # try:
-    #     run_umap_with_clustering(
-    #         active_cells,
-    #         n_neighbors=5,
-    #         min_dist=1,
-    #         n_components=2,
-    #         normalize=True,
-    #         eps=0.5,
-    #         min_samples=5,
-    #     )
-    # except Exception as e:
-    #     logger.error(f"UMAP analysis failed: {e}")
-    #     return
+    logger.info("Running UMAP...")
+    try:
+        run_umap_on_cells(
+            active_cells,
+            n_neighbors=5,
+            min_dist=1,
+            n_components=2,
+            normalize=True,
+            eps=0.5,
+            min_samples=5,
+        )
+    except Exception as e:
+        logger.error(f"UMAP analysis failed: {e}")
+        return
 
     logger.info(f"Pipeline for {data_path.name} completed successfully in {time.time() - start:.2f} seconds")
 
