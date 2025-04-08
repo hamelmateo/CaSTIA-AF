@@ -5,6 +5,7 @@ import sys
 import logging
 
 from src.gui.viewer import OverlayViewer
+from src.gui.umap_viewer import UMAPViewer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -21,7 +22,8 @@ def main() -> None:
             logger.info("No folder selected. Exiting.")
             return
 
-        viewer = OverlayViewer(Path(folder))
+        viewer = UMAPViewer()
+        #viewer = OverlayViewer(Path(folder))
         viewer.show()
         sys.exit(app.exec_())
 

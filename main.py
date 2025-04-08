@@ -30,7 +30,7 @@ from src.core.pipeline import (
     get_cells_intensity_profiles_parallelized,
 )
 from src.analysis.umap_analysis import run_umap_with_clustering, run_umap_on_cells
-from src.analysis.tuning import explore_processing_parameters
+from src.analysis.tuning import explore_processing_parameters, explore_umap_parameters
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
 import random
@@ -56,6 +56,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     temp_overlay_path = output_path / "temp_overlay.TIF"
     cells_file_path = output_path / "cells.pkl"
     active_cells_file_path = output_path / "active_cells.pkl"
+    umap_file_path = output_path / "umap.npy"
 
     hoechst_img_path = data_path / "HOECHST"
     fitc_img_path = data_path / "FITC"
@@ -140,20 +141,35 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     #    explore_processing_parameters(example_cell, sigmas, cutoffs)
 
 
+    #logger.info("Running UMAP...")
+    #try:
+    #    explore_umap_parameters(
+    #        active_cells,
+    #        neighbors_list=[5, 10, 15, 30, 50],
+    #        min_dist_list=[0.01, 0.1, 0.3, 0.5, 0.9],
+    #        normalize_options=[True, False],
+    #        n_components=2
+    #    )
+    #except Exception as e:
+    #    logger.error(f"UMAP finetuning failed: {e}")
+    #    return
+
+
+    
     logger.info("Running UMAP...")
     try:
         run_umap_on_cells(
-            active_cells,
-            n_neighbors=5,
+            active_cells, 
+            umap_file_path,
+            n_neighbors=5, 
             min_dist=1,
             n_components=2,
-            normalize=True,
-            eps=0.5,
-            min_samples=5,
+            normalize=False,
         )
     except Exception as e:
-        logger.error(f"UMAP analysis failed: {e}")
+        logger.error(f"UMAP finetuning failed: {e}")
         return
+
 
     logger.info(f"Pipeline for {data_path.name} completed successfully in {time.time() - start:.2f} seconds")
 

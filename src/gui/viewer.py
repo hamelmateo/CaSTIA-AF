@@ -10,6 +10,8 @@ import tifffile
 import numpy as np
 from pathlib import Path
 import logging
+from typing import Optional, Callable
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,7 @@ class OverlayViewer(QMainWindow):
         self.folder = folder_path
         self.cells_file = self.folder / "active_cells.pkl"
         self.overlay_file = self.folder / "overlay.TIF"
+        self.cell_click_callback: Optional[Callable[[object], None]] = None
 
         try:
             self.cells = load_existing_cells(self.cells_file, True)
@@ -115,6 +118,8 @@ class OverlayViewer(QMainWindow):
                 if selected_cell:
                     try:
                         show_cell_plot(selected_cell)
+                        if self.cell_click_callback:
+                            self.cell_click_callback(selected_cell)
                     except Exception as e:
                         logger.warning(f"Failed to plot intensity: {e}")
 
@@ -138,3 +143,19 @@ class OverlayViewer(QMainWindow):
         for item in self.current_highlight:
             self.scene.removeItem(item)
         self.current_highlight.clear()
+
+    def set_callback(self, callback: Callable[[object], None]):
+        """
+        Register a function to call when a cell is clicked.
+        """
+        self.cell_click_callback = callback
+
+    def highlight_cell_by_label(self, label: int):
+        """
+        Highlight a specific cell in the overlay by its label.
+        """
+        for cell in self.cells:
+            if cell.label == label:
+                self.clear_highlight()
+                self.highlight_cell(cell)
+            break

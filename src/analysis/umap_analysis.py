@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
 import logging
+from pathlib import Path
 
 from src.core.cell import Cell
 from typing import List, Tuple
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 def run_umap_on_cells(
     active_cells: List[Cell],
+    output_path: Path,
     n_neighbors: int,
     min_dist: float,
     n_components: int,
@@ -41,6 +43,7 @@ def run_umap_on_cells(
     try:
         reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
         embedding = reducer.fit_transform(traces)
+        np.save(output_path, embedding)
     except Exception as e:
         logger.error(f"UMAP failed: {e}")
         raise
