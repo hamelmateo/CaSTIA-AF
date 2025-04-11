@@ -62,7 +62,6 @@ def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.n
         if save_overlay:
             overlay_image = make_outline_overlay(images_hd, nuclei_mask[np.newaxis, ..., np.newaxis])
             save_tif_image(overlay_image[0, ..., 0], output_path)
-            logger.info(f"Overlay image saved to: {output_path}")
 
         return nuclei_mask
 

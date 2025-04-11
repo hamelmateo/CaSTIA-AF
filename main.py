@@ -1,17 +1,14 @@
 import time
 import logging
 from pathlib import Path
-from typing import List
 
 from src.io.loader import (
-    load_existing_cells,
-    load_existing_img,
+    load_cells_from_pickle,
+    load_images,
     save_pickle_file,
 )
 from src.config.config import (
     ROI_SCALE,
-    FITC_FILE_PATTERN,
-    HOECHST_FILE_PATTERN,
     PADDING,
     PARALLELELIZE,
     SAVE_OVERLAY,
@@ -21,7 +18,8 @@ from src.config.config import (
     GAUSSIAN_SIGMA,
     HPF_CUTOFF,
     SAMPLING_FREQ,
-    ORDER
+    ORDER,
+    BTYPE
 )
 from src.core.pipeline import (
     cells_segmentation,
@@ -29,11 +27,9 @@ from src.core.pipeline import (
     get_cells_intensity_profiles,
     get_cells_intensity_profiles_parallelized,
 )
-from src.analysis.umap_analysis import run_umap_with_clustering, run_umap_on_cells
-from src.analysis.tuning import explore_processing_parameters, explore_umap_parameters
+from src.analysis.umap_analysis import run_umap_on_cells
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
-import random
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -51,9 +47,12 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     """
     output_path.mkdir(parents=True, exist_ok=True)
 
+    directory_name = data_path.name
+    fitc_file_pattern = rf"{directory_name}__w3FITC_t(\d+).TIF"
+    hoechst_file_pattern = rf"{directory_name}__w2DAPI_t(\d+).TIF"
+
     nuclei_mask_path = output_path / "nuclei_mask.TIF"
     overlay_path = output_path / "overlay.TIF"
-    temp_overlay_path = output_path / "temp_overlay.TIF"
     cells_file_path = output_path / "cells.pkl"
     active_cells_file_path = output_path / "active_cells.pkl"
     umap_file_path = output_path / "umap.npy"
@@ -70,7 +69,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                 nuclei_mask = cells_segmentation(
                     hoechst_img_path,
                     ROI_SCALE,
-                    HOECHST_FILE_PATTERN,
+                    hoechst_file_pattern,
                     PADDING,
                     overlay_path,
                     SAVE_OVERLAY,
@@ -81,7 +80,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                 return
         else:
             try:
-                nuclei_mask = load_existing_img(nuclei_mask_path)
+                nuclei_mask = load_images(nuclei_mask_path)
             except Exception as e:
                 logger.error(f"Failed to load existing mask: {e}")
                 return
@@ -93,7 +92,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
             logger.error(f"Error converting/saving cells: {e}")
             return
     else:
-        cells = load_existing_cells(cells_file_path, EXISTING_CELLS)
+        cells = load_cells_from_pickle(cells_file_path, EXISTING_CELLS)
 
     logger.info(f"Number of cells detected: {len(cells)}")
 
@@ -107,7 +106,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                     active_cells,
                     fitc_img_path,
                     ROI_SCALE,
-                    FITC_FILE_PATTERN,
+                    fitc_file_pattern, 
                     PADDING,
                 )
             else:
@@ -115,47 +114,22 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                 get_cells_intensity_profiles_parallelized(
                     active_cells,
                     fitc_img_path,
-                    FITC_FILE_PATTERN,
+                    fitc_file_pattern,
                     PADDING,
                     ROI_SCALE,
                     GAUSSIAN_SIGMA,
                     HPF_CUTOFF,
                     SAMPLING_FREQ,
-                    ORDER
+                    ORDER,
+                    BTYPE
                 )
             save_pickle_file(active_cells, active_cells_file_path)
         except Exception as e:
             logger.error(f"Failed during intensity profiling: {e}")
             return
     else:
-        active_cells = load_existing_cells(active_cells_file_path, EXISTING_CELLS)
+        active_cells = load_cells_from_pickle(active_cells_file_path, EXISTING_CELLS)
 
-
-    
-    # Pick one example cell
-    #example_cell = next((cell for cell in active_cells if cell.label == 366), None)
-
-    #if example_cell:
-    #    sigmas = [0.1, 0.5, 1.0, 2.0, 5.0]
-    #    cutoffs = [0.001, 0.005, 0.01, 0.02, 0.05]
-    #    explore_processing_parameters(example_cell, sigmas, cutoffs)
-
-
-    #logger.info("Running UMAP...")
-    #try:
-    #    explore_umap_parameters(
-    #        active_cells,
-    #        neighbors_list=[5, 10, 15, 30, 50],
-    #        min_dist_list=[0.01, 0.1, 0.3, 0.5, 0.9],
-    #        normalize_options=[True, False],
-    #        n_components=2
-    #    )
-    #except Exception as e:
-    #    logger.error(f"UMAP finetuning failed: {e}")
-    #    return
-
-
-    
     logger.info("Running UMAP...")
     try:
         run_umap_on_cells(
@@ -170,32 +144,59 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
         logger.error(f"UMAP finetuning failed: {e}")
         return
 
-
     logger.info(f"Pipeline for {data_path.name} completed successfully in {time.time() - start:.2f} seconds")
+
+
+def find_isx_folders(folder: Path) -> list[Path]:
+    """
+    Recursively find all ISX folders under 'Data/' directories.
+    Skips any folder paths that include 'Output'.
+    """
+    isx_folders = []
+    for subpath in folder.rglob("*"):
+        if "Output" in subpath.parts:
+            continue  # skip anything in Output
+        if subpath.is_dir() and subpath.name.startswith("IS"):
+            isx_folders.append(subpath)
+    return isx_folders
+
 
 def main() -> None:
     """
-    Select root experiment folder and process all ISX folders inside Data/
+    Select one or multiple folders (date or ISX) and run the pipeline on all detected ISX folders.
     """
     app = QApplication(sys.argv)
-    root_folder = QFileDialog.getExistingDirectory(None, "Select Root Experiment Folder (e.g., 20250326)")
+    folder_dialog = QFileDialog()
+    folder_dialog.setFileMode(QFileDialog.Directory)
+    folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+    folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)
+    folder_dialog.setWindowTitle("Select One or More Folders (Date folders or ISX)")
 
-    if not root_folder:
+    if folder_dialog.exec_():
+        selected = folder_dialog.selectedFiles()
+        all_isx_folders = []
+
+        for folder_str in selected:
+            folder = Path(folder_str)
+            if folder.name.startswith("IS"):
+                all_isx_folders.append(folder)
+            else:
+                isx_inside = find_isx_folders(folder)
+                all_isx_folders.extend(isx_inside)
+
+        if not all_isx_folders:
+            logger.warning("No ISX folders found in selected path(s). Exiting.")
+            return
+
+        logger.info(f"Found {len(all_isx_folders)} ISX folders.")
+        for isx_folder in sorted(all_isx_folders):
+            output_folder = isx_folder.parents[1] / "Output" / isx_folder.name
+            logger.info(f"Processing {isx_folder}...")
+            run_pipeline(isx_folder, output_folder)
+
+    else:
         logger.info("No folder selected. Exiting.")
-        return
 
-    root_path = Path(root_folder)
-    data_dir = root_path / "Data"
-    output_dir = root_path / "Output"
-
-    if not data_dir.exists():
-        logger.error(f"Missing 'Data' directory in {root_path}")
-        return
-
-    for isx_folder in sorted(data_dir.glob("IS*")):
-        if isx_folder.is_dir():
-            logger.info(f"Processing {isx_folder.name}...")
-            run_pipeline(isx_folder, output_dir / isx_folder.name)
 
 if __name__ == "__main__":
     main()

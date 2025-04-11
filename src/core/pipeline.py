@@ -10,11 +10,10 @@ from tqdm import tqdm
 
 from src.core.cell import Cell
 from src.io.loader import (
-    save_pickle_file,
-    load_and_crop_images,
+    preprocess_images,
     save_tif_image,
-    save_image_histogram,
     rename_files_with_padding,
+    load_images,
     crop_image,
 )
 from src.core.segmentation import segmented
@@ -46,7 +45,7 @@ def cells_segmentation(
     Returns:
         np.ndarray: The resulting nuclei mask.
     """
-    nucleis_imgs = load_and_crop_images(input_dir, roi_scale, file_pattern, padding)
+    nucleis_imgs = preprocess_images(input_dir, roi_scale, file_pattern, padding)
     logger.debug("Running segmentation...")
     nuclei_mask = segmented(nucleis_imgs, overlay_path, save_overlay)
     save_tif_image(nuclei_mask, nuclei_mask_path)
@@ -80,32 +79,6 @@ def convert_mask_to_cells(nuclei_mask: np.ndarray) -> List[Cell]:
         label += 1
     return cells
 
-def get_cells_intensity_profiles(
-    cells: List[Cell],
-    input_dir: Path,
-    roi_scale: float,
-    file_pattern: str,
-    padding: int
-) -> None:
-    """
-    Calculate the intensity profiles for each cell based on their timepoints.
-
-    Args:
-        cells (List[Cell]): List of Cell objects to process.
-        input_dir (Path): Path to the directory containing FITC images.
-        roi_scale (float): Scale factor for cropping the images.
-        file_pattern (str): File pattern to match FITC images.
-        padding (int): Padding for filenames.
-    """
-    calcium_imgs = load_and_crop_images(input_dir, roi_scale, file_pattern, padding)
-    if calcium_imgs.size > 0:
-        logger.info(f"{len(calcium_imgs)} FITC images loaded.")
-        for idx, img in enumerate(calcium_imgs):
-            logger.debug(f"Processing image {idx + 1}/{len(calcium_imgs)}...")
-            for cell in cells:
-                cell.add_mean_intensity(img)
-    else:
-        logger.warning("No FITC images found.")
 
 def compute_intensity_for_image(image_path: Path, cell_coords: List[np.ndarray], roi_scale: float) -> List[float]:
     """
@@ -127,6 +100,7 @@ def compute_intensity_for_image(image_path: Path, cell_coords: List[np.ndarray],
         mean_intensity.append(float(np.mean(intensities)))
     return mean_intensity
 
+
 def get_cells_intensity_profiles_parallelized(
     cells: List[Cell],
     input_dir: Path,
@@ -136,7 +110,8 @@ def get_cells_intensity_profiles_parallelized(
     gaussian_sigma: float, 
     hpf_cutoff: float, 
     sampling_freq: float, 
-    order: int
+    order: int,
+    btype: str
 ) -> None:
     """
     Calculate the intensity profiles for each cell using parallel processing
@@ -164,11 +139,39 @@ def get_cells_intensity_profiles_parallelized(
         raise
 
     logger.debug("Executor map completed. Results collected.")
+    
     results_per_cell = list(zip(*results))
     for cell, trace in zip(cells, results_per_cell):
-        cell.intensity_trace = list(map(int, trace))
-        # Overwrite with processed trace directly
-        processed = cell.get_processed_trace(gaussian_sigma, hpf_cutoff, sampling_freq, order)
-        cell.intensity_trace = list(map(float, processed))
+        cell.raw_intensity_trace = list(map(int, trace))      
+        
+        cell.get_processed_trace(gaussian_sigma, hpf_cutoff, sampling_freq, order, btype)
 
     logger.info("Processed intensity traces set for all cells.")
+    
+
+def get_cells_intensity_profiles(
+    cells: List[Cell],
+    input_dir: Path,
+    roi_scale: float,
+    file_pattern: str,
+    padding: int
+) -> None:
+    """
+    Calculate the intensity profiles for each cell based on their timepoints.
+
+    Args:
+        cells (List[Cell]): List of Cell objects to process.
+        input_dir (Path): Path to the directory containing FITC images.
+        roi_scale (float): Scale factor for cropping the images.
+        file_pattern (str): File pattern to match FITC images.
+        padding (int): Padding for filenames.
+    """
+    calcium_imgs = preprocess_images(input_dir, roi_scale, file_pattern, padding)
+    if calcium_imgs.size > 0:
+        logger.info(f"{len(calcium_imgs)} FITC images loaded.")
+        for idx, img in enumerate(calcium_imgs):
+            logger.debug(f"Processing image {idx + 1}/{len(calcium_imgs)}...")
+            for cell in cells:
+                cell.add_mean_intensity(img)
+    else:
+        logger.warning("No FITC images found.")

@@ -13,37 +13,38 @@ from src.core.cell import Cell
 logger = logging.getLogger(__name__)
 
 
+# ==========================
+# DIVERSE FUNCTIONS
+# ==========================
 
-def load_and_crop_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
+def preprocess_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
     """
-    Load .tif images from a directory, rename them with padded numbers, and crop to ROI.
+    Preprocess .tif images by renaming, loading, and cropping.
+
+    This function renames .tif images in a directory with padded numbers, 
+    loads them into memory, and crops them to a specified region of interest (ROI).
 
     Args:
-        dir (Path): Path to folder.
+        dir (Path): Path to the folder containing .tif images.
         roi_scale (float): Scale factor for cropping (e.g., 0.75).
-        pattern (str): Regex pattern to match filenames.
-        padding (int): Padding digits for filename numbering.
+        pattern (str): Regex pattern to match filenames for renaming.
+        padding (int): Number of digits for zero-padding in filenames.
 
     Returns:
         np.ndarray: Array of cropped images.
 
     Raises:
-        FileNotFoundError: If no .tif images are found.
-        ValueError: If any image failed to load.
+        FileNotFoundError: If no .tif images are found in the directory.
+        ValueError: If any image fails to load.
     """
     rename_files_with_padding(dir, pattern, padding)
-    images = list(dir.glob("*.TIF"))
-    if not images:
-        raise FileNotFoundError(f"No .tif images found in {dir}")
-
-    logger.info(f"Found {len(images)} images in directory: {dir}")
-    loaded_images = [tifffile.imread(str(image)) for image in images]
-
-    if any(img is None for img in loaded_images):
-        raise ValueError(f"Could not load one or more images from {dir}")
+    
+    loaded_images = load_images(dir)
 
     cropped_images = [crop_image(img, roi_scale) for img in loaded_images]
+    
     return np.array(cropped_images)
+
 
 def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     """
@@ -60,6 +61,7 @@ def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
     crop_h, crop_w = int(height * scale), int(width * scale)
     start_h, start_w = (height - crop_h) // 2, (width - crop_w) // 2
     return image[start_h:start_h + crop_h, start_w:start_w + crop_w]
+
 
 def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -> None:
     """
@@ -83,9 +85,64 @@ def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -
             file.rename(new_path)
             logger.info(f"Renamed: {file.name} -> {new_name}")
 
-def load_existing_cells(file_path: Path, load: bool = False) -> List[Cell]:
+
+def generate_random_cell_overlay(cells: List[Cell], output_path: Path) -> None:
     """
-    Load cells from a pickle file.
+    Generate a grayscale image with random intensities assigned per cell.
+
+    Args:
+        cells (List[Cell]): List of Cell objects.
+        output_path (Path): Save path.
+    """
+    overlay = np.zeros((1536, 1536), dtype=np.uint16)
+    for cell in cells:
+        if not cell.pixel_coords.size:
+            continue
+        val = random.randint(10_000, 60_000)
+        for y, x in cell.pixel_coords:
+            overlay[y, x] = val
+    save_tif_image(overlay, output_path)
+    logger.info(f"Random cell overlay saved at: {output_path}")
+
+
+
+# ==========================
+# LOADING FUNCTIONS
+# ==========================
+
+
+def load_images(dir: Path = None) -> List[np.ndarray]:
+    """
+    Load all .tif images from a specified directory.
+
+    Args:
+        dir (Path): Path to the directory containing .tif images.
+
+    Returns:
+        List[np.ndarray]: List of loaded images as numpy arrays.
+
+    Raises:
+        FileNotFoundError: If no .tif images are found in the directory.
+        ValueError: If any image fails to load.
+    """
+    images = list(dir.glob("*.TIF"))
+    if not images:
+        logger.error(f"No .tif images found in {dir}")
+        raise FileNotFoundError(f"No .tif images found in {dir}")
+
+    logger.info(f"Found {len(images)} images in directory: {dir}")
+    loaded_images = [tifffile.imread(str(image)) for image in images]
+
+    if any(img is None for img in loaded_images):
+        logger.error(f"Could not load one or more images from {dir}")
+        raise ValueError(f"Failed to load one or more images from {dir}")
+
+    return loaded_images
+
+
+def load_cells_from_pickle(file_path: Path, load: bool = False) -> List[Cell]:
+    """
+    Load a pickle file.
 
     Args:
         file_path (Path): Path to the pickle file.
@@ -103,6 +160,7 @@ def load_existing_cells(file_path: Path, load: bool = False) -> List[Cell]:
         logger.warning(f"File {file_path} not loaded (missing or load=False). Returning empty list.")
         return []
 
+
 def load_existing_img(img_path: Path) -> np.ndarray:
     """
     Load a 16-bit grayscale image from a .tif file.
@@ -115,6 +173,13 @@ def load_existing_img(img_path: Path) -> np.ndarray:
     """
     logger.debug(f"Loading image from: {img_path}")
     return tifffile.imread(str(img_path))
+
+
+
+# ==========================
+# SAVING FUNCTIONS
+# ==========================
+
 
 def save_tif_image(image: np.ndarray, file_path: Path, photometric: str = 'minisblack', imagej: bool = True) -> None:
     """
@@ -129,6 +194,7 @@ def save_tif_image(image: np.ndarray, file_path: Path, photometric: str = 'minis
     tifffile.imwrite(file_path, image.astype(np.uint16), photometric=photometric, imagej=imagej)
     logger.info(f"Saved .tif image to: {file_path}")
 
+
 def save_pickle_file(data: object, file_path: Path) -> None:
     """
     Save a Python object using pickle.
@@ -140,6 +206,7 @@ def save_pickle_file(data: object, file_path: Path) -> None:
     with open(file_path, "wb") as f:
         pickle.dump(data, f)
     logger.info(f"Pickle saved to: {file_path}")
+
 
 def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Intensity Histogram", bins=65536) -> None:
     """
@@ -165,20 +232,64 @@ def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Inten
     plt.close()
     logger.info(f"Histogram saved to {output_path}")
 
-def generate_random_cell_overlay(cells: List[Cell], output_path: Path) -> None:
+
+
+# ==========================
+# PLOTTING FUNCTIONS
+# ==========================
+
+
+def plot_umap(
+    embedding: np.ndarray,
+    output_path: Path = None,
+    title: str = "UMAP Projection",
+    n_neighbors: int = None,
+    min_dist: float = None,
+    n_components: int = None,
+    labels: np.ndarray = None
+) -> None:
     """
-    Generate a grayscale image with random intensities assigned per cell.
+    Plot the UMAP embedding.
 
     Args:
-        cells (List[Cell]): List of Cell objects.
-        output_path (Path): Save path.
+        embedding (np.ndarray): UMAP embedding (2D array).
+        output_path (Path): Path to save the plot (optional).
+        title (str): Title of the plot.
+        n_neighbors (int): The size of the local neighborhood used for manifold approximation.
+        min_dist (float): The minimum distance between points in the low-dimensional space.
+        n_components (int): The number of dimensions for the UMAP embedding.
+        labels (np.ndarray): Optional cluster labels for coloring points.
     """
-    overlay = np.zeros((1536, 1536), dtype=np.uint16)
-    for cell in cells:
-        if not cell.pixel_coords.size:
-            continue
-        val = random.randint(10_000, 60_000)
-        for y, x in cell.pixel_coords:
-            overlay[y, x] = val
-    save_tif_image(overlay, output_path)
-    logger.info(f"Random cell overlay saved at: {output_path}")
+    plt.figure(figsize=(8, 6))
+    
+    if labels is not None:
+        scatter = plt.scatter(embedding[:, 0], embedding[:, 1], c=labels, cmap='tab10', s=10, alpha=0.7)
+        plt.colorbar(scatter, label="Cluster Labels")
+    else:
+        plt.scatter(embedding[:, 0], embedding[:, 1], s=10, c='blue', alpha=0.6)
+
+    plt.title(title)
+    plt.xlabel("UMAP-1")
+    plt.ylabel("UMAP-2")
+    plt.grid(True)
+
+    # Add UMAP parameters as text on the plot
+    if n_neighbors is not None or min_dist is not None or n_components is not None:
+        param_text = "\n".join([
+            f"n_neighbors = {n_neighbors}" if n_neighbors is not None else "",
+            f"min_dist = {min_dist}" if min_dist is not None else "",
+            f"n_components = {n_components}" if n_components is not None else ""
+        ]).strip()
+        plt.gca().text(
+            0.95, 0.95, param_text, transform=plt.gca().transAxes,
+            fontsize=9, verticalalignment='top', horizontalalignment='right',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8)
+        )
+
+    plt.tight_layout()
+
+    if output_path:
+        np.save(output_path, embedding)
+        logger.info(f"UMAP saved to {output_path}")
+    else:
+        plt.show()

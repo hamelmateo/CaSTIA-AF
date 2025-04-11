@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 from src.core.cell import Cell
+from src.io.loader import plot_umap
 from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def run_umap_on_cells(
     Returns:
         np.ndarray: 2D array representing UMAP embedding.
     """
-    traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
+    traces = [cell.processed_intensity_trace for cell in active_cells if len(cell.processed_intensity_trace) > 0]
 
     if normalize:
         traces = StandardScaler().fit_transform(traces)
@@ -41,33 +42,13 @@ def run_umap_on_cells(
         traces = np.array(traces)
 
     try:
-        reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components)
+        reducer = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components, metric='correlation', random_state=42)
         embedding = reducer.fit_transform(traces)
-        np.save(output_path, embedding)
     except Exception as e:
         logger.error(f"UMAP failed: {e}")
         raise
 
-    plt.figure(figsize=(8, 6))
-    plt.scatter(embedding[:, 0], embedding[:, 1], s=10, c='blue', alpha=0.6)
-    plt.title("UMAP Projection of Calcium Time Series")
-    plt.xlabel("UMAP-1")
-    plt.ylabel("UMAP-2")
-    plt.grid(True)
-
-    param_text = (
-        f"UMAP Params:\n"
-        f"n_neighbors = {n_neighbors}\n"
-        f"min_dist = {min_dist}\n"
-        f"n_components = {n_components}\n"
-        f"normalized = {normalize}"
-    )
-    plt.gca().text(0.95, 0.95, param_text, transform=plt.gca().transAxes,
-                   fontsize=9, verticalalignment='top', horizontalalignment='right',
-                   bbox=dict(boxstyle='round,pad=0.4', facecolor='lightgray', alpha=0.8))
-
-    plt.tight_layout()
-    plt.show()
+    plot_umap(embedding, output_path, "cells_UMAP", n_neighbors, min_dist, n_components)
 
     return embedding
 
@@ -95,7 +76,7 @@ def run_umap_with_clustering(
     Returns:
         Tuple[np.ndarray, np.ndarray]: UMAP embeddings and DBSCAN cluster labels.
     """
-    traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
+    traces = [cell.processed_intensity_trace for cell in active_cells if len(cell.processed_intensity_trace) > 0]
 
     if normalize:
         traces = StandardScaler().fit_transform(traces)

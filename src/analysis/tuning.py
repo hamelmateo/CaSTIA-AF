@@ -19,7 +19,7 @@ def explore_processing_parameters(cell, sigmas, cutoffs, fs=1.0, order=2):
         fs (float): Sampling frequency in Hz (default 1.0).
         order (int): Filter order for high-pass (default 2).
     """
-    raw = cell.intensity_trace
+    raw = cell.raw_intensity_trace
     n_rows = len(cutoffs)
     n_cols = len(sigmas)
 
@@ -66,7 +66,7 @@ def explore_umap_parameters(
         normalize_options (List[bool]): Whether to normalize input data.
         n_components (int): Number of UMAP output dimensions (default: 2).
     """
-    traces = [cell.intensity_trace for cell in active_cells if len(cell.intensity_trace) > 0]
+    traces = [cell.raw_intensity_trace for cell in active_cells if len(cell.raw_intensity_trace) > 0]
     if not traces:
         print("No valid traces found for UMAP.")
         return

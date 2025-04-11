@@ -20,8 +20,6 @@ TEMP_OVERLAY_PATH = OUTPUT_DIR / "temp_overlay.TIF"
 # ==========================
 # FILE PATTERNS AND PADDING
 # ==========================
-FITC_FILE_PATTERN = r"20250326__w3FITC_t(\d+).TIF"
-HOECHST_FILE_PATTERN = r"20250326__w2DAPI_t(\d+).TIF"
 PADDING = 5  # Filename zero-padding digits
 
 # ==========================
@@ -32,7 +30,8 @@ SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
 GAUSSIAN_SIGMA = 0.5  # Sigma for Gaussian filter
 HPF_CUTOFF = 0.001  # High-pass filter cutoff frequency (Hz)
 SAMPLING_FREQ = 1.0  # Sampling frequency (Hz)
-ORDER = 2  # Filter order
+ORDER = 9  # Filter order
+BTYPE = 'highpass'  # Filter type
 
 # ==========================
 # FLAGS

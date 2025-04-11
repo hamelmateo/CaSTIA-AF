@@ -4,8 +4,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QPolygonF
 from PyQt5.QtCore import Qt, QPointF
-from src.io.loader import load_existing_cells
-from src.gui.plotter import show_cell_plot
+from src.io.loader import load_cells_from_pickle
 import tifffile
 import numpy as np
 from pathlib import Path
@@ -27,7 +26,7 @@ class OverlayViewer(QMainWindow):
         self.cell_click_callback: Optional[Callable[[object], None]] = None
 
         try:
-            self.cells = load_existing_cells(self.cells_file, True)
+            self.cells = load_cells_from_pickle(self.cells_file, True)
             self.overlay_img = tifffile.imread(str(self.overlay_file))
         except Exception as e:
             logger.error(f"Failed to load viewer data: {e}")
@@ -115,11 +114,10 @@ class OverlayViewer(QMainWindow):
                 img_pos = self.view.mapToScene(pos)
                 x, y = int(img_pos.x()), int(img_pos.y())
                 selected_cell = self.find_closest_cell(y, x, radius=8)
-                if selected_cell:
+                if selected_cell and self.cell_click_callback:
                     try:
-                        show_cell_plot(selected_cell)
-                        if self.cell_click_callback:
-                            self.cell_click_callback(selected_cell)
+                        self.cell_click_callback(selected_cell)
+
                     except Exception as e:
                         logger.warning(f"Failed to plot intensity: {e}")
 
