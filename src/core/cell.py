@@ -5,6 +5,7 @@ import logging
 from typing import Optional
 from scipy.ndimage import gaussian_filter1d
 from scipy.signal import butter, sosfilt
+from src.analysis.signal_processing import process_trace
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +31,9 @@ class Cell:
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.raw_intensity_trace: list[int] = []
-        self.processed_intensity_trace: list[int] = []
+        self.processed_intensity_trace: list[float] = []
         self.is_valid: bool = len(self.pixel_coords) >= SMALL_OBJECT_THRESHOLD
+        self.exclude_from_umap = False
 
     def add_mean_intensity(self, image: np.ndarray) -> None:
         """
@@ -81,39 +83,21 @@ class Cell:
         plt.grid(True)
         plt.show()
 
-    def get_processed_trace(self, sigma: float = 2.0, cutoff: float = 0.01, fs: float = 1.0, order: int = 2, btype: str = 'highpass') -> None:
+    def get_processed_trace(self, sigma: float = 1.0) -> None:
         """
-        Return the processed intensity trace:
-        1. High-pass filter to remove photobleaching
-        2. Gaussian smoothing to reduce noise
-        3. Normalization to [0, 1] range with baseline = 0
+        Apply the full processing pipeline to the raw trace:
+        detrending, smoothing, and ΔF/F₀ normalization.
 
         Args:
-            sigma (float): Standard deviation for Gaussian smoothing.
-            cutoff (float): High-pass filter cutoff frequency (Hz).
-            fs (float): Sampling frequency (Hz).
-            order (int): Filter order.
+            sigma (float): Gaussian smoothing sigma.
         """
         if not self.raw_intensity_trace:
             logger.info(f"Cell {self.label} has no intensity data to process.")
-            return np.array([])
+            self.processed_intensity_trace = []
+            return
 
         try:
-            raw = np.array(self.raw_intensity_trace)
-
-            # Step 1: High-pass filter (remove low-frequency drift)
-            sos = butter(order, cutoff, btype=btype, analog=False, output='sos', fs=fs)
-            filtered = sosfilt(sos, raw)
-
-            # Step 2: Gaussian smoothing
-            smoothed = gaussian_filter1d(filtered, sigma=sigma)
-
-            """# Step 3: Normalize to [0, 1]
-            baseline = np.percentile(smoothed, 10)
-            peak = np.max(smoothed)
-            normalized = (smoothed - baseline) / (peak - baseline + 1e-8)"""
-
-            self.processed_intensity_trace = [int(v) for v in smoothed]
+            self.processed_intensity_trace = list(process_trace(self.raw_intensity_trace,sigma=sigma))
         except Exception as e:
-            logger.error(f"Processing failed for cell {self.label}: {e}")
+            logger.error(f"Failed to process trace for cell {self.label}: {e}")
             self.processed_intensity_trace = []

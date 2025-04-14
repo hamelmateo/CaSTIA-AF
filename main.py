@@ -1,6 +1,7 @@
 import time
 import logging
 from pathlib import Path
+from random import randint
 
 from src.io.loader import (
     load_cells_from_pickle,
@@ -14,12 +15,9 @@ from src.config.config import (
     SAVE_OVERLAY,
     EXISTING_CELLS,
     EXISTING_MASK,
-    EXISTING_INTENSITY_PROFILE,
-    GAUSSIAN_SIGMA,
-    HPF_CUTOFF,
-    SAMPLING_FREQ,
-    ORDER,
-    BTYPE
+    EXISTING_RAW_INTENSITY,
+    EXISTING_PROCESSED_INTENSITY,
+    GAUSSIAN_SIGMA
 )
 from src.core.pipeline import (
     cells_segmentation,
@@ -27,6 +25,7 @@ from src.core.pipeline import (
     get_cells_intensity_profiles,
     get_cells_intensity_profiles_parallelized,
 )
+from src.analysis.tuning import highpass_filter_param_tuning, explore_processing_parameters
 from src.analysis.umap_analysis import run_umap_on_cells
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
@@ -54,7 +53,8 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     nuclei_mask_path = output_path / "nuclei_mask.TIF"
     overlay_path = output_path / "overlay.TIF"
     cells_file_path = output_path / "cells.pkl"
-    active_cells_file_path = output_path / "active_cells.pkl"
+    raw_cells_file_path = output_path / "raw_active_cells.pkl"
+    processed_cells_file_path = output_path / "processed_active_cells.pkl"
     umap_file_path = output_path / "umap.npy"
 
     hoechst_img_path = data_path / "HOECHST"
@@ -99,7 +99,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     active_cells = [cell for cell in cells if cell.is_valid]
     logger.info(f"Active cells: {len(active_cells)} / Total: {len(cells)}")
 
-    if not EXISTING_INTENSITY_PROFILE or not active_cells_file_path.exists():
+    if not EXISTING_RAW_INTENSITY or not processed_cells_file_path.exists():
         try:
             if not PARALLELELIZE:
                 get_cells_intensity_profiles(
@@ -117,21 +117,58 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                     fitc_file_pattern,
                     PADDING,
                     ROI_SCALE,
-                    GAUSSIAN_SIGMA,
-                    HPF_CUTOFF,
-                    SAMPLING_FREQ,
-                    ORDER,
-                    BTYPE
+                    GAUSSIAN_SIGMA
                 )
-            save_pickle_file(active_cells, active_cells_file_path)
+            save_pickle_file(active_cells, raw_cells_file_path)
         except Exception as e:
             logger.error(f"Failed during intensity profiling: {e}")
             return
     else:
-        active_cells = load_cells_from_pickle(active_cells_file_path, EXISTING_CELLS)
+        active_cells = load_cells_from_pickle(raw_cells_file_path, EXISTING_CELLS)
 
+    if not EXISTING_PROCESSED_INTENSITY or not processed_cells_file_path.exists():
+        try:
+            for cell in active_cells:
+                cell.get_processed_trace(GAUSSIAN_SIGMA)
+            save_pickle_file(active_cells, processed_cells_file_path)
+        except Exception as e:
+            logger.error(f"Failed to process traces: {e}")
+            return
+
+
+    """ # Run custom processing on selected cell labels
+    selected_labels = [665, 305, 640, 34, 485, 158, 319, 600]
+    selected_cells = [cell for cell in active_cells if cell.label in selected_labels]
+
+    
+    processing_configs = [
+        {"sigma": 0.5, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 1.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 3.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 4.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+    ]
+
+    if selected_cells:
+        from src.analysis.signal_processing import run_processing_pipeline
+        run_processing_pipeline(selected_cells, processing_configs)
+    else:
+        logger.warning("No matching cells found for custom processing pipeline.")
+    """
+
+
+    
     logger.info("Running UMAP...")
     try:
+        # Optional: Exclude outlier cells by label
+        # cluster 1: 319, 331, 338, 361
+        # cluster 2: 633, 646, 675, 685
+
+        excluded_labels = [319,331,338,361,633,646,675,685]
+        for cell in active_cells:
+            if cell.label in excluded_labels:
+                cell.exclude_from_umap = True
+
         run_umap_on_cells(
             active_cells, 
             umap_file_path,
@@ -143,7 +180,8 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     except Exception as e:
         logger.error(f"UMAP finetuning failed: {e}")
         return
-
+    
+        
     logger.info(f"Pipeline for {data_path.name} completed successfully in {time.time() - start:.2f} seconds")
 
 

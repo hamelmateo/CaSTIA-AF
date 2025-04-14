@@ -9,6 +9,7 @@ import logging
 from typing import List
 
 from src.core.cell import Cell
+from src.analysis.signal_processing import process_trace, detrend_exponential, gaussian_smooth, normalize_trace
 
 logger = logging.getLogger(__name__)
 
@@ -293,3 +294,111 @@ def plot_umap(
         logger.info(f"UMAP saved to {output_path}")
     else:
         plt.show()
+
+
+
+
+# ==========================
+
+
+def run_processing_pipeline(cells: List[Cell], processing_configs: List[dict]):
+    plot_all_cells_processing_stages(cells, sigma=1.0)
+
+
+def plot_all_cells_processing_stages(cells: List[Cell], sigma=1.0):
+    stages_labels = ["Raw", "Detrended", "Smoothed", "ΔF/F₀"]
+    n_rows = len(cells)
+    n_cols = len(stages_labels)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 2.5 * n_rows), sharey=False, sharex=True)
+    if n_rows == 1:
+        axes = [axes]  # Ensure iterable if single cell
+
+    for i, cell in enumerate(cells):
+        trace = np.array(cell.raw_intensity_trace, dtype=float)
+
+        raw = trace.copy()
+        detrended = detrend_exponential(raw)
+        smoothed = gaussian_smooth(detrended, sigma=sigma)
+        normalized = normalize_trace(smoothed, method='deltaf')
+        stages = [raw, detrended, smoothed, normalized]
+
+        for j, (data, label) in enumerate(zip(stages, stages_labels)):
+            ax = axes[i][j] if n_rows > 1 else axes[j]
+            ax.plot(data, color='blue')
+            ax.set_title(f"{label}" if i == 0 else "")
+            ax.set_xlabel("Time")
+            if j == 0:
+                ax.set_ylabel(f"Cell {cell.label}")
+            ax.grid(True)
+
+    fig.suptitle("Processing Stages for All Cells", fontsize=16)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+def plot_trace_grid(cell, sigmas, cutoffs, fs=1.0, order=2):
+    raw = cell.raw_intensity_trace
+    n_rows = len(cutoffs)
+    n_cols = len(sigmas)
+
+    plt.figure(figsize=(8, 3))
+    plt.plot(raw, color='black')
+    plt.title(f"Raw Intensity Trace - Cell {cell.label}")
+    plt.xlabel("Timepoint")
+    plt.ylabel("Intensity")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 2.5*n_rows), sharex=True, sharey=True)
+
+    for i, cutoff in enumerate(cutoffs):
+        for j, sigma in enumerate(sigmas):
+            trace = process_trace(raw, sigma=sigma, cutoff=cutoff, fs=fs, order=order)
+            ax = axes[i][j] if n_rows > 1 else axes[j]
+
+            if trace is None or len(trace) == 0:
+                ax.set_title(f"σ={sigma}, cutoff={cutoff} (empty)")
+                continue
+
+            ax.plot(trace, color='blue')
+            ax.set_title(f"σ={sigma}, cutoff={cutoff}")
+            ax.grid(True)
+
+    fig.suptitle(f"Processed Trace Grid (Cell {cell.label})", fontsize=14)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()
+
+
+def plot_highpass_grid(cell, cutoffs, orders, fs=1.0, sigma=1.0, btype='highpass'):
+    raw = cell.raw_intensity_trace
+    n_rows = len(cutoffs)
+    n_cols = len(orders)
+
+    plt.figure(figsize=(8, 3))
+    plt.plot(raw, color='black')
+    plt.title(f"Raw Intensity Trace - Cell {cell.label}")
+    plt.xlabel("Timepoint")
+    plt.ylabel("Intensity")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 2.5*n_rows), sharex=True, sharey=True)
+
+    for i, cutoff in enumerate(cutoffs):
+        for j, order in enumerate(orders):
+            trace = process_trace(raw, sigma=sigma, cutoff=cutoff, fs=fs, order=order, btype=btype)
+            ax = axes[i][j] if n_rows > 1 else axes[j]
+
+            if trace is None or len(trace) == 0:
+                ax.set_title(f"order={order}, cutoff={cutoff} (empty)")
+                continue
+
+            ax.plot(trace, color='blue')
+            ax.set_title(f"order={order}, cutoff={cutoff}")
+            ax.grid(True)
+
+    fig.suptitle(f"Processed Trace Grid (Cell {cell.label})", fontsize=14)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.show()

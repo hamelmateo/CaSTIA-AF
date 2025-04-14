@@ -34,7 +34,8 @@ def run_umap_on_cells(
     Returns:
         np.ndarray: 2D array representing UMAP embedding.
     """
-    traces = [cell.processed_intensity_trace for cell in active_cells if len(cell.processed_intensity_trace) > 0]
+    traces = [cell.processed_intensity_trace for cell in active_cells
+          if len(cell.processed_intensity_trace) > 0 and not cell.exclude_from_umap]
 
     if normalize:
         traces = StandardScaler().fit_transform(traces)

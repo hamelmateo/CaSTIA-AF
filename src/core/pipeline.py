@@ -17,7 +17,6 @@ from src.io.loader import (
     crop_image,
 )
 from src.core.segmentation import segmented
-from src.config.config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +106,7 @@ def get_cells_intensity_profiles_parallelized(
     pattern: str,
     padding: int,
     roi_scale: float,
-    gaussian_sigma: float, 
-    hpf_cutoff: float, 
-    sampling_freq: float, 
-    order: int,
-    btype: str
+    gaussian_sigma: float
 ) -> None:
     """
     Calculate the intensity profiles for each cell using parallel processing
@@ -143,10 +138,8 @@ def get_cells_intensity_profiles_parallelized(
     results_per_cell = list(zip(*results))
     for cell, trace in zip(cells, results_per_cell):
         cell.raw_intensity_trace = list(map(int, trace))      
-        
-        cell.get_processed_trace(gaussian_sigma, hpf_cutoff, sampling_freq, order, btype)
 
-    logger.info("Processed intensity traces set for all cells.")
+    logger.info("Raw intensity traces set for all cells.")
     
 
 def get_cells_intensity_profiles(
