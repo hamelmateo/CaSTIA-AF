@@ -21,7 +21,7 @@ class OverlayViewer(QMainWindow):
         self.setGeometry(100, 100, 1000, 1000)
 
         self.folder = folder_path
-        self.cells_file = self.folder / "active_cells.pkl"
+        self.cells_file = self.folder / "processed_active_cells.pkl"
         self.overlay_file = self.folder / "overlay.TIF"
         self.cell_click_callback: Optional[Callable[[object], None]] = None
 

@@ -8,7 +8,7 @@ PADDING = 5  # Filename zero-padding digits
 # ==========================
 ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
 SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
-GAUSSIAN_SIGMA = 0.5  # Sigma for Gaussian filter
+GAUSSIAN_SIGMA = 2.5  # Sigma for Gaussian filter
 HPF_CUTOFF = 0.001  # High-pass filter cutoff frequency (Hz)
 SAMPLING_FREQ = 1.0  # Sampling frequency (Hz)
 ORDER = 9  # Filter order
@@ -23,3 +23,6 @@ EXISTING_PROCESSED_INTENSITY = True  # Load intensity traces if available
 EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
 SAVE_OVERLAY = True  # Save segmentation overlay
 PARALLELELIZE = True  # Use parallel processing for intensity extraction
+
+
+HARDDRIVE_PATH = "D:/Mateo"

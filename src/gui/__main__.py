@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import logging
 
+from src.config.config import HARDDRIVE_PATH
 from src.gui.umap_viewer import UMAPViewer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -16,7 +17,7 @@ def main() -> None:
     app = QApplication(sys.argv)
 
     try:
-        folder = QFileDialog.getExistingDirectory(None, "Select Analysis Folder")
+        folder = QFileDialog.getExistingDirectory(None, "Select Analysis Folder", HARDDRIVE_PATH)
         if not folder:
             logger.info("No folder selected. Exiting.")
             return

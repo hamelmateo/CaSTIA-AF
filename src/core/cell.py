@@ -30,10 +30,12 @@ class Cell:
         self.label = label
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
-        self.raw_intensity_trace: list[int] = []
+        self.raw_intensity_trace: list[float] = []
         self.processed_intensity_trace: list[float] = []
         self.is_valid: bool = len(self.pixel_coords) >= SMALL_OBJECT_THRESHOLD
         self.exclude_from_umap = False
+        self.has_good_exponential_fit: bool = True
+
 
     def add_mean_intensity(self, image: np.ndarray) -> None:
         """
@@ -44,7 +46,7 @@ class Cell:
         """
         try:
             intensities = [image[y, x] for y, x in self.pixel_coords]
-            mean_intensity = int(np.mean(intensities))
+            mean_intensity = np.mean(intensities)
             self.raw_intensity_trace.append(mean_intensity)
         except Exception as e:
             logger.error(f"Failed to compute mean intensity for cell {self.label}: {e}")
@@ -97,7 +99,11 @@ class Cell:
             return
 
         try:
-            self.processed_intensity_trace = list(process_trace(self.raw_intensity_trace,sigma=sigma))
+            self.processed_intensity_trace, r_squared = process_trace(
+                self.raw_intensity_trace, sigma=sigma
+            )
+            self.has_good_exponential_fit = r_squared >= 0.8
         except Exception as e:
             logger.error(f"Failed to process trace for cell {self.label}: {e}")
             self.processed_intensity_trace = []
+            self.has_good_exponential_fit = False

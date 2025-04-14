@@ -2,21 +2,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import butter, sosfilt, filtfilt
 from scipy.ndimage import gaussian_filter1d
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, OptimizeWarning
 from typing import List
+import warnings
+from sklearn.metrics import r2_score
 
 
 
 
-def process_trace(raw_trace, sigma=1.0):
+def process_trace(raw_trace: list[float], sigma: float = 1.0) -> tuple[np.ndarray, float]:
     raw = np.array(raw_trace)
-    detrended = detrend_exponential(raw)
+    detrended, r2 = detrend_exponential(raw)
+    #filtered = highpass_filter(trace, cutoff, fs, order, btype, mode)
     smoothed = gaussian_smooth(detrended, sigma)
     normalized = normalize_trace(smoothed, 'deltaf')
-    #filtered = highpass_filter(trace, cutoff, fs, order, btype, mode)
     #normalized = normalize_trace(smoothed)
 
-    processed_trace = normalized
+    processed_trace = normalized, r2
 
     return processed_trace
 
@@ -32,29 +34,29 @@ def highpass_filter(trace, cutoff, fs=1.0, order=2, btype='highpass', mode='sos'
         raise ValueError(f"Unsupported filter mode: {mode}. Use 'sos' or 'ba'.")
 
 
-def detrend_exponential(trace):
-    """
-    Fit an exponential decay model and subtract it to remove photobleaching.
-
-    Args:
-        trace (np.ndarray): Input intensity trace.
-
-    Returns:
-        np.ndarray: Detrended trace.
-    """
-    def exp_func(t, A, k, C):
+def detrend_exponential(trace: np.ndarray) -> tuple[np.ndarray, float]:
+    def exp_model(t, A, k, C):
         return A * np.exp(-k * t) + C
 
     t = np.arange(len(trace))
     try:
-        # Initial guesses: A=peak-min, k=small decay, C=min
-        popt, _ = curve_fit(exp_func, t, trace, p0=[trace[0] - trace[-1], 0.01, trace[-1]], maxfev=10000)
-        fitted = exp_func(t, *popt)
+        popt, _ = curve_fit(
+            exp_model,
+            t,
+            trace,
+            p0=[trace[0] - trace[-1], 0.01, trace[-1]],
+            bounds=([0, 0, 0], [np.inf, 1.0, np.inf]),
+            maxfev=10000
+        )
+        fitted = exp_model(t, *popt)
         detrended = trace - fitted
-        return detrended
+        r_squared = r2_score(trace, fitted)
+        return detrended, r_squared
     except Exception as e:
         print(f"Exponential fitting failed: {e}")
-        return trace
+        return trace, 0.0
+
+
 
 
 def gaussian_smooth(trace, sigma):

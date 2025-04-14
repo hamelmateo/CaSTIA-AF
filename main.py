@@ -9,6 +9,7 @@ from src.io.loader import (
     save_pickle_file,
 )
 from src.config.config import (
+    HARDDRIVE_PATH,
     ROI_SCALE,
     PADDING,
     PARALLELELIZE,
@@ -133,7 +134,8 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
             save_pickle_file(active_cells, processed_cells_file_path)
         except Exception as e:
             logger.error(f"Failed to process traces: {e}")
-            return
+    else:
+        active_cells = load_cells_from_pickle(processed_cells_file_path, EXISTING_PROCESSED_INTENSITY)
 
 
     """ # Run custom processing on selected cell labels
@@ -160,14 +162,14 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     
     logger.info("Running UMAP...")
     try:
-        # Optional: Exclude outlier cells by label
+        """# Optional: Exclude outlier cells by label
         # cluster 1: 319, 331, 338, 361
         # cluster 2: 633, 646, 675, 685
 
         excluded_labels = [319,331,338,361,633,646,675,685]
         for cell in active_cells:
             if cell.label in excluded_labels:
-                cell.exclude_from_umap = True
+                cell.exclude_from_umap = True"""
 
         run_umap_on_cells(
             active_cells, 
@@ -178,7 +180,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
             normalize=False,
         )
     except Exception as e:
-        logger.error(f"UMAP finetuning failed: {e}")
+        logger.error(f"UMAP processing failed: {e}")
         return
     
         
@@ -205,6 +207,7 @@ def main() -> None:
     """
     app = QApplication(sys.argv)
     folder_dialog = QFileDialog()
+    folder_dialog.setDirectory(HARDDRIVE_PATH)
     folder_dialog.setFileMode(QFileDialog.Directory)
     folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
     folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)

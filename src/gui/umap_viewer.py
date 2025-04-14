@@ -64,7 +64,7 @@ class UMAPViewer(QMainWindow):
     def load_from_path(self, folder_path: Path):
         self.folder_path = folder_path
         umap_file = folder_path / "umap.npy"
-        cells_file = folder_path / "active_cells.pkl"
+        cells_file = folder_path / "processed_active_cells.pkl"
 
         if not umap_file.exists() or not cells_file.exists():
             return
@@ -126,7 +126,7 @@ class UMAPViewer(QMainWindow):
             print(f"Cell label {label} not found in current embedding.")
 
     def plot_raw_and_processed(self, cell):
-        if not cell.raw_intensity_trace or not cell.processed_intensity_trace:
+        if len(cell.raw_intensity_trace) == 0 or len(cell.processed_intensity_trace) == 0:
             return
 
         # Clear old canvases
