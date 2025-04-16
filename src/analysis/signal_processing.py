@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import butter, sosfilt, filtfilt
+from scipy.signal import butter, firwin, savgol_filter, sosfilt, filtfilt
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit, OptimizeWarning
 from typing import List
@@ -12,13 +12,14 @@ from sklearn.metrics import r2_score
 
 def process_trace(raw_trace: list[float], sigma: float = 1.0) -> tuple[np.ndarray, float]:
     raw = np.array(raw_trace)
-    detrended, r2 = detrend_exponential(raw)
+    #detrended, r2 = detrend_exponential(raw)
     #filtered = highpass_filter(trace, cutoff, fs, order, btype, mode)
+    detrended = fir_filter(raw, cutoff=0.001, fs=1.0, numtaps=201)
     smoothed = gaussian_smooth(detrended, sigma)
     normalized = normalize_trace(smoothed, 'deltaf')
     #normalized = normalize_trace(smoothed)
 
-    processed_trace = normalized, r2
+    processed_trace = normalized
 
     return processed_trace
 
@@ -32,6 +33,24 @@ def highpass_filter(trace, cutoff, fs=1.0, order=2, btype='highpass', mode='sos'
         return sosfilt(sos, trace)
     else:
         raise ValueError(f"Unsupported filter mode: {mode}. Use 'sos' or 'ba'.")
+
+
+def fir_filter(trace, cutoff=0.001, fs=1.0, numtaps=201):
+    if numtaps % 2 == 0:
+        numtaps += 1  # Ensure it's odd
+    fir_coeff = firwin(numtaps, cutoff=cutoff, fs=fs, pass_zero=False)
+    return filtfilt(fir_coeff, [1.0], trace)
+
+
+def diff_filter(trace, **kwargs):
+    return np.diff(trace, prepend=trace[0])
+
+
+def savgol_baseline_subtract(trace, window_length=21, polyorder=3):
+    if window_length % 2 == 0:
+        window_length += 1  # must be odd
+    baseline = savgol_filter(trace, window_length, polyorder)
+    return trace - baseline
 
 
 def detrend_exponential(trace: np.ndarray) -> tuple[np.ndarray, float]:
@@ -55,8 +74,6 @@ def detrend_exponential(trace: np.ndarray) -> tuple[np.ndarray, float]:
     except Exception as e:
         print(f"Exponential fitting failed: {e}")
         return trace, 0.0
-
-
 
 
 def gaussian_smooth(trace, sigma):

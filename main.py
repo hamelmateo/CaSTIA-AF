@@ -138,38 +138,46 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
         active_cells = load_cells_from_pickle(processed_cells_file_path, EXISTING_PROCESSED_INTENSITY)
 
 
-    """ # Run custom processing on selected cell labels
+    # Run custom processing on selected cell labels
     selected_labels = [665, 305, 640, 34, 485, 158, 319, 600]
     selected_cells = [cell for cell in active_cells if cell.label in selected_labels]
 
-    
+    """
     processing_configs = [
-        {"sigma": 0.5, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
-        {"sigma": 1.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
-        {"sigma": 2.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
-        {"sigma": 3.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
-        {"sigma": 4.0, "cutoff": 0.01, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "order": 2, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "order": 3, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "order": 4, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "order": 5, "btype": "highpass", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "order": 6, "btype": "highpass", "mode": "sos", "normalize": False},
+    ]"""
+    """
+    processing_configs = [
+        {"sigma": 2.0, "cutoff": 0.001, "numtaps": 501, "btype": "fir", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "numtaps": 701, "btype": "fir", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "numtaps": 1001, "btype": "fir", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "numtaps": 171, "btype": "fir", "mode": "sos", "normalize": False},
+        {"sigma": 2.0, "cutoff": 0.001, "numtaps": 201, "btype": "fir", "mode": "sos", "normalize": False},
     ]
 
     if selected_cells:
-        from src.analysis.signal_processing import run_processing_pipeline
+        from src.io.loader import run_processing_pipeline
         run_processing_pipeline(selected_cells, processing_configs)
     else:
         logger.warning("No matching cells found for custom processing pipeline.")
     """
 
 
-    
+    """
     logger.info("Running UMAP...")
     try:
-        """# Optional: Exclude outlier cells by label
+        # Optional: Exclude outlier cells by label
         # cluster 1: 319, 331, 338, 361
         # cluster 2: 633, 646, 675, 685
 
-        excluded_labels = [319,331,338,361,633,646,675,685]
-        for cell in active_cells:
-            if cell.label in excluded_labels:
-                cell.exclude_from_umap = True"""
+        #excluded_labels = [319,331,338,361,633,646,675,685]
+        #for cell in active_cells:
+        #   if cell.label in excluded_labels:
+        #        cell.exclude_from_umap = True
 
         run_umap_on_cells(
             active_cells, 
@@ -182,7 +190,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     except Exception as e:
         logger.error(f"UMAP processing failed: {e}")
         return
-    
+    """
         
     logger.info(f"Pipeline for {data_path.name} completed successfully in {time.time() - start:.2f} seconds")
 

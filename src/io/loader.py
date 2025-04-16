@@ -9,7 +9,7 @@ import logging
 from typing import List
 
 from src.core.cell import Cell
-from src.analysis.signal_processing import process_trace, detrend_exponential, gaussian_smooth, normalize_trace
+from src.analysis.signal_processing import process_trace, detrend_exponential, fir_filter, gaussian_smooth, normalize_trace, highpass_filter
 
 logger = logging.getLogger(__name__)
 
@@ -302,39 +302,63 @@ def plot_umap(
 
 
 def run_processing_pipeline(cells: List[Cell], processing_configs: List[dict]):
-    plot_all_cells_processing_stages(cells, sigma=1.0)
+    plot_all_cells_processing_stages(cells, processing_configs)
 
 
-def plot_all_cells_processing_stages(cells: List[Cell], sigma=1.0):
+def plot_all_cells_processing_stages(cells: List[Cell], processing_configs: List[dict]) -> None:
+    """
+    Plot the processing stages for all cells across multiple processing configurations.
+
+    Args:
+        cells (List[Cell]): List of Cell objects.
+        processing_configs (List[dict]): List of parameter dictionaries, one per config.
+
+    Returns:
+        None
+    """
     stages_labels = ["Raw", "Detrended", "Smoothed", "ΔF/F₀"]
-    n_rows = len(cells)
-    n_cols = len(stages_labels)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 2.5 * n_rows), sharey=False, sharex=True)
-    if n_rows == 1:
-        axes = [axes]  # Ensure iterable if single cell
+    for config_idx, config in enumerate(processing_configs):
+        
+        
+        sigma = config.get("sigma", 1.0)
+        cutoff = config.get("cutoff", 0.001)
+        numtaps = config.get("numtaps", 201)
+        fs = config.get("fs", 1.0)
+        """order = config.get("order", 2)"""
 
-    for i, cell in enumerate(cells):
-        trace = np.array(cell.raw_intensity_trace, dtype=float)
+        method = config.get("method", "deltaf")
 
-        raw = trace.copy()
-        detrended = detrend_exponential(raw)
-        smoothed = gaussian_smooth(detrended, sigma=sigma)
-        normalized = normalize_trace(smoothed, method='deltaf')
-        stages = [raw, detrended, smoothed, normalized]
+        n_rows = len(cells)
+        n_cols = len(stages_labels)
 
-        for j, (data, label) in enumerate(zip(stages, stages_labels)):
-            ax = axes[i][j] if n_rows > 1 else axes[j]
-            ax.plot(data, color='blue')
-            ax.set_title(f"{label}" if i == 0 else "")
-            ax.set_xlabel("Time")
-            if j == 0:
-                ax.set_ylabel(f"Cell {cell.label}")
-            ax.grid(True)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 2.5 * n_rows), sharey=False, sharex=True)
+        if n_rows == 1:
+            axes = [axes]  # Ensure iterable if single cell
 
-    fig.suptitle("Processing Stages for All Cells", fontsize=16)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+        for i, cell in enumerate(cells):
+            trace = np.array(cell.raw_intensity_trace, dtype=float)
+
+            raw = trace.copy()
+            #detrended = highpass_filter(raw, cutoff=cutoff, fs=fs, order=order)
+            detrended = fir_filter(raw, cutoff=cutoff, fs=fs, numtaps=numtaps)
+            smoothed = gaussian_smooth(detrended, sigma=sigma)
+            normalized = normalize_trace(smoothed, method=method)
+            stages = [raw, detrended, smoothed, normalized]
+
+            for j, (data, label) in enumerate(zip(stages, stages_labels)):
+                ax = axes[i][j] if n_rows > 1 else axes[j]
+                ax.plot(data, color='blue')
+                ax.set_title(f"{label}" if i == 0 else "")
+                ax.set_xlabel("Time")
+                if j == 0:
+                    ax.set_ylabel(f"Cell {cell.label}")
+                ax.grid(True)
+
+        fig.suptitle(f"Processing Stages - Config {config_idx+1}: σ={sigma}, cutoff={cutoff}, numtaps={numtaps}", fontsize=14)
+        fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
+
 
 def plot_trace_grid(cell, sigmas, cutoffs, fs=1.0, order=2):
     raw = cell.raw_intensity_trace

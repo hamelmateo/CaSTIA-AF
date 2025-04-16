@@ -99,10 +99,13 @@ class Cell:
             return
 
         try:
-            self.processed_intensity_trace, r_squared = process_trace(
+            self.processed_intensity_trace = process_trace(
                 self.raw_intensity_trace, sigma=sigma
             )
-            self.has_good_exponential_fit = r_squared >= 0.8
+            """self.processed_intensity_trace, r_squared = process_trace(
+                self.raw_intensity_trace, sigma=sigma
+            )
+            self.has_good_exponential_fit = r_squared >= 0.8"""
         except Exception as e:
             logger.error(f"Failed to process trace for cell {self.label}: {e}")
             self.processed_intensity_trace = []
