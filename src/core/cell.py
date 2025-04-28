@@ -85,13 +85,14 @@ class Cell:
         plt.grid(True)
         plt.show()
 
-    def get_processed_trace(self, sigma: float = 1.0) -> None:
+
+    def get_processed_trace(self, params: dict) -> None:
         """
         Apply the full processing pipeline to the raw trace:
         detrending, smoothing, and ΔF/F₀ normalization.
 
         Args:
-            sigma (float): Gaussian smoothing sigma.
+            params (dict): Processing parameters.
         """
         if not self.raw_intensity_trace:
             logger.info(f"Cell {self.label} has no intensity data to process.")
@@ -100,13 +101,9 @@ class Cell:
 
         try:
             self.processed_intensity_trace = process_trace(
-                self.raw_intensity_trace, sigma=sigma
+                self.raw_intensity_trace, params=params
             )
-            """self.processed_intensity_trace, r_squared = process_trace(
-                self.raw_intensity_trace, sigma=sigma
-            )
-            self.has_good_exponential_fit = r_squared >= 0.8"""
         except Exception as e:
             logger.error(f"Failed to process trace for cell {self.label}: {e}")
             self.processed_intensity_trace = []
-            self.has_good_exponential_fit = False
+

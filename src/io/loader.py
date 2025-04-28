@@ -9,7 +9,8 @@ import logging
 from typing import List
 
 from src.core.cell import Cell
-from src.analysis.signal_processing import process_trace, detrend_exponential, fir_filter, gaussian_smooth, normalize_trace, highpass_filter
+from src.analysis.signal_processing import moving_average_detrend, process_trace, detrend_exponential, fir_filter, gaussian_smooth, normalize_trace, butterworth_filter, wavelet_detrend, diff_filter, savgol_baseline_subtract
+from src.config.config import DETRENDING_MODE
 
 logger = logging.getLogger(__name__)
 
@@ -300,64 +301,57 @@ def plot_umap(
 
 # ==========================
 
-
-def run_processing_pipeline(cells: List[Cell], processing_configs: List[dict]):
-    plot_all_cells_processing_stages(cells, processing_configs)
-
-
-def plot_all_cells_processing_stages(cells: List[Cell], processing_configs: List[dict]) -> None:
+def plot_all_cells_processing_stages(cells: list, processing_configs: list, save_dir: Path = None) -> None:
     """
-    Plot the processing stages for all cells across multiple processing configurations.
+    Plot and save the processing stages (Raw -> Processed) for multiple cells
+    under multiple processing configurations.
 
     Args:
         cells (List[Cell]): List of Cell objects.
-        processing_configs (List[dict]): List of parameter dictionaries, one per config.
-
-    Returns:
-        None
+        processing_configs (List[dict]): List of processing parameter dictionaries.
+        save_dir (Path, optional): Directory to save the plots. Defaults to None (just show).
     """
-    stages_labels = ["Raw", "Detrended", "Smoothed", "ΔF/F₀"]
+    if save_dir:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-    for config_idx, config in enumerate(processing_configs):
-        
-        
-        sigma = config.get("sigma", 1.0)
-        cutoff = config.get("cutoff", 0.001)
-        numtaps = config.get("numtaps", 201)
-        fs = config.get("fs", 1.0)
-        """order = config.get("order", 2)"""
-
-        method = config.get("method", "deltaf")
-
+    for config_idx, params in enumerate(processing_configs):
         n_rows = len(cells)
-        n_cols = len(stages_labels)
+        n_cols = 2  # Only raw and processed
 
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 2.5 * n_rows), sharey=False, sharex=True)
         if n_rows == 1:
-            axes = [axes]  # Ensure iterable if single cell
+            axes = [axes]  # Ensure iterable if only one cell
 
         for i, cell in enumerate(cells):
-            trace = np.array(cell.raw_intensity_trace, dtype=float)
+            raw = np.array(cell.raw_intensity_trace, dtype=float)
+            processed = process_trace(raw, params)
 
-            raw = trace.copy()
-            #detrended = highpass_filter(raw, cutoff=cutoff, fs=fs, order=order)
-            detrended = fir_filter(raw, cutoff=cutoff, fs=fs, numtaps=numtaps)
-            smoothed = gaussian_smooth(detrended, sigma=sigma)
-            normalized = normalize_trace(smoothed, method=method)
-            stages = [raw, detrended, smoothed, normalized]
+            # Plot raw
+            ax_raw = axes[i][0] if n_rows > 1 else axes[0]
+            ax_raw.plot(raw, color='black')
+            ax_raw.set_title("Raw")
+            ax_raw.set_xlabel("Timepoint")
+            if i == 0:
+                ax_raw.set_ylabel(f"Cell {cell.label}")
 
-            for j, (data, label) in enumerate(zip(stages, stages_labels)):
-                ax = axes[i][j] if n_rows > 1 else axes[j]
-                ax.plot(data, color='blue')
-                ax.set_title(f"{label}" if i == 0 else "")
-                ax.set_xlabel("Time")
-                if j == 0:
-                    ax.set_ylabel(f"Cell {cell.label}")
-                ax.grid(True)
+            # Plot processed
+            ax_proc = axes[i][1] if n_rows > 1 else axes[1]
+            ax_proc.plot(processed, color='blue')
+            ax_proc.set_title("Processed")
+            ax_proc.set_xlabel("Timepoint")
 
-        fig.suptitle(f"Processing Stages - Config {config_idx+1}: σ={sigma}, cutoff={cutoff}, numtaps={numtaps}", fontsize=14)
+        fig.suptitle(f"Processing Stages - Config {config_idx+1} [{DETRENDING_MODE.upper()}]", fontsize=14)
         fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.show()
+
+        if save_dir:
+            plot_filename = save_dir / f"processing_config_{config_idx+1}.png"
+            fig.savefig(plot_filename)
+            plt.close(fig)
+            print(f"Saved plot to {plot_filename}")
+        else:
+            plt.show()
+
 
 
 def plot_trace_grid(cell, sigmas, cutoffs, fs=1.0, order=2):

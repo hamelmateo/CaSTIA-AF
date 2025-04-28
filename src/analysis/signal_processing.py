@@ -4,27 +4,105 @@ from scipy.signal import butter, firwin, savgol_filter, sosfilt, filtfilt
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit, OptimizeWarning
 from typing import List
+import pywt
 import warnings
 from sklearn.metrics import r2_score
+from src.config.config import DETRENDING_MODE
 
 
 
 
-def process_trace(raw_trace: list[float], sigma: float = 1.0) -> tuple[np.ndarray, float]:
+def process_trace(raw_trace: list[float], params: dict) -> np.ndarray:
+    import numpy as np
+    from src.config.config import DETRENDING_MODE  # fallback if needed
+
     raw = np.array(raw_trace)
-    #detrended, r2 = detrend_exponential(raw)
-    #filtered = highpass_filter(trace, cutoff, fs, order, btype, mode)
-    detrended = fir_filter(raw, cutoff=0.001, fs=1.0, numtaps=201)
+    mode = params.get('detrending_method', DETRENDING_MODE)  # <<< KEY FIX
+
+    sigma = params.get('sigma', 1.0)
+    normalize_method = params.get('normalize_method', 'deltaf')
+
+    # === DETRENDING STEP ===
+    if mode == 'wavelet':
+        wavelet = params.get('wavelet', 'db4')
+        level = params.get('level', None)
+        detrended = wavelet_detrend(raw, wavelet=wavelet, level=level)
+
+    elif mode == 'fir':
+        cutoff = params.get('cutoff', 0.001)
+        numtaps = params.get('numtaps', 201)
+        detrended = fir_filter(raw, cutoff=cutoff, fs=1.0, numtaps=numtaps)
+
+    elif mode == 'butterworth':
+        cutoff = params.get('cutoff', 0.001)
+        order = params.get('order', 2)
+        mode_butter = params.get('mode', 'sos')
+        detrended = butterworth_filter(raw, cutoff=cutoff, fs=1.0, order=order, btype='highpass', mode=mode_butter)
+
+    elif mode == 'exponentialfit':
+        detrended, _ = detrend_exponential(raw)
+
+    elif mode == 'diff':
+        detrended = diff_filter(raw)
+
+    elif mode == 'savgol':
+        window_length = params.get('window_length', 101)
+        polyorder = params.get('polyorder', 2)
+        presmoothing_sigma = params.get('presmoothing_sigma', 0.0)
+
+        if presmoothing_sigma > 0:
+            presmoothed = gaussian_smooth(raw, presmoothing_sigma)
+        else:
+            presmoothed = raw
+
+        detrended = savgol_baseline_subtract(presmoothed, window_length=window_length, polyorder=polyorder)
+
+    elif mode == 'movingaverage':
+        window_size = params.get('window_size', 101)
+        detrended = moving_average_detrend(raw, window_size=window_size)
+
+    else:
+        raise ValueError(f"Unsupported DETRENDING_MODE: {mode}")
+
+    # === SMOOTHING STEP ===
     smoothed = gaussian_smooth(detrended, sigma)
-    normalized = normalize_trace(smoothed, 'deltaf')
-    #normalized = normalize_trace(smoothed)
+
+    # === NORMALIZATION STEP ===
+    normalized = normalize_trace(smoothed, normalize_method)
 
     processed_trace = normalized
 
     return processed_trace
 
 
-def highpass_filter(trace, cutoff, fs=1.0, order=2, btype='highpass', mode='sos'):
+
+def moving_average_detrend(trace: np.ndarray, window_size: int = 101) -> np.ndarray:
+    if window_size < 1:
+        raise ValueError("window_size must be >= 1")
+    baseline = np.convolve(trace, np.ones(window_size)/window_size, mode='same')
+    return trace - baseline
+
+
+def wavelet_detrend(trace: np.ndarray, wavelet: str = 'db4', level: int = None) -> np.ndarray:
+    """
+    Perform wavelet detrending by removing low-frequency components.
+
+    Args:
+        trace (np.ndarray): Raw signal.
+        wavelet (str): Wavelet name, e.g., 'db4', 'coif5'.
+        level (int): Decomposition level (optional).
+
+    Returns:
+        np.ndarray: Detrended signal.
+    """
+    coeffs = pywt.wavedec(trace, wavelet, mode='periodization', level=level)
+    # Zero out approximation coefficients (lowest frequency part)
+    coeffs[0] = np.zeros_like(coeffs[0])
+    detrended = pywt.waverec(coeffs, wavelet, mode='periodization')
+    return detrended[:len(trace)]  # In case of padding
+
+
+def butterworth_filter(trace, cutoff, fs=1.0, order=2, btype='highpass', mode='sos'):
     if mode == 'ba':
         b, a = butter(order, cutoff, btype=btype, analog=False, fs=fs)
         return filtfilt(b, a, trace)
@@ -91,12 +169,16 @@ def normalize_trace(trace, method='deltaf', min_range=1e-2):
             - 'percentile' : scale to [0, 1] using 10th percentile as baseline
             - 'deltaf' : ΔF/F₀ using 10th percentile as F₀
             - 'zscore' : standard score normalization
+            - 'none' : no normalization (return original)
         min_range (float): Minimum allowed dynamic range to avoid division by near-zero
 
     Returns:
         np.ndarray: Normalized trace
     """
     trace = np.array(trace, dtype=float)
+
+    if method == 'none':
+        return trace  # <<< Simply return the raw input without changes
 
     if method == 'minmax':
         min_val = np.min(trace)
