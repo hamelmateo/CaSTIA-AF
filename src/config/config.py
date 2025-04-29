@@ -8,12 +8,9 @@ PADDING = 5  # Filename zero-padding digits
 # ==========================
 ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
 SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
-GAUSSIAN_SIGMA = 2.5  # Sigma for Gaussian filter
-HPF_CUTOFF = 0.001  # High-pass filter cutoff frequency (Hz)
 SAMPLING_FREQ = 1.0  # Sampling frequency (Hz)
-ORDER = 9  # Filter order
 BTYPE = 'highpass'  # Filter type
-DETRENDING_MODE = 'savgol'  # Detrending mode ('wavelet', 'butterworth', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage')
+DETRENDING_MODE = 'butterworth'  # Detrending mode ('wavelet', 'butterworth', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage')
 
 
 # ==========================
@@ -36,10 +33,10 @@ SIGNAL_PROCESSING_PARAMETERS = {
     },
 
     "butterworth": {
-        "cutoff": 0.001,            # High-pass cutoff frequency (Hz)
-        "order": 2,                 # Filter order
-        "mode": "sos",              # 'sos' or 'ba'
-        "sigma": 2.0,
+        "cutoff": 0.003,            # High-pass cutoff frequency (Hz)
+        "order": 6,                 # Filter order
+        "mode": "ba",              # 'sos' or 'ba'
+        "sigma": 6.0,
         "normalize_method": "deltaf"
     },
 

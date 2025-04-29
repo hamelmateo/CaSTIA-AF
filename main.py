@@ -18,7 +18,6 @@ from src.config.config import (
     EXISTING_MASK,
     EXISTING_RAW_INTENSITY,
     EXISTING_PROCESSED_INTENSITY,
-    GAUSSIAN_SIGMA,
     SIGNAL_PROCESSING_PARAMETERS,
     DETRENDING_MODE
 )
@@ -102,7 +101,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     active_cells = [cell for cell in cells if cell.is_valid]
     logger.info(f"Active cells: {len(active_cells)} / Total: {len(cells)}")
 
-    if not EXISTING_RAW_INTENSITY or not processed_cells_file_path.exists():
+    if not EXISTING_RAW_INTENSITY or not raw_cells_file_path.exists():
         try:
             if not PARALLELELIZE:
                 get_cells_intensity_profiles(
@@ -119,8 +118,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
                     fitc_img_path,
                     fitc_file_pattern,
                     PADDING,
-                    ROI_SCALE,
-                    GAUSSIAN_SIGMA
+                    ROI_SCALE
                 )
             save_pickle_file(active_cells, raw_cells_file_path)
         except Exception as e:
@@ -140,84 +138,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     else:
         active_cells = load_cells_from_pickle(processed_cells_file_path, EXISTING_PROCESSED_INTENSITY)
 
-    """
-    # Run custom processing on selected cell labels
-    selected_labels = [665, 305, 640, 34, 485, 158, 319, 600]
-    selected_cells = [cell for cell in active_cells if cell.label in selected_labels]
-    """
-    
-    # =============================================================
-    # Processing Parameters Dictionary (for use with plot_all_cells_processing_stages)
-    # -------------------------------------------------------------
-    # Common Parameters:
-    # - sigma: float
-    #     Gaussian smoothing standard deviation after detrending.
-    # - normalize_method: str
-    #     Normalization method to use ('deltaf', 'minmax', 'percentile', 'zscore').
 
-    # Specific to Wavelet Detrending (DETRENDING_MODE == 'wavelet'):
-    # - wavelet: str
-    #     Name of the wavelet function (e.g., 'db4', 'coif5', 'sym5').
-    # - level: int or None
-    #     Decomposition level. If None, uses maximum possible level.
-
-    # Specific to FIR Detrending (DETRENDING_MODE == 'fir'):
-    # - cutoff: float
-    #     High-pass filter cutoff frequency (normalized to [0, 0.5]).
-    # - numtaps: int
-    #     Number of filter taps (must be odd).
-
-    # Specific to Butterworth Detrending (DETRENDING_MODE == 'butterworth'):
-    # - cutoff: float
-    #     High-pass filter cutoff frequency (Hz).
-    # - order: int
-    #     Order of the Butterworth filter.
-    # - mode: str
-    #     Filter mode ('sos' or 'ba').
-
-    # Exponential fit detrending (DETRENDING_MODE == 'exponentialfit'):
-    # - No additional parameters required.
-
-    # -------------------------------------------------------------
-    # NOTE (Wavelet Testing):
-    # Only the following wavelets produced good results:
-    # - 'db2', 'db4', 'sym4'
-    #
-    # NOTE (Butterworth Testing):
-    # No good results were found using the Butterworth filter.
-    #
-    # NOTE (Diff filter Testing):
-    # No good results were found using the Diff filter.
-    #
-    # NOTE (Savgol filter Testing):
-    # Good results were found using the Savgol filter.
-    #
-    # NOTE (FIR filter Testing):
-    # No good results were found using the FIR filter.
-    # =============================================================
-
-    """
-    processing_configs = [
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 351, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 401, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 451, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 501, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 551, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 601, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 651, "polyorder": 2},
-        {"wavelet": "db2", "level": None, "sigma": 6.0, "normalize_method": "deltaf", "cutoff": 0.01, "order": 2, "mode": "sos", "window_length": 701, "polyorder": 2},
-    ]
-    
-
-    if selected_cells:
-        from src.io.loader import plot_all_cells_processing_stages
-        plot_all_cells_processing_stages(selected_cells, processing_configs)
-    else:
-        logger.warning("No matching cells found for custom processing pipeline.")
-    """
-
-
-    """"""
     logger.info("Running UMAP...")
     try:
         # Optional: Exclude outlier cells by label

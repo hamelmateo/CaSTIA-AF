@@ -105,8 +105,7 @@ def get_cells_intensity_profiles_parallelized(
     input_dir: Path,
     pattern: str,
     padding: int,
-    roi_scale: float,
-    gaussian_sigma: float
+    roi_scale: float
 ) -> None:
     """
     Calculate the intensity profiles for each cell using parallel processing
