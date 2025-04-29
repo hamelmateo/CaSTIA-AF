@@ -64,6 +64,10 @@ def process_trace(raw_trace: list[float], params: dict) -> np.ndarray:
     else:
         raise ValueError(f"Unsupported DETRENDING_MODE: {mode}")
 
+
+    # === CUT FIRST 125 TIMEPOINTS ===
+    detrended = cut_trace_start(detrended)
+
     # === SMOOTHING STEP ===
     smoothed = gaussian_smooth(detrended, sigma)
 
@@ -74,6 +78,15 @@ def process_trace(raw_trace: list[float], params: dict) -> np.ndarray:
 
     return processed_trace
 
+
+def cut_trace_start(trace: np.ndarray, num_points: int = 125) -> np.ndarray:
+    """
+    Cut the first `num_points` elements of the trace.
+    If the trace is shorter than `num_points`, returns an empty array.
+    """
+    if len(trace) <= num_points:
+        return np.array([], dtype=trace.dtype)
+    return trace[num_points:]
 
 
 def moving_average_detrend(trace: np.ndarray, window_size: int = 101) -> np.ndarray:
