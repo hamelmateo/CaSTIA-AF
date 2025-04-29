@@ -1,7 +1,6 @@
 import time
 import logging
 from pathlib import Path
-from random import randint
 
 from src.io.loader import (
     load_cells_from_pickle,
@@ -27,7 +26,6 @@ from src.core.pipeline import (
     get_cells_intensity_profiles,
     get_cells_intensity_profiles_parallelized,
 )
-from src.analysis.tuning import highpass_filter_param_tuning, explore_processing_parameters
 from src.analysis.umap_analysis import run_umap_on_cells
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
@@ -48,7 +46,7 @@ def run_pipeline(data_path: Path, output_path: Path) -> None:
     """
     output_path.mkdir(parents=True, exist_ok=True)
 
-    directory_name = data_path.name
+    directory_name = data_path.parents[2].name
     fitc_file_pattern = rf"{directory_name}__w3FITC_t(\d+).TIF"
     hoechst_file_pattern = rf"{directory_name}__w2DAPI_t(\d+).TIF"
 
