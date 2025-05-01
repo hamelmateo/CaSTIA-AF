@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import logging
-from calcium_activity_characterization.data.cells import Cell
+from data.cells import Cell
 import pandas as pd
 
 

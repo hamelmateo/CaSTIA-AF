@@ -18,8 +18,8 @@ from tqdm import tqdm
 import pandas as pd
 from arcos4py.tools import binData, track_events_dataframe
 
-from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.utilities.loader import (
+from data.cells import Cell
+from utilities.loader import (
     preprocess_images,
     save_tif_image,
     rename_files_with_padding,
@@ -29,8 +29,8 @@ from calcium_activity_characterization.utilities.loader import (
     load_cells_from_pickle,
     save_event_summary_to_excel
 )
-from calcium_activity_characterization.processing.segmentation import segmented
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from processing.segmentation import segmented
+from processing.signal_processing import SignalProcessor
 from analysis.umap_analysis import run_umap_on_cells
 
 logger = logging.getLogger(__name__)

@@ -9,8 +9,8 @@ import logging
 from typing import List
 import pandas as pd
 
-from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from data.cells import Cell
+from processing.signal_processing import SignalProcessor
 from config.config import DETRENDING_MODE, SIGNAL_PROCESSING_PARAMETERS
 
 

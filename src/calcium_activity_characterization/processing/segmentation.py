@@ -4,7 +4,7 @@ from deepcell.utils.plot_utils import make_outline_overlay
 from pathlib import Path
 import logging
 
-from calcium_activity_characterization.utilities.loader import save_tif_image
+from utilities.loader import save_tif_image
 
 logger = logging.getLogger(__name__)
 

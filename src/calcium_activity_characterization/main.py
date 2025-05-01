@@ -5,7 +5,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
 
-from calcium_activity_characterization.processing.pipeline import CalciumPipeline
+from processing.pipeline import CalciumPipeline
 from config.config import (
     HARDDRIVE_PATH,
     ROI_SCALE,

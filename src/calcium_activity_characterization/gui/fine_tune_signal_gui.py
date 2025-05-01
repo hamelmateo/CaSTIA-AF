@@ -9,7 +9,7 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from processing.signal_processing import SignalProcessor
 from config.config import SIGNAL_PROCESSING_PARAMETERS
 from config import config
 
@@ -175,7 +175,7 @@ class FineTuneSignalWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
+    from utilities.loader import load_cells_from_pickle
     from pathlib import Path
 
     app = QApplication(sys.argv)

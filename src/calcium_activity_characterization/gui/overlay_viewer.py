@@ -12,8 +12,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-from calcium_activity_characterization.utilities.loader import load_cells_from_pickle, load_pickle_file
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from utilities.loader import load_cells_from_pickle, load_pickle_file
+from processing.signal_processing import SignalProcessor
 from config import config
 
 logger = logging.getLogger(__name__)

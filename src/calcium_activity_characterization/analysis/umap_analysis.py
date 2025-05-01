@@ -6,8 +6,8 @@ from sklearn.cluster import DBSCAN
 import logging
 from pathlib import Path
 
-from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.utilities.loader import plot_umap
+from data.cells import Cell
+from utilities.loader import plot_umap
 from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
