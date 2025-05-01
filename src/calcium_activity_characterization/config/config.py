@@ -82,3 +82,36 @@ PARALLELELIZE = True  # Use parallel processing for intensity extraction
 
 
 HARDDRIVE_PATH = "D:/Mateo"
+
+
+
+# ==========================
+# CONFIGURATION ARCOS PARAMETERS
+# ==========================
+
+BINDATA_PARAMETERS = {
+    "smooth_k": 3,
+    "bias_k": 51,
+    "peak_threshold": 0.2,
+    "binarization_threshold": 0.1,
+    "polynomial_degree": 1,
+    "bias_method": "runmed",  # can be 'lm', 'runmed', or 'none'
+    "n_jobs": -1
+}
+
+
+TRACKING_PARAMETERS = {
+    "position_columns": ["x", "y"],       # Columns indicating cell centroid
+    "frame_column": "frame",              # Timepoint column
+    "id_column": "trackID",               # Unique cell ID
+    "binarized_measurement_column": "intensity.bin",  # Binary activation column
+    "clid_column": "event_id",            # Event ID output column
+
+    # ARCOS-specific parameters
+    "eps": 10.0,               # Spatial proximity threshold
+    "min_clustersize": 3,     # Minimum number of cells to form an event
+    "allow_merges": True,     # Allow events to merge
+    "allow_splits": True,     # Allow events to split
+    "stability_threshold": 5, # Minimum duration (frames) for event stability
+    "linking_method": "nearest"  # Method to associate objects across frames
+}

@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.gui.overlay_viewer import OverlayViewer
-from src.gui.plotter import show_cell_plot
+from gui.overlay_viewer import OverlayViewer
+from calcium_activity_characterization.utilities.plotter import show_cell_plot
 
 class UMAPViewer(QMainWindow):
     def __init__(self, folder_path: Optional[Path] = None):

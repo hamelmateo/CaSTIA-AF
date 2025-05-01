@@ -3,7 +3,7 @@ from itertools import product
 from sklearn.preprocessing import StandardScaler
 import umap
 import numpy as np
-from src.core.cell import Cell
+from calcium_activity_characterization.data.cells import Cell
 from typing import List
 from scipy.signal import butter, sosfilt, filtfilt
 

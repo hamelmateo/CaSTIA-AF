@@ -7,10 +7,12 @@ import matplotlib.pyplot as plt
 import random
 import logging
 from typing import List
+import pandas as pd
 
-from src.core.cell import Cell
-from src.analysis.signal_processing import moving_average_detrend, process_trace, detrend_exponential, fir_filter, gaussian_smooth, normalize_trace, butterworth_filter, wavelet_detrend, diff_filter, savgol_baseline_subtract
-from src.config.config import DETRENDING_MODE
+from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from config.config import DETRENDING_MODE, SIGNAL_PROCESSING_PARAMETERS
+
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +163,30 @@ def load_cells_from_pickle(file_path: Path, load: bool = False) -> List[Cell]:
     else:
         logger.warning(f"File {file_path} not loaded (missing or load=False). Returning empty list.")
         return []
+
+
+def load_pickle_file(file_path: Path):
+    """
+    Load any Python object (e.g. DataFrame, dict, list) from a pickle file.
+
+    Args:
+        file_path (Path): Path to the .pkl file.
+
+    Returns:
+        object: The loaded Python object.
+    """
+    if not file_path.exists():
+        logger.warning(f"File {file_path} not loaded (missing or load=False). Returning empty list.")
+        return []
+
+    try:
+        with open(file_path, "rb") as f:
+            data = pickle.load(f)
+        logger.info(f"Successfully loaded pickle from {file_path}")
+        return data
+    except Exception as e:
+        logger.error(f"Failed to load pickle file from {file_path}: {e}")
+        raise
 
 
 def load_existing_img(img_path: Path) -> np.ndarray:
@@ -325,7 +351,9 @@ def plot_all_cells_processing_stages(cells: list, processing_configs: list, save
 
         for i, cell in enumerate(cells):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
-            processed = process_trace(raw, params)
+            processor = SignalProcessor(DETRENDING_MODE, SIGNAL_PROCESSING_PARAMETERS[DETRENDING_MODE])
+            processed = processor.run(raw)
+
 
             # Plot raw
             ax_raw = axes[i][0] if n_rows > 1 else axes[0]
@@ -353,70 +381,45 @@ def plot_all_cells_processing_stages(cells: list, processing_configs: list, save
             plt.show()
 
 
+def save_event_summary_to_excel(events_df: pd.DataFrame, output_path: Path) -> None:
+    """
+    Save a summary of tracked ARCOS events as an Excel file.
 
-def plot_trace_grid(cell, sigmas, cutoffs, fs=1.0, order=2):
-    raw = cell.raw_intensity_trace
-    n_rows = len(cutoffs)
-    n_cols = len(sigmas)
+    Each row represents one event, with columns:
+        - event_id
+        - n_frames: number of unique frames
+        - n_cells: number of unique cells (trackID)
+        - start_frame: first frame index
+        - end_frame: last frame index
+        - frames: list of frame indices
+        - cells: list of cell IDs
 
-    plt.figure(figsize=(8, 3))
-    plt.plot(raw, color='black')
-    plt.title(f"Raw Intensity Trace - Cell {cell.label}")
-    plt.xlabel("Timepoint")
-    plt.ylabel("Intensity")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    Args:
+        events_df (pd.DataFrame): Output from track_events_dataframe
+        output_path (Path): Path to save the Excel file
+    """
+    if "event_id" not in events_df.columns:
+        raise ValueError("Missing 'event_id' column in event dataframe.")
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 2.5*n_rows), sharex=True, sharey=True)
+    summary = (
+        events_df.groupby("event_id")
+        .agg(
+            frames=("frame", lambda x: sorted(x.unique())),
+            cells=("trackID", lambda x: sorted(x.unique())),
+        )
+        .reset_index()
+    )
 
-    for i, cutoff in enumerate(cutoffs):
-        for j, sigma in enumerate(sigmas):
-            trace = process_trace(raw, sigma=sigma, cutoff=cutoff, fs=fs, order=order)
-            ax = axes[i][j] if n_rows > 1 else axes[j]
+    summary["n_frames"] = summary["frames"].apply(len)
+    summary["n_cells"] = summary["cells"].apply(len)
+    summary["start_frame"] = summary["frames"].apply(lambda x: x[0] if x else None)
+    summary["end_frame"] = summary["frames"].apply(lambda x: x[-1] if x else None)
 
-            if trace is None or len(trace) == 0:
-                ax.set_title(f"σ={sigma}, cutoff={cutoff} (empty)")
-                continue
+    # Optional: move columns into order
+    summary = summary[
+        ["event_id", "n_frames", "n_cells", "start_frame", "end_frame", "frames", "cells"]
+    ]
 
-            ax.plot(trace, color='blue')
-            ax.set_title(f"σ={sigma}, cutoff={cutoff}")
-            ax.grid(True)
-
-    fig.suptitle(f"Processed Trace Grid (Cell {cell.label})", fontsize=14)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
-
-
-def plot_highpass_grid(cell, cutoffs, orders, fs=1.0, sigma=1.0, btype='highpass'):
-    raw = cell.raw_intensity_trace
-    n_rows = len(cutoffs)
-    n_cols = len(orders)
-
-    plt.figure(figsize=(8, 3))
-    plt.plot(raw, color='black')
-    plt.title(f"Raw Intensity Trace - Cell {cell.label}")
-    plt.xlabel("Timepoint")
-    plt.ylabel("Intensity")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 2.5*n_rows), sharex=True, sharey=True)
-
-    for i, cutoff in enumerate(cutoffs):
-        for j, order in enumerate(orders):
-            trace = process_trace(raw, sigma=sigma, cutoff=cutoff, fs=fs, order=order, btype=btype)
-            ax = axes[i][j] if n_rows > 1 else axes[j]
-
-            if trace is None or len(trace) == 0:
-                ax.set_title(f"order={order}, cutoff={cutoff} (empty)")
-                continue
-
-            ax.plot(trace, color='blue')
-            ax.set_title(f"order={order}, cutoff={cutoff}")
-            ax.grid(True)
-
-    fig.suptitle(f"Processed Trace Grid (Cell {cell.label})", fontsize=14)
-    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    excel_path = output_path / "event_summary.xlsx"
+    summary.to_excel(excel_path, index=False)
+    logger.info(f"Saved event summary to {excel_path}")

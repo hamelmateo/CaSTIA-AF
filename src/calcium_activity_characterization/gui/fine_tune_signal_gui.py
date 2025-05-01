@@ -9,9 +9,9 @@ from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
-from src.analysis.signal_processing import process_trace
-from src.config.config import SIGNAL_PROCESSING_PARAMETERS
-from src.config import config
+from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from config.config import SIGNAL_PROCESSING_PARAMETERS
+from config import config
 
 class FineTuneSignalWindow(QMainWindow):
     def __init__(self, cells: list):
@@ -150,7 +150,9 @@ class FineTuneSignalWindow(QMainWindow):
 
         for idx, cell in enumerate(self.cells):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
-            processed = process_trace(raw, params)
+            processor = SignalProcessor(params["detrending_method"], params)
+            processed = processor.run(raw)
+
 
             ax_raw = self.axs[idx][0]
             ax_proc = self.axs[idx][1]
@@ -173,7 +175,7 @@ class FineTuneSignalWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    from src.io.loader import load_cells_from_pickle
+    from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
     from pathlib import Path
 
     app = QApplication(sys.argv)

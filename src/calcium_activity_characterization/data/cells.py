@@ -1,11 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from src.config.config import SMALL_OBJECT_THRESHOLD
+from config.config import SMALL_OBJECT_THRESHOLD
 import logging
 from typing import Optional
-from scipy.ndimage import gaussian_filter1d
-from scipy.signal import butter, sosfilt
-from src.analysis.signal_processing import process_trace
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -85,25 +83,30 @@ class Cell:
         plt.grid(True)
         plt.show()
 
+    def get_arcos_dataframe(self) -> pd.DataFrame:
+            """
+            Return a DataFrame formatted for arcos4py binarization and event tracking.
 
-    def get_processed_trace(self, params: dict) -> None:
-        """
-        Apply the full processing pipeline to the raw trace:
-        detrending, smoothing, and ΔF/F₀ normalization.
+            The DataFrame contains the following columns:
+                - frame: Timepoint index.
+                - trackID: Unique cell identifier.
+                - x: X-coordinate of centroid.
+                - y: Y-coordinate of centroid.
+                - intensity: Raw intensity trace.
 
-        Args:
-            params (dict): Processing parameters.
-        """
-        if not self.raw_intensity_trace:
-            logger.info(f"Cell {self.label} has no intensity data to process.")
-            self.processed_intensity_trace = []
-            return
+            Returns:
+                pd.DataFrame: DataFrame with cell information formatted for arcos4py.
+            """
+            if not self.raw_intensity_trace:
+                logger.warning(f"Cell {self.label} has no intensity data.")
+                return pd.DataFrame()
 
-        try:
-            self.processed_intensity_trace = process_trace(
-                self.raw_intensity_trace, params=params
-            )
-        except Exception as e:
-            logger.error(f"Failed to process trace for cell {self.label}: {e}")
-            self.processed_intensity_trace = []
+            data = {
+                'frame': range(len(self.raw_intensity_trace)),
+                'trackID': [self.label] * len(self.raw_intensity_trace),
+                'x': [self.centroid[1]] * len(self.raw_intensity_trace),  # centroid[1] is X-coordinate
+                'y': [self.centroid[0]] * len(self.raw_intensity_trace),  # centroid[0] is Y-coordinate
+                'intensity': self.raw_intensity_trace
+            }
 
+            return pd.DataFrame(data)

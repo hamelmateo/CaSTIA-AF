@@ -1,11 +1,10 @@
-# python -m src.gui
 from PyQt5.QtWidgets import QApplication, QFileDialog
 from pathlib import Path
 import sys
 import logging
 
-from src.config.config import HARDDRIVE_PATH
-from src.gui.umap_viewer import UMAPViewer
+from config.config import HARDDRIVE_PATH
+from gui.overlay_viewer import OverlayViewer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ def main() -> None:
             logger.info("No folder selected. Exiting.")
             return
 
-        viewer = UMAPViewer(Path(folder))
+        viewer = OverlayViewer(Path(folder))
         viewer.show()
         viewer.raise_()
         sys.exit(app.exec_())
