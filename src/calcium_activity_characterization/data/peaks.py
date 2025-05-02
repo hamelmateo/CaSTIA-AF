@@ -68,11 +68,11 @@ class PeakDetector:
         if self.method == "skimage":
             peaks, properties = find_peaks(
                 trace,
-                prominence=self.params.get("prominence", 0.1),
-                distance=self.params.get("distance", 5),
-                height=self.params.get("height"),
-                threshold=self.params.get("threshold"),
-                width=self.params.get("width")
+                prominence=self.method_params.get("prominence", 0.1),
+                distance=self.method_params.get("distance", 5),
+                height=self.method_params.get("height"),
+                threshold=self.method_params.get("threshold"),
+                width=self.method_params.get("width")
             )
 
             prominences = properties["prominences"]
