@@ -17,11 +17,11 @@ BTYPE = 'highpass'  # Filter type
 # ==========================
 
 SIGNAL_PROCESSING = {
-    "pipeline": "arcos",  # Options: 'arcos', 'custom'
+    "pipeline": "custom",  # Options: 'arcos', 'custom'
     "apply": {
-        "detrending": True,
+        "detrending": False,
         "smoothing": True,
-        "normalization": True,
+        "normalization": False,
     },
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
@@ -30,7 +30,7 @@ SIGNAL_PROCESSING = {
 # TODO: Normalization parameters dictionary
 
 SIGNAL_PROCESSING_PARAMETERS = {
-    "sigma": 2.0,          # Global Gaussian smoothing σ
+    "sigma": 4.0,          # Global Gaussian smoothing σ
 
     "methods": {
         "wavelet": {
@@ -74,15 +74,35 @@ SIGNAL_PROCESSING_PARAMETERS = {
 # ==========================
 # FLAGS
 # ==========================
+SAVE_OVERLAY = True  # Save segmentation overlay
 EXISTING_CELLS = True  # Load precomputed cells from file
 EXISTING_MASK = True  # Load precomputed mask from file
-EXISTING_PROCESSED_INTENSITY = True  # Load intensity traces if available
 EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
-SAVE_OVERLAY = True  # Save segmentation overlay
+EXISTING_PROCESSED_INTENSITY = False  # Load intensity traces if available
+
+
 PARALLELELIZE = True  # Use parallel processing for intensity extraction
-
-
 HARDDRIVE_PATH = "D:/Mateo"
+
+
+# ==========================
+# PEAK DETECTION PARAMETERS
+# ==========================
+
+PEAK_DETECTION = {
+    "method": "skimage",  # only 'skimage' supported for now
+    "params": {
+        "skimage": {
+            "prominence": 0.1,
+            "distance": 5,
+            "height": None,
+            "threshold": None,
+            "width": None,
+            "scale_class_quantiles": [0.33, 0.66]
+        }
+    }
+}
+
 
 
 

@@ -8,6 +8,7 @@ from calcium_activity_characterization.processing.pipeline import CalciumPipelin
 from calcium_activity_characterization.config.config import (
     HARDDRIVE_PATH,
     ROI_SCALE,
+    SMALL_OBJECT_THRESHOLD,
     PADDING,
     PARALLELELIZE,
     SAVE_OVERLAY,
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 CONFIG = {
     "ROI_SCALE": ROI_SCALE,
+    "SMALL_OBJECT_THRESHOLD": SMALL_OBJECT_THRESHOLD,
     "PADDING": PADDING,
     "PARALLELELIZE": PARALLELELIZE,
     "SAVE_OVERLAY": SAVE_OVERLAY,

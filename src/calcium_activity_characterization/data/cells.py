@@ -1,10 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
-from typing import Optional
 import pandas as pd
 
-from calcium_activity_characterization.config.config import SMALL_OBJECT_THRESHOLD
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from calcium_activity_characterization.data.peaks import Peak
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +26,19 @@ class Cell:
     def __init__(
         self,
         label: int,
-        centroid: Optional[np.ndarray] = None,
-        pixel_coords: Optional[np.ndarray] = None
+        centroid: np.ndarray = None,
+        pixel_coords: np.ndarray = None,
+        small_object_threshold: int = 200
     ) -> None:
         self.label = label
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.raw_intensity_trace: list[float] = []
         self.processed_intensity_trace: list[float] = []
-        self.is_valid: bool = len(self.pixel_coords) >= SMALL_OBJECT_THRESHOLD
+        self.peaks: list["Peak"] = []
+        self.is_valid: bool = len(self.pixel_coords) >= small_object_threshold
         self.exclude_from_umap = False
-        self.has_good_exponential_fit: bool = True
+
 
 
     def add_mean_intensity(self, image: np.ndarray) -> None:
@@ -111,3 +116,10 @@ class Cell:
             }
 
             return pd.DataFrame(data)
+    
+    def detect_peaks(self, detector) -> None:
+        if len(self.processed_intensity_trace) == 0:
+            self.peaks = []
+            return
+
+        self.peaks = detector.detect(self.processed_intensity_trace)

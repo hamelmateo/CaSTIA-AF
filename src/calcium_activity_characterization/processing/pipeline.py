@@ -31,6 +31,8 @@ from calcium_activity_characterization.utilities.loader import (
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
 from calcium_activity_characterization.analysis.umap_analysis import run_umap_on_cells
+from calcium_activity_characterization.data.peaks import PeakDetector
+
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,27 @@ class CalciumPipeline:
     def __init__(self, config: dict):
         self.config = config
         self.DEVICE_CORES = os.cpu_count()
+        
+        # data
+        self.cells: List[Cell] = []
+        self.active_cells: List[Cell] = []
+
+        # folder paths
+        self.data_path: Path = None
+        self.output_path: Path = None
+        self.directory_name: Path = None
+
+        # file paths
+        self.fitc_file_pattern: Path = None
+        self.hoechst_file_pattern: Path = None
+        self.hoechst_img_path: Path = None
+        self.fitc_img_path: Path = None
+        self.nuclei_mask_path: Path = None
+        self.overlay_path: Path = None
+        self.cells_file_path: Path = None
+        self.raw_cells_file_path: Path = None
+        self.processed_cells_file_path: Path = None
+        self.umap_file_path: Path = None
 
     def run(self, data_path: Path, output_path: Path) -> None:
         """
@@ -59,8 +82,9 @@ class CalciumPipeline:
         self._init_paths(data_path, output_path)
         self._segment_cells()
         self._compute_intensity()
-        #df_processed = self._arcos4py_signal_processing_pipeline() # ARCOS4py detrending & binarization
         self._signal_processing_pipeline()
+        self._detect_peaks()
+        #df_processed = self._arcos4py_signal_processing_pipeline() # ARCOS4py detrending & binarization
         #self._track_events(df_processed) # ARCOS4py tracking
         #self._run_umap()
 
@@ -134,7 +158,7 @@ class CalciumPipeline:
             pixel_coords = np.argwhere(nuclei_mask == label)
             if pixel_coords.size > 0:
                 centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int)
-                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords)
+                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords, small_object_threshold=self.config["SMALL_OBJECT_THRESHOLD"])
                 if (
                     centroid[0] < 20 or centroid[1] < 20 or
                     centroid[0] > nuclei_mask.shape[0] - 20 or
@@ -228,17 +252,7 @@ class CalciumPipeline:
             return
 
         elif pipeline_type == "custom":
-            mode = processing_cfg["method"]
-            apply_flags = processing_cfg["apply"]
-            params = self.config["SIGNAL_PROCESSING_PARAMETERS"][mode]
-
-            processor = SignalProcessor(
-                mode=mode,
-                params=params,
-                use_detrending=apply_flags.get("detrending", False),
-                use_smoothing=apply_flags.get("smoothing", False),
-                use_normalization=apply_flags.get("normalization", False)
-            )
+            processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
 
             for cell in self.active_cells:
                 cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
@@ -303,6 +317,19 @@ class CalciumPipeline:
 
         return df_processed
     
+
+    def _detect_peaks(self):
+        """
+        Run peak detection on all active cells using parameters from config.
+        """
+        detector = PeakDetector(params=self.config.get("PEAK_DETECTION", {}))
+
+        for cell in self.active_cells:
+            cell.detect_peaks(detector)
+
+        logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
+
+
 
     def _track_events(self, df_processed):
         events_df, lineage_tracker = track_events_dataframe(
