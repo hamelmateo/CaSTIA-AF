@@ -54,19 +54,19 @@ class SignalProcessor:
         Returns:
             np.ndarray: Processed trace.
         """
-        raw_trace = np.array(raw_trace, dtype=float)
+        trace = np.array(raw_trace, dtype=float)
 
         if self.use_detrending:
-            processed_trace = self._detrend(raw_trace)
-            processed_trace = self._cut_trace_start(processed_trace, 125)
+            trace = self._detrend(trace)
+            trace = self._cut_trace_start(trace, 125)
 
         if self.use_smoothing:
-            processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
+            trace = gaussian_filter1d(trace, sigma=self.sigma)
 
         if self.use_normalization:
-            processed_trace = self._normalize(processed_trace)
+            trace = self._normalize(trace)
 
-        return processed_trace
+        return trace
 
     def _cut_trace_start(self, trace: np.ndarray, num_points: int) -> np.ndarray:
         """
