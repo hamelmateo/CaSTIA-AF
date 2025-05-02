@@ -166,17 +166,21 @@ class SignalProcessingTestGUI(QMainWindow):
         self.axs = self.figure.subplots(5, 2, squeeze=False)
         self.peak_text.clear()
 
-        detector = PeakDetector(self.get_peak_params())
+        colors = plt.cm.tab10.colors
 
         for i, cell in enumerate(self.random_cells):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
             cell.processed_intensity_trace = processed.tolist()
+
+            detector = PeakDetector(self.get_peak_params())
             cell.detect_peaks(detector)
 
             ax_raw = self.axs[i][0]
             ax_proc = self.axs[i][1]
+            ax_raw.cla()
+            ax_proc.cla()
 
             ax_raw.plot(raw, color='black')
             ax_raw.set_title(f"Cell {cell.label} - Raw")
@@ -187,8 +191,12 @@ class SignalProcessingTestGUI(QMainWindow):
             ax_proc.plot(processed, color='blue', label="Processed")
             for peak in cell.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8, label="Peak" if peak.id == 0 else "")
-                ax_proc.hlines(
-                    peak.height - peak.prominence, peak.start_time, peak.end_time, color='orange', linestyle='--', label="Width" if peak.id == 0 else ""
+                ax_proc.axvspan(
+                    peak.start_time,
+                    peak.end_time,
+                    color=colors[peak.id % len(colors)],
+                    alpha=0.3,
+                    label=f"Peak {peak.id}" if peak.id == 0 else None
                 )
 
             ax_proc.set_title("Processed + Peaks")
