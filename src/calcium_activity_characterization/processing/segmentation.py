@@ -4,9 +4,10 @@ from deepcell.utils.plot_utils import make_outline_overlay
 from pathlib import Path
 import logging
 
-from utilities.loader import save_tif_image
+from calcium_activity_characterization.utilities.loader import save_tif_image
 
 logger = logging.getLogger(__name__)
+
 
 def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.ndarray:
     """

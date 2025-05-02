@@ -7,9 +7,8 @@ import matplotlib.pyplot as plt
 import random
 import logging
 from typing import List
-import pandas as pd
 
-from data.cells import Cell
+from calcium_activity_characterization.data.cells import Cell
 
 
 logger = logging.getLogger(__name__)

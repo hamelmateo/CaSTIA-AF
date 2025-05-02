@@ -3,11 +3,9 @@ from itertools import product
 from sklearn.preprocessing import StandardScaler
 import umap
 import numpy as np
-from data.cells import Cell
 from typing import List
-from scipy.signal import butter, sosfilt, filtfilt
 
-
+from calcium_activity_characterization.data.cells import Cell
 
 def explore_umap_parameters(
     active_cells: List[Cell],

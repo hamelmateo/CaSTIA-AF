@@ -1,13 +1,12 @@
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QFileDialog, QListWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QWidget, QLabel
+    QHBoxLayout, QPushButton, QWidget
 )
 from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import tifffile
-import numpy as np
 import pickle
 from pathlib import Path
 

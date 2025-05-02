@@ -1,12 +1,13 @@
 import matplotlib.pyplot as plt
 import logging
-from data.cells import Cell
 import pandas as pd
 import numpy as np
 from pathlib import Path
 
+from calcium_activity_characterization.data.cells import Cell
 
 logger = logging.getLogger(__name__)
+
 
 def show_cell_plot(cell: Cell) -> None:
     """

@@ -1,8 +1,8 @@
 from PyQt5.QtWidgets import (
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMainWindow,
-    QPushButton, QVBoxLayout, QWidget, QDockWidget, QCheckBox, QDialog
+    QVBoxLayout, QWidget, QDockWidget, QCheckBox, QDialog
 )
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QPolygonF
+from PyQt5.QtGui import QPixmap, QImage, QPen, QPolygonF
 from PyQt5.QtCore import Qt, QPointF
 import tifffile
 import numpy as np
@@ -12,9 +12,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-from utilities.loader import load_cells_from_pickle, load_pickle_file
-from processing.signal_processing import SignalProcessor
-from config import config
+from calcium_activity_characterization.utilities.loader import load_cells_from_pickle, load_pickle_file
+from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.config import config
+
 
 logger = logging.getLogger(__name__)
 

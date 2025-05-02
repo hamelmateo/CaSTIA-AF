@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from config.config import SMALL_OBJECT_THRESHOLD
 import logging
 from typing import Optional
 import pandas as pd
+
+from calcium_activity_characterization.config.config import SMALL_OBJECT_THRESHOLD
 
 logger = logging.getLogger(__name__)
 

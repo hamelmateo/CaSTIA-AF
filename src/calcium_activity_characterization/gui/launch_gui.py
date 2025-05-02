@@ -3,8 +3,9 @@ from pathlib import Path
 import sys
 import logging
 
-from config.config import HARDDRIVE_PATH
-from gui.overlay_viewer import OverlayViewer
+from calcium_activity_characterization.config.config import HARDDRIVE_PATH
+from calcium_activity_characterization.gui.overlay_viewer import OverlayViewer
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

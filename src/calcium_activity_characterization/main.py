@@ -1,12 +1,11 @@
-import time
 import logging
 from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
 
-from processing.pipeline import CalciumPipeline
-from config.config import (
+from calcium_activity_characterization.processing.pipeline import CalciumPipeline
+from calcium_activity_characterization.config.config import (
     HARDDRIVE_PATH,
     ROI_SCALE,
     PADDING,

@@ -5,13 +5,12 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QComboBox, QLineEdit, QFormLayout, QScrollArea
 )
-from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
-from processing.signal_processing import SignalProcessor
-from config.config import SIGNAL_PROCESSING_PARAMETERS
-from config import config
+from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS
+
 
 class FineTuneSignalWindow(QMainWindow):
     def __init__(self, cells: list):

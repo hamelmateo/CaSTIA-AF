@@ -5,10 +5,10 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
 import logging
 from pathlib import Path
-
-from data.cells import Cell
-from utilities.plotter import plot_umap
 from typing import List, Tuple
+
+from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.utilities.plotter import plot_umap
 
 logger = logging.getLogger(__name__)
 

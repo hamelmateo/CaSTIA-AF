@@ -1,18 +1,15 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QFileDialog, QApplication, QGraphicsScene, QGraphicsView,
-    QVBoxLayout, QPushButton, QWidget, QLabel, QHBoxLayout
+    QMainWindow, QFileDialog, QVBoxLayout, QPushButton, QWidget, QHBoxLayout
 )
-from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
 import pickle
-import sys
 from pathlib import Path
 from typing import Optional
 
-from gui.overlay_viewer import OverlayViewer
-from utilities.plotter import show_cell_plot
+from calcium_activity_characterization.gui.overlay_viewer import OverlayViewer
+
 
 class UMAPViewer(QMainWindow):
     def __init__(self, folder_path: Optional[Path] = None):
