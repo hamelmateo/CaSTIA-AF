@@ -31,9 +31,10 @@ class SignalProcessor:
             mode (str): The detrending method to use.
             params (dict): Parameters specific to the selected method.
         """
-        self.use_detrending = pipeline.get("detrending", True)
-        self.use_smoothing = pipeline.get("smoothing", True)
-        self.use_normalization = pipeline.get("normalization", True)
+        apply = pipeline.get("apply", {})
+        self.use_detrending = apply.get("detrending", True)
+        self.use_smoothing = apply.get("smoothing", True)
+        self.use_normalization = apply.get("normalization", True)
 
         self.detrending_mode = pipeline.get("detrending_mode", "butterworth")
         self.detrending_params = params.get("methods", {}).get(self.detrending_mode, {})
