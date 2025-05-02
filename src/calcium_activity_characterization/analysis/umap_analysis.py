@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from data.cells import Cell
-from utilities.loader import plot_umap
+from utilities.plotter import plot_umap
 from typing import List, Tuple
 
 logger = logging.getLogger(__name__)

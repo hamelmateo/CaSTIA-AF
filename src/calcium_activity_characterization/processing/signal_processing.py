@@ -11,18 +11,19 @@ from scipy.signal import butter, firwin, savgol_filter, sosfilt, filtfilt
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
+import pywt
 
 
 class SignalProcessor:
     """
-    Class for detrending, smoothing, and normalizing calcium intensity traces.
+    Class for pptional detrending, smoothing, and normalizing calcium intensity traces.
 
     Attributes:
         mode (str): Detrending method name (e.g., 'butterworth', 'wavelet', etc.)
         params (dict): Dictionary of parameters specific to the selected method
     """
 
-    def __init__(self, mode: str, params: dict):
+    def __init__(self, params: dict, pipeline: dict):
         """
         Initialize the SignalProcessor.
 
@@ -30,10 +31,17 @@ class SignalProcessor:
             mode (str): The detrending method to use.
             params (dict): Parameters specific to the selected method.
         """
-        self.mode = mode
-        self.params = params
+        self.use_detrending = pipeline.get("detrending", True)
+        self.use_smoothing = pipeline.get("smoothing", True)
+        self.use_normalization = pipeline.get("normalization", True)
+
+        self.detrending_mode = pipeline.get("detrending_mode", "butterworth")
+        self.detrending_params = params.get("methods", {}).get(self.detrending_mode, {})
+
+        self.normalize_method = pipeline.get("normalizing_method", "deltaf")
+
         self.sigma = params.get("sigma", 1.0)
-        self.normalize_method = params.get("normalize_method", "deltaf")
+
 
     def run(self, raw_trace: list[float]) -> np.ndarray:
         """
@@ -45,11 +53,19 @@ class SignalProcessor:
         Returns:
             np.ndarray: Processed trace.
         """
-        trace = np.array(raw_trace, dtype=float)
-        detrended = self._detrend(trace)
-        detrended = self._cut_trace_start(detrended, 125)
-        smoothed = gaussian_filter1d(detrended, sigma=self.sigma)
-        return self._normalize(smoothed)
+        raw_trace = np.array(raw_trace, dtype=float)
+
+        if self.use_detrending:
+            processed_trace = self._detrend(raw_trace)
+            processed_trace = self._cut_trace_start(processed_trace, 125)
+
+        if self.use_smoothing:
+            processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
+
+        if self.use_normalization:
+            processed_trace = self._normalize(processed_trace)
+
+        return processed_trace
 
     def _cut_trace_start(self, trace: np.ndarray, num_points: int) -> np.ndarray:
         """
@@ -74,40 +90,42 @@ class SignalProcessor:
         Returns:
             np.ndarray: Detrended trace.
         """
-        if self.mode == "wavelet":
-            import pywt
-            wavelet = self.params.get("wavelet", "db4")
-            level = self.params.get("level")
+        if self.detrending_mode == "wavelet":
+            wavelet = self.detrending_params.get("wavelet", "db4")
+            level = self.detrending_params.get("level")
             coeffs = pywt.wavedec(trace, wavelet, mode="periodization", level=level)
             coeffs[0] = np.zeros_like(coeffs[0])
             return pywt.waverec(coeffs, wavelet, mode="periodization")[:len(trace)]
 
-        elif self.mode == "fir":
-            cutoff = self.params.get("cutoff", 0.001)
-            numtaps = self.params.get("numtaps", 201)
+        elif self.detrending_mode == "fir":
+            cutoff = self.detrending_params.get("cutoff", 0.001)
+            numtaps = self.detrending_params.get("numtaps", 201)
+            fs = self.detrending_params.get("sampling_freq", 1.0)
             if numtaps % 2 == 0:
                 numtaps += 1
-            fir_coeff = firwin(numtaps, cutoff=cutoff, fs=1.0, pass_zero=False)
+            fir_coeff = firwin(numtaps, cutoff=cutoff, fs=fs, pass_zero=False)
             return filtfilt(fir_coeff, [1.0], trace)
 
-        elif self.mode == "butterworth":
-            cutoff = self.params.get("cutoff", 0.003)
-            order = self.params.get("order", 6)
-            mode = self.params.get("mode", "ba")
+        elif self.detrending_mode == "butterworth":
+            cutoff = self.detrending_params.get("cutoff", 0.003)
+            order = self.detrending_params.get("order", 6)
+            mode = self.detrending_params.get("mode", "ba")
+            btype = self.detrending_params.get("btype", "highpass")
+            fs = self.detrending_params.get("sampling_freq", 1.0)
             if mode == "ba":
-                b, a = butter(order, cutoff, btype='highpass', fs=1.0)
+                b, a = butter(order, cutoff, btype=btype, fs=fs)
                 return filtfilt(b, a, trace)
             else:
-                sos = butter(order, cutoff, btype='highpass', output='sos', fs=1.0)
+                sos = butter(order, cutoff, btype=btype, output=mode, fs=fs)
                 return sosfilt(sos, trace)
 
-        elif self.mode == "exponentialfit":
+        elif self.detrending_mode == "exponentialfit":
             return self._detrend_exponential(trace)[0]
 
-        elif self.mode == "diff":
+        elif self.detrending_mode == "diff":
             return np.diff(trace, prepend=trace[0])
 
-        elif self.mode == "savgol":
+        elif self.detrending_mode == "savgol":
             presigma = self.params.get("presmoothing_sigma", 0.0)
             if presigma > 0:
                 trace = gaussian_filter1d(trace, presigma)
@@ -118,7 +136,7 @@ class SignalProcessor:
             baseline = savgol_filter(trace, window_length, polyorder)
             return trace - baseline
 
-        elif self.mode == "movingaverage":
+        elif self.detrending_mode == "movingaverage":
             window = self.params.get("window_size", 101)
             baseline = np.convolve(trace, np.ones(window)/window, mode='same')
             return trace - baseline
@@ -167,10 +185,7 @@ class SignalProcessor:
         """
         method = self.normalize_method
 
-        if method == "none":
-            return trace
-
-        elif method == "minmax":
+        if method == "minmax":
             min_val, max_val = np.min(trace), np.max(trace)
             denom = max_val - min_val
             return (trace - min_val) / (denom + 1e-8) if denom >= min_range else trace - min_val

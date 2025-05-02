@@ -10,60 +10,61 @@ ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
 SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
 SAMPLING_FREQ = 1.0  # Sampling frequency (Hz)
 BTYPE = 'highpass'  # Filter type
-DETRENDING_MODE = 'butterworth'  # Detrending mode ('wavelet', 'butterworth', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage')
 
 
 # ==========================
 # SIGNAL PROCESSING PARAMETERS
 # ==========================
 
+SIGNAL_PROCESSING = {
+    "pipeline": "arcos",  # Options: 'arcos', 'custom'
+    "apply": {
+        "detrending": True,
+        "smoothing": True,
+        "normalization": True,
+    },
+    "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
+    "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
+}
+
+# TODO: Normalization parameters dictionary
+
 SIGNAL_PROCESSING_PARAMETERS = {
-    "wavelet": {
-        "wavelet": "db4",           # Name of the wavelet ('db4', 'sym4', etc.)
-        "level": None,              # Decomposition level (None = max possible)
-        "sigma": 2.0,               # Gaussian smoothing after detrending
-        "normalize_method": "deltaf"  # Normalization type
-    },
+    "sigma": 2.0,          # Global Gaussian smoothing σ
 
-    "fir": {
-        "cutoff": 0.001,            # High-pass cutoff (normalized to Nyquist)
-        "numtaps": 201,             # Number of filter taps (must be odd)
-        "sigma": 2.0,
-        "normalize_method": "deltaf"
-    },
+    "methods": {
+        "wavelet": {
+            "wavelet": "db4", # Wavelet type: 'db4', 'haar', etc.
+            "level": None     # Decomposition level (None for automatic)
+        },
 
-    "butterworth": {
-        "cutoff": 0.003,            # High-pass cutoff frequency (Hz)
-        "order": 6,                 # Filter order
-        "mode": "ba",              # 'sos' or 'ba'
-        "sigma": 6.0,
-        "normalize_method": "deltaf"
-    },
+        "fir": {
+            "cutoff": 0.001,
+            "numtaps": 201,
+            "sampling_freq": 1.0  # Sampling rate in Hz
+        },
 
-    "exponentialfit": {
-        # No specific parameters needed
-        "sigma": 2.0,
-        "normalize_method": "deltaf"
-    },
+        "butterworth": {
+            "cutoff": 0.003,
+            "order": 6,
+            "mode": "ba",   # 'ba' for Butterworth, 'sos' for SOS
+            "btype": "highpass",
+            "sampling_freq": 1.0  # Sampling rate in Hz
+        },
 
-    "diff": {
-        # No specific parameters needed
-        "sigma": 2.0,
-        "normalize_method": "deltaf"
-    },
+        "exponentialfit": {},
 
-    "savgol": {
-        "presmoothing_sigma": 6.0,   # Sigma for Gaussian pre-smoothing
-        "window_length": 601,        # Must be odd
-        "polyorder": 2,              # Polynomial order (degree)
-        "sigma": 4.0,
-        "normalize_method": "none"
-    },
+        "diff": {},
 
-    "movingaverage": {
-        "window_size": 101,          # Moving average window size
-        "sigma": 2.0,
-        "normalize_method": "deltaf"
+        "savgol": {
+            "presmoothing_sigma": 6.0,
+            "window_length": 601,
+            "polyorder": 2
+        },
+
+        "movingaverage": {
+            "window_size": 101
+        }
     }
 }
 

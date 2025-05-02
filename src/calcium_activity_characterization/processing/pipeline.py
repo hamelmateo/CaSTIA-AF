@@ -26,8 +26,7 @@ from utilities.loader import (
     load_images,
     crop_image,
     save_pickle_file,
-    load_cells_from_pickle,
-    save_event_summary_to_excel
+    load_cells_from_pickle
 )
 from processing.segmentation import segmented
 from processing.signal_processing import SignalProcessor
@@ -60,9 +59,9 @@ class CalciumPipeline:
         self._init_paths(data_path, output_path)
         self._segment_cells()
         self._compute_intensity()
-        df_processed = self._binarize_and_detrend() # ARCOS4py binarization
-        self._track_events(df_processed) # ARCOS4py tracking
-        #self._process_traces()
+        #df_processed = self._arcos4py_signal_processing_pipeline() # ARCOS4py detrending & binarization
+        self._signal_processing_pipeline()
+        #self._track_events(df_processed) # ARCOS4py tracking
         #self._run_umap()
 
     def _init_paths(self, data_path: Path, output_path: Path) -> None:
@@ -212,20 +211,54 @@ class CalciumPipeline:
         img = crop_image(img, roi_scale)
         return [float(np.mean([img[y, x] for y, x in coords])) for coords in cell_coords]
 
-    def _process_traces(self):
+    def _signal_processing_pipeline(self):
         """
-        Run detrending and normalization pipeline on all active cells.
+        Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if not self.config["EXISTING_PROCESSED_INTENSITY"] or not self.processed_cells_file_path.exists():
-            mode = self.config["DETRENDING_MODE"]
-            params = self.config["SIGNAL_PROCESSING_PARAMETERS"]
-            processor = SignalProcessor(mode, params[mode])
+        if self.config["EXISTING_PROCESSED_INTENSITY"] and self.processed_cells_file_path.exists():
+            self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
+            return
+
+        processing_cfg = self.config["SIGNAL_PROCESSING"]
+        pipeline_type = processing_cfg["pipeline"]
+
+        if pipeline_type == "arcos":
+            self._arcos4py_signal_processing_pipeline()
+            return
+
+        elif pipeline_type == "custom":
+            mode = processing_cfg["method"]
+            apply_flags = processing_cfg["apply"]
+            params = self.config["SIGNAL_PROCESSING_PARAMETERS"][mode]
+
+            processor = SignalProcessor(
+                mode=mode,
+                params=params,
+                use_detrending=apply_flags.get("detrending", False),
+                use_smoothing=apply_flags.get("smoothing", False),
+                use_normalization=apply_flags.get("normalization", False)
+            )
+
             for cell in self.active_cells:
                 cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
+
             save_pickle_file(self.active_cells, self.processed_cells_file_path)
+            return
+
         else:
-            self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
+            raise ValueError(f"Unknown signal processing pipeline: {pipeline_type}")
+
+    def _custom_signal_processing_pipeline(self):
+        """
+        Run custom signal processing pipeline on all active cells.
+        """
+        params = self.config["SIGNAL_PROCESSING_PARAMETERS"]
+        pipeline = self.config["SIGNAL_PROCESSING"]
+        processor = SignalProcessor(params=params, pipeline=pipeline)
+        for cell in self.active_cells:
+            cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
+
 
     def _run_umap(self):
         """
@@ -250,7 +283,7 @@ class CalciumPipeline:
         return df_arcos
 
 
-    def _binarize_and_detrend(self):
+    def _arcos4py_signal_processing_pipeline(self):
         # Create DataFrame from active_cells
         df_raw = self._prepare_arcos_input()
 
@@ -276,6 +309,6 @@ class CalciumPipeline:
             df_processed,
             **self.config["TRACKING_PARAMETERS"]
         )
-        save_event_summary_to_excel(events_df, self.output_path / "event_summary.xlsx")
         save_pickle_file(events_df, self.output_path / "tracked_events.pkl")
         save_pickle_file(lineage_tracker, self.output_path / "lineage_tracker.pkl")
+
