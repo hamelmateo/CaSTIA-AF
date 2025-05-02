@@ -126,9 +126,6 @@ class SignalProcessor:
             return np.diff(trace, prepend=trace[0])
 
         elif self.detrending_mode == "savgol":
-            presigma = self.params.get("presmoothing_sigma", 0.0)
-            if presigma > 0:
-                trace = gaussian_filter1d(trace, presigma)
             window_length = self.params.get("window_length", 101)
             polyorder = self.params.get("polyorder", 2)
             if window_length % 2 == 0:
