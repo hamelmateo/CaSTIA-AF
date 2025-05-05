@@ -104,7 +104,7 @@ PEAK_DETECTION = {
     },
     "peak_grouping": {
         "overlap_margin": 0,  # Margin for grouping overlapping peaks
-        "verbose": True  # Print grouping information
+        "verbose": False  # Print grouping information
     }
 }
 
@@ -134,7 +134,7 @@ TRACKING_PARAMETERS = {
     "clid_column": "event_id",            # Event ID output column
 
     # ARCOS-specific parameters
-    "eps": 10.0,               # Spatial proximity threshold
+    "eps": 100.0,               # Spatial proximity threshold
     "min_clustersize": 3,     # Minimum number of cells to form an event
     "allow_merges": True,     # Allow events to merge
     "allow_splits": True,     # Allow events to split

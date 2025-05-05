@@ -2,6 +2,9 @@ from typing import Optional, Literal, List
 import numpy as np
 from scipy.signal import find_peaks, peak_widths
 from collections import defaultdict, deque
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Peak:
@@ -158,7 +161,7 @@ class PeakDetector:
             return []
 
         overlap_margin = self.grouping_params.get("overlap_margin", 0)
-        verbose = self.grouping_params.get("verbose", True)
+        verbose = self.grouping_params.get("verbose", False)
 
         # Build adjacency list for overlapping peaks
         graph = defaultdict(set)
@@ -217,11 +220,11 @@ class PeakDetector:
                 group_id_counter += 1
 
         if verbose:
-            print(f"[PeakDetector] Formed {group_id_counter} overlapping groups.")
+            logger.info(f"[PeakDetector] Formed {group_id_counter} overlapping groups.")
             for gid in range(group_id_counter):
                 size = sum(p.group_id == gid for p in grouped_peaks)
-                print(f" - Group {gid}: {size} peaks")
+                logger.info(f" - Group {gid}: {size} peaks")
             num_individuals = sum(p.role == "individual" for p in grouped_peaks)
-            print(f"[PeakDetector] Found {num_individuals} individual (non-overlapping) peaks.")
+            logger.info(f"[PeakDetector] Found {num_individuals} individual (non-overlapping) peaks.")
 
         return grouped_peaks

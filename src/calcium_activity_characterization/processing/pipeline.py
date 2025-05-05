@@ -82,10 +82,8 @@ class CalciumPipeline:
         self._init_paths(data_path, output_path)
         self._segment_cells()
         self._compute_intensity()
-        self._signal_processing_pipeline()
-        self._detect_peaks()
-        #df_processed = self._arcos4py_signal_processing_pipeline() # ARCOS4py detrending & binarization
-        #self._track_events(df_processed) # ARCOS4py tracking
+        arcos_input_df = self._signal_processing_pipeline()
+        self._track_events(arcos_input_df) # ARCOS4py tracking
         #self._run_umap()
 
     def _init_paths(self, data_path: Path, output_path: Path) -> None:
@@ -111,6 +109,7 @@ class CalciumPipeline:
         self.cells_file_path = output_path / "cells.pkl"
         self.raw_cells_file_path = output_path / "raw_active_cells.pkl"
         self.processed_cells_file_path = output_path / "processed_active_cells.pkl"
+        self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.umap_file_path = output_path / "umap.npy"
 
     def _segment_cells(self):
@@ -248,17 +247,21 @@ class CalciumPipeline:
         pipeline_type = processing_cfg["pipeline"]
 
         if pipeline_type == "arcos":
-            self._arcos4py_signal_processing_pipeline()
-            return
+            arcos_input_df = self._arcos4py_signal_processing_pipeline()
+            save_pickle_file(arcos_input_df, self.arcos_input_df)
+            return arcos_input_df
 
         elif pipeline_type == "custom":
             processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
 
             for cell in self.active_cells:
                 cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
-
+            
             save_pickle_file(self.active_cells, self.processed_cells_file_path)
-            return
+            
+            arcos_input_df = self._custom_binarization_pipeline()
+            save_pickle_file(arcos_input_df, self.arcos_input_df)
+            return arcos_input_df
 
         else:
             raise ValueError(f"Unknown signal processing pipeline: {pipeline_type}")
@@ -292,9 +295,11 @@ class CalciumPipeline:
 
 
     def _prepare_arcos_input(self) -> pd.DataFrame:
-        df_list = [cell.get_arcos_dataframe() for cell in self.active_cells]
-        df_arcos = pd.concat(df_list, ignore_index=True)
-        return df_arcos
+        signal_processing_pipeline = self.config["SIGNAL_PROCESSING"]["pipeline"]
+        
+        df_list = [cell.get_arcos_dataframe(signal_processing_pipeline) for cell in self.active_cells]
+        arcos_input_df = pd.concat(df_list, ignore_index=True)
+        return arcos_input_df
 
 
     def _arcos4py_signal_processing_pipeline(self):
@@ -312,30 +317,69 @@ class CalciumPipeline:
             frame_column="frame"
         )
 
-        # Save processed DataFrame
-        save_pickle_file(df_processed, self.output_path / "binarized_data.pkl")
-
         return df_processed
     
 
-    def _detect_peaks(self):
+    def _custom_binarization_pipeline(self) -> pd.DataFrame: 
         """
-        Run peak detection on all active cells using parameters from config.
+        Run peak detection on all active cells using parameters from config and binarize the traces.
         """
         detector = PeakDetector(params=self.config.get("PEAK_DETECTION", {}))
 
         for cell in self.active_cells:
             cell.detect_peaks(detector)
+            cell.binarize_trace_from_peaks()
 
+        df = self._prepare_arcos_input()
         logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
 
+        return df
 
 
-    def _track_events(self, df_processed):
+
+    def _track_events(self, df: pd.DataFrame) -> None:
+        """
+        Track events in the DataFrame using arcos4py's track_events_dataframe function.
+
+        Args:
+            df (pd.DataFrame): DataFrame containing the binarized data.
+        """
+
         events_df, lineage_tracker = track_events_dataframe(
-            df_processed,
+            df,
             **self.config["TRACKING_PARAMETERS"]
         )
         save_pickle_file(events_df, self.output_path / "tracked_events.pkl")
         save_pickle_file(lineage_tracker, self.output_path / "lineage_tracker.pkl")
+
+        # === Summary ===
+        if not isinstance(events_df, pd.DataFrame):
+            print("❌ Not a valid DataFrame.")
+        else:
+            print("✅ Tracked events summary:")
+            print("📋 Columns:", events_df.columns.tolist())
+
+            # Defensive column checking
+            has_event_col = "event_id" in events_df.columns
+            has_frame_col = "frame" in events_df.columns
+            has_cell_col = "trackID" in events_df.columns
+
+            if has_frame_col:
+                print(f"\n🔹 Total unique frames: {events_df['frame'].nunique()}")
+
+            if has_event_col:
+                print(f"🔹 Total unique events: {events_df['event_id'].nunique()}")
+                print(f"🔹 Event durations (frames):")
+                print(events_df.groupby("event_id")["frame"].agg(["min", "max", "count"]).head())
+
+            if has_cell_col:
+                print(f"🔹 Total unique cells: {events_df['lineage'].nunique()}")
+
+            if has_frame_col and has_event_col:
+                print(f"\n🔹 Events per frame:")
+                print(events_df.groupby("frame")["event_id"].nunique().head())
+
+                print(f"\n🔹 Example frame data:")
+                first_frame = events_df["frame"].min()
+                print(events_df[events_df["frame"] == first_frame].head())
 
