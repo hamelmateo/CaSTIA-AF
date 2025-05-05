@@ -118,8 +118,9 @@ class Cell:
             return pd.DataFrame(data)
     
     def detect_peaks(self, detector) -> None:
+        logger.info(f"Detecting peaks for Cell {self.label}.")
         if len(self.processed_intensity_trace) == 0:
             self.peaks = []
             return
 
-        self.peaks = detector.detect(self.processed_intensity_trace)
+        self.peaks = detector.run(self.processed_intensity_trace)

@@ -205,7 +205,7 @@ class SignalProcessingTestGUI(QMainWindow):
             ax_proc.grid(True)
 
             peak_lines = [
-                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rise_time}, prom={p.prominence:.2f}, width={p.width:.2f}, height={p.height:.2f}, class={p.scale_class}"
+                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rise_time}, prom={p.prominence:.2f}, duration={p.duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
                 for p in cell.peaks
             ]
             self.peak_text.append("\n".join(peak_lines) + "\n")
@@ -218,7 +218,7 @@ class SignalProcessingTestGUI(QMainWindow):
         self.canvas.draw()
 
     def save_figure(self):
-        output_dir = Path("testing/SignalProcessingTest")
+        output_dir = Path("tests/signal_peaks_test/figures")
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = output_dir / f"result_plot_{timestamp}.png"

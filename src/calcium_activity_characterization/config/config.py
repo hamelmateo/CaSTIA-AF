@@ -93,13 +93,18 @@ PEAK_DETECTION = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
-            "prominence": 0.1,
-            "distance": 5,
+            "prominence": 3, # Minimum prominence of peaks
+            "distance": 20,  # Minimum distance between peaks
             "height": None,
             "threshold": None,
             "width": None,
-            "scale_class_quantiles": [0.33, 0.66]
+            "scale_class_quantiles": [0.33, 0.66],
+            "relative_height": 0.6 # Relative height for FWHM calculation
         }
+    },
+    "peak_grouping": {
+        "overlap_margin": 0,  # Margin for grouping overlapping peaks
+        "verbose": True  # Print grouping information
     }
 }
 
