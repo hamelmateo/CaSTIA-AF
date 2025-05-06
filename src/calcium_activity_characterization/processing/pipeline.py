@@ -139,7 +139,7 @@ class CalciumPipeline:
             self.cells = load_cells_from_pickle(self.cells_file_path, True)
 
         self.active_cells = [cell for cell in self.cells if cell.is_valid]
-        logger.info(f"Loaded {len(self.active_cells)} active cells out of {len(self.cells)}")
+        logger.info(f"Kept {len(self.active_cells)} active cells out of {len(self.cells)}")
 
     def _convert_mask_to_cells(self, nuclei_mask: np.ndarray) -> List[Cell]:
         """

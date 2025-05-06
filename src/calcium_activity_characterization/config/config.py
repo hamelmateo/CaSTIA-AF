@@ -1,16 +1,25 @@
 # ==========================
-# FILE PATTERNS AND PADDING
+# FLAGS
 # ==========================
-PADDING = 5  # Filename zero-padding digits
+DEBUGGING = False  # Enable debugging mode
+DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
+SAVE_OVERLAY = True  # Save segmentation overlay
+EXISTING_CELLS = True  # Load precomputed cells from file
+EXISTING_MASK = True  # Load precomputed mask from file
+EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
+EXISTING_PROCESSED_INTENSITY = False  # Load intensity traces if available
+
+
+PARALLELELIZE = True  # Use parallel processing for intensity extraction
+HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
+
 
 # ==========================
 # IMAGE PROCESSING PARAMETERS
 # ==========================
 ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
 SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
-SAMPLING_FREQ = 1.0  # Sampling frequency (Hz)
-BTYPE = 'highpass'  # Filter type
-
+PADDING = 5  # Filename zero-padding digits
 
 # ==========================
 # SIGNAL PROCESSING PARAMETERS
@@ -69,22 +78,6 @@ SIGNAL_PROCESSING_PARAMETERS = {
 }
 
 
-
-
-# ==========================
-# FLAGS
-# ==========================
-SAVE_OVERLAY = True  # Save segmentation overlay
-EXISTING_CELLS = True  # Load precomputed cells from file
-EXISTING_MASK = True  # Load precomputed mask from file
-EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
-EXISTING_PROCESSED_INTENSITY = False  # Load intensity traces if available
-
-
-PARALLELELIZE = True  # Use parallel processing for intensity extraction
-HARDDRIVE_PATH = "D:/Mateo"
-
-
 # ==========================
 # PEAK DETECTION PARAMETERS
 # ==========================
@@ -107,7 +100,6 @@ PEAK_DETECTION = {
         "verbose": False  # Print grouping information
     }
 }
-
 
 
 
@@ -134,10 +126,21 @@ TRACKING_PARAMETERS = {
     "clid_column": "event_id",            # Event ID output column
 
     # ARCOS-specific parameters
-    "eps": 100.0,               # Spatial proximity threshold
-    "min_clustersize": 3,     # Minimum number of cells to form an event
+    "eps": 70.0,               # Spatial proximity threshold
+    "min_clustersize": 10,     # Minimum number of cells to form an event
     "allow_merges": True,     # Allow events to merge
-    "allow_splits": True,     # Allow events to split
-    "stability_threshold": 5, # Minimum duration (frames) for event stability
-    "linking_method": "nearest"  # Method to associate objects across frames
+    "allow_splits": False,     # Allow events to split
+    "stability_threshold": 30, # Minimum duration (frames) for event stability
+    "linking_method": "nearest",  # Method to associate objects across frames
+    "clustering_method": "dbscan",  # Clustering method for event detection
+    "min_samples": 5,   # Minimum number of samples for clustering
+    "remove_small_clusters": True,  # Remove small clusters
+    "min_size_for_split": 1,  # Minimum size for split detection
+    "reg": 1, # Regularization parameter for transportation solver
+    "reg_m": 10, # Regularization parameter for transportation solver
+    "cost_threshold": 0, # Cost threshold for event association
+    "n_prev": 30, # Number of previous frames to consider for event association
+    "predictor": False, # Predictor for event association
+    "n_jobs": 1, # Number of parallel jobs for event association
+    "show_progress": True, # Show progress bar for event association
 }
