@@ -6,6 +6,8 @@ import sys
 
 from calcium_activity_characterization.processing.pipeline import CalciumPipeline
 from calcium_activity_characterization.config.config import (
+    DEBUGGING,
+    DEBUGGING_FILE_PATH,
     HARDDRIVE_PATH,
     ROI_SCALE,
     SMALL_OBJECT_THRESHOLD,
@@ -59,39 +61,41 @@ def main() -> None:
     Select one or multiple folders (date or ISX) and run the pipeline on all detected ISX folders.
     """
     app = QApplication(sys.argv)
-    folder_dialog = QFileDialog()
-    folder_dialog.setDirectory(HARDDRIVE_PATH)
-    folder_dialog.setFileMode(QFileDialog.Directory)
-    folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
-    folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)
-    folder_dialog.setWindowTitle("Select One or More Folders (Date folders or ISX)")
-
-    if folder_dialog.exec_():
-        selected = folder_dialog.selectedFiles()
-        all_isx_folders = []
-
-        for folder_str in selected:
-            folder = Path(folder_str)
-            if folder.name.startswith("IS"):
-                all_isx_folders.append(folder)
-            else:
-                isx_inside = find_isx_folders(folder)
-                all_isx_folders.extend(isx_inside)
-
-        if not all_isx_folders:
-            logger.warning("No ISX folders found in selected path(s). Exiting.")
-            return
-
-        pipeline = CalciumPipeline(CONFIG)
-        logger.info(f"Found {len(all_isx_folders)} ISX folders.")
-
-        for isx_folder in sorted(all_isx_folders):
-            output_folder = isx_folder.parents[1] / "Output" / isx_folder.name
-            logger.info(f"Processing {isx_folder}...")
-            pipeline.run(isx_folder, output_folder)
-
+    if DEBUGGING:
+        logger.info("[DEBUGGING MODE] Using test folder from config.")
+        selected = [Path(DEBUGGING_FILE_PATH)]
     else:
-        logger.info("No folder selected. Exiting.")
+        folder_dialog = QFileDialog()
+        folder_dialog.setDirectory(HARDDRIVE_PATH)
+        folder_dialog.setFileMode(QFileDialog.Directory)
+        folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
+        folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)
+        folder_dialog.setWindowTitle("Select One or More Folders (Date folders or ISX)")
+
+        if not folder_dialog.exec_():
+            logger.info("No folder selected. Exiting.")
+            return
+        
+        selected = [Path(folder_str) for folder_str in folder_dialog.selectedFiles()]
+
+    all_isx_folders = []
+    for folder in selected:
+        if folder.name.startswith("IS"):
+            all_isx_folders.append(folder)
+        else:
+            all_isx_folders.extend(find_isx_folders(folder))
+
+    if not all_isx_folders:
+        logger.warning("No ISX folders found in selected path(s). Exiting.")
+        return
+
+    pipeline = CalciumPipeline(CONFIG)
+    logger.info(f"Found {len(all_isx_folders)} ISX folders.")
+
+    for isx_folder in sorted(all_isx_folders):
+        output_folder = isx_folder.parents[1] / "Output" / isx_folder.name
+        logger.info(f"Processing {isx_folder}...")
+        pipeline.run(isx_folder, output_folder)
 
 if __name__ == "__main__":
     main()
