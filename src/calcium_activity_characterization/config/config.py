@@ -126,21 +126,22 @@ TRACKING_PARAMETERS = {
     "clid_column": "event_id",            # Event ID output column
 
     # ARCOS-specific parameters
-    "eps": 70.0,               # Spatial proximity threshold
-    "min_clustersize": 10,     # Minimum number of cells to form an event
-    "allow_merges": True,     # Allow events to merge
+    "eps": 50.0,               # Spatial proximity threshold
+    "eps_prev": 150.0,          # Maximum distance for linking previous clusters
+    "min_clustersize": 15,     # Minimum number of cells to form an event
+    "allow_merges": False,     # Allow events to merge
     "allow_splits": False,     # Allow events to split
     "stability_threshold": 30, # Minimum duration (frames) for event stability
-    "linking_method": "nearest",  # Method to associate objects across frames
-    "clustering_method": "dbscan",  # Clustering method for event detection
-    "min_samples": 5,   # Minimum number of samples for clustering
-    "remove_small_clusters": True,  # Remove small clusters
+    "linking_method": "nearest",  # Method to associate objects across frames - "nearest", "transportation"
+    "clustering_method": "dbscan",  # Clustering method for event detection - "dbscan", "hdbscan"
+    "min_samples": 1,   # Minimum number of samples for clustering
+    "remove_small_clusters": False,  # Remove small clusters
     "min_size_for_split": 1,  # Minimum size for split detection
     "reg": 1, # Regularization parameter for transportation solver
     "reg_m": 10, # Regularization parameter for transportation solver
     "cost_threshold": 0, # Cost threshold for event association
-    "n_prev": 30, # Number of previous frames to consider for event association
+    "n_prev": 1, # Number of previous frames to consider for event association
     "predictor": False, # Predictor for event association
-    "n_jobs": 1, # Number of parallel jobs for event association
+    "n_jobs": 10, # Number of parallel jobs for event association
     "show_progress": True, # Show progress bar for event association
 }
