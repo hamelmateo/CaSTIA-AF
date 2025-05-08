@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import logging
 import pandas as pd
 
-from calcium_activity_characterization.config.config import SMALL_OBJECT_THRESHOLD, BIG_OBJECT_THRESHOLD
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -28,7 +27,9 @@ class Cell:
         self,
         label: int,
         centroid: np.ndarray = None,
-        pixel_coords: np.ndarray = None
+        pixel_coords: np.ndarray = None,
+        small_object_threshold: int = 100,
+        big_object_threshold: int = 10000
     ) -> None:
         self.label = label
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
@@ -37,7 +38,7 @@ class Cell:
         self.processed_intensity_trace: list[float] = []
         self.binary_trace: list[int] = []
         self.peaks: list["Peak"] = []
-        self.is_valid: bool = len(self.pixel_coords) >= SMALL_OBJECT_THRESHOLD and len(self.pixel_coords) <= BIG_OBJECT_THRESHOLD
+        self.is_valid: bool = len(self.pixel_coords) >= small_object_threshold and len(self.pixel_coords) <= big_object_threshold
         self.exclude_from_umap = False
 
 

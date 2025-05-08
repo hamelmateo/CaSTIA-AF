@@ -161,7 +161,7 @@ class CalciumPipeline:
             pixel_coords = np.argwhere(nuclei_mask == label)
             if pixel_coords.size > 0:
                 centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int)
-                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords, small_object_threshold=self.config["SMALL_OBJECT_THRESHOLD"])
+                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords, small_object_threshold=self.config["SMALL_OBJECT_THRESHOLD"], big_object_threshold=self.config["BIG_OBJECT_THRESHOLD"])
                 if (
                     centroid[0] < 20 or centroid[1] < 20 or
                     centroid[0] > nuclei_mask.shape[0] - 20 or

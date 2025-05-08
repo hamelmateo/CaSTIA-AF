@@ -1,6 +1,5 @@
 # TODO: Normalization parameters dictionary
 # TODO: deal with deprecated pixel values
-# TODO: discard too big cells (big object threshold)
 
 # ==========================
 # FLAGS
