@@ -32,9 +32,10 @@ class SignalProcessor:
             params (dict): Parameters specific to the selected method.
         """
         apply = pipeline.get("apply", {})
-        self.use_detrending = apply.get("detrending", True)
-        self.use_smoothing = apply.get("smoothing", True)
-        self.use_normalization = apply.get("normalization", True)
+        self.use_detrending = apply.get("detrending", False)
+        self.use_smoothing = apply.get("smoothing", False)
+        self.use_normalization = apply.get("normalization", False)
+        self.use_cut_trace = apply.get("cut_trace", False)
 
         self.detrending_mode = pipeline.get("detrending_mode", "butterworth")
         self.detrending_params = params.get("methods", {}).get(self.detrending_mode, {})
@@ -58,6 +59,8 @@ class SignalProcessor:
 
         if self.use_detrending:
             trace = self._detrend(trace)
+
+        if self.use_cut_trace:    
             trace = self._cut_trace_start(trace, 125)
 
         if self.use_smoothing:

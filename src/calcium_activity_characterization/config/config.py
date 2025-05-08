@@ -4,7 +4,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = False  # Enable debugging mode
+DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
 EXISTING_CELLS = True  # Load precomputed cells from file
@@ -30,11 +30,11 @@ PADDING = 5  # Filename zero-padding digits
 # ==========================
 
 SIGNAL_PROCESSING = {
-    "pipeline": "custom",  # Options: 'arcos', 'custom'
     "apply": {
         "detrending": False,
         "smoothing": True,
         "normalization": False,
+        "cut_trace": False
     },
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
@@ -102,6 +102,33 @@ PEAK_DETECTION = {
     "peak_grouping": {
         "overlap_margin": 0,  # Margin for grouping overlapping peaks
         "verbose": False  # Print grouping information
+    }
+}
+
+
+# ==========================
+# CORRELATION PARAMETERS
+# ==========================
+
+CORRELATION_PARAMETERS = {
+    "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'euclidean', 'cosine'
+    "params": {
+        "cross_correlation": {
+            "window_size": 200,  # Window size for cross-correlation
+            "lag_percent": 0.5,    # Percentage of window size for lag calculation
+            "step_percent": 0.5   # Percentage of window size for step size calculation
+        }
+    }
+}
+
+CLUSTERING_PARAMETERS = {
+    "method": "dbscan",  # Clustering method: 'dbscan', 'hdbscan'
+    "params": {
+        "dbscan": {
+            "eps": 0.05,  # Maximum distance between two samples for them to be considered as in the same neighborhood
+            "min_samples": 5,  # Number of samples in a neighborhood for a point to be considered as a core point
+            "metric": "precomputed"  # Distance metric to use
+        }
     }
 }
 

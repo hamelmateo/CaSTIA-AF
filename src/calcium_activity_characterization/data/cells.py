@@ -91,7 +91,7 @@ class Cell:
         plt.grid(True)
         plt.show()
 
-    def get_arcos_dataframe(self, pipeline_type: str) -> pd.DataFrame:
+    def get_arcos_dataframe(self) -> pd.DataFrame:
             """
             Return a DataFrame formatted for arcos4py binarization and event tracking.
 
@@ -105,20 +105,15 @@ class Cell:
             Returns:
                 pd.DataFrame: DataFrame with cell information formatted for arcos4py.
             """
-            if not self.raw_intensity_trace:
+            if not self.binary_trace:
                 logger.warning(f"Cell {self.label} has no intensity data.")
                 return pd.DataFrame()
 
-            if pipeline_type == "arcos":
-                trace = self.raw_intensity_trace
-            elif pipeline_type == "custom":
-                trace = self.binary_trace
-
             data = {
-                'frame': range(len(trace)),
-                'trackID': [self.label] * len(trace),
-                'x': [self.centroid[1]] * len(trace),  # centroid[1] is X-coordinate
-                'y': [self.centroid[0]] * len(trace),  # centroid[0] is Y-coordinate
+                'frame': range(len(self.binary_trace)),
+                'trackID': [self.label] * len(self.binary_trace),
+                'x': [self.centroid[1]] * len(self.binary_trace),  # centroid[1] is X-coordinate
+                'y': [self.centroid[0]] * len(self.binary_trace),  # centroid[0] is Y-coordinate
                 'intensity': self.raw_intensity_trace,
                 'intensity.bin': self.binary_trace
             }

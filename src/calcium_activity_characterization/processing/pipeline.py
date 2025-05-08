@@ -15,8 +15,11 @@ from typing import List
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
+from scipy.signal import correlate
+from sklearn.cluster import DBSCAN
+from collections import Counter
+import matplotlib.pyplot as plt
 import pandas as pd
-from arcos4py.tools import binData, track_events_dataframe
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -30,6 +33,7 @@ from calcium_activity_characterization.utilities.loader import (
 )
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.processing.event_detection import ArcosEventDetector
 from calcium_activity_characterization.analysis.umap_analysis import run_umap_on_cells
 from calcium_activity_characterization.data.peaks import PeakDetector
 
@@ -82,10 +86,16 @@ class CalciumPipeline:
         self._init_paths(data_path, output_path)
         self._segment_cells()
         self._compute_intensity()
-        arcos_input_df = self._signal_processing_pipeline()
+
         if self.config["ARCOS_TRACKING"]:
-            self._arcos_track_events(arcos_input_df) # ARCOS4py tracking
-        #self._run_umap()
+            self._arcos_event_pipeline()
+
+        self._signal_processing_pipeline()
+        self._binarization_pipeline()
+        correlation_matrices = self._correlation_analysis()
+        self.plot_similarity_matrices(correlation_matrices)
+        clustered_labels = self._cluster_high_similarity_groups(correlation_matrices)
+        self.plot_clusters_on_overlay(clustered_labels)
 
 
 
@@ -238,6 +248,7 @@ class CalciumPipeline:
         img = crop_image(img, roi_scale)
         return [float(np.mean([img[y, x] for y, x in coords])) for coords in cell_coords]
 
+
     def _signal_processing_pipeline(self):
         """
         Run signal processing pipeline on all active cells.
@@ -247,41 +258,12 @@ class CalciumPipeline:
             self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
             return
 
-        processing_cfg = self.config["SIGNAL_PROCESSING"]
-        pipeline_type = processing_cfg["pipeline"]
+        processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
 
-        if pipeline_type == "arcos":
-            arcos_input_df = self._arcos4py_signal_processing_pipeline()
-            save_pickle_file(arcos_input_df, self.arcos_input_df)
-            return arcos_input_df
-
-        elif pipeline_type == "custom":
-            processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
-
-            for cell in self.active_cells:
-                cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
-            
-            save_pickle_file(self.active_cells, self.processed_cells_file_path)
-            
-            self._custom_binarization_pipeline()
-            save_pickle_file(self.active_cells, self.binarized_cells_file_path)
-
-            arcos_input_df = self._prepare_arcos_input()
-            save_pickle_file(arcos_input_df, self.arcos_input_df)
-            return arcos_input_df
-
-        else:
-            raise ValueError(f"Unknown signal processing pipeline: {pipeline_type}")
-
-    def _custom_signal_processing_pipeline(self):
-        """
-        Run custom signal processing pipeline on all active cells.
-        """
-        params = self.config["SIGNAL_PROCESSING_PARAMETERS"]
-        pipeline = self.config["SIGNAL_PROCESSING"]
-        processor = SignalProcessor(params=params, pipeline=pipeline)
         for cell in self.active_cells:
             cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
+        
+        save_pickle_file(self.active_cells, self.processed_cells_file_path)
 
 
     def _run_umap(self):
@@ -301,33 +283,27 @@ class CalciumPipeline:
             logger.error(f"UMAP processing failed: {e}")
 
 
-    def _prepare_arcos_input(self) -> pd.DataFrame:
-        signal_processing_pipeline = self.config["SIGNAL_PROCESSING"]["pipeline"]
-        
-        df_list = [cell.get_arcos_dataframe(signal_processing_pipeline) for cell in self.active_cells]
-        arcos_input_df = pd.concat(df_list, ignore_index=True)
-        return arcos_input_df
+    def _arcos_event_pipeline(self) -> None:
+        """
+        Run event detection using arcos4py on the processed DataFrame.
 
+        Args:
+            df (pd.DataFrame): DataFrame containing the binarized data.
+        """
 
-    def _arcos4py_signal_processing_pipeline(self):
-        # Create DataFrame from active_cells
-        df_raw = self._prepare_arcos_input()
-
-        # Instantiate binData with parameters
-        binarizer = binData(**self.config["BINDATA_PARAMETERS"])
-
-        # Run binarization
-        df_processed = binarizer.run(
-            df_raw,
-            group_column="trackID",
-            measurement_column="intensity",
-            frame_column="frame"
+        arcos_pipeline = ArcosEventDetector(
+            bindata_params=self.config["BINDATA_PARAMETERS"],
+            tracking_params=self.config["TRACKING_PARAMETERS"]
         )
 
-        return df_processed
-    
+        events_df, lineage_tracker = arcos_pipeline.run(active_cells=self.active_cells)
 
-    def _custom_binarization_pipeline(self): 
+        save_pickle_file(events_df, self.output_path / "tracked_events.pkl")
+        save_pickle_file(lineage_tracker, self.output_path / "lineage_tracker.pkl")
+
+
+
+    def _binarization_pipeline(self): 
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
@@ -339,51 +315,165 @@ class CalciumPipeline:
 
         
         logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
+        save_pickle_file(self.active_cells, self.binarized_cells_file_path)
 
 
-    def _arcos_track_events(self, df: pd.DataFrame) -> None:
+ 
+
+
+    def _compute_similarity_matrix(self, traces: np.ndarray, lag_range: int) -> np.ndarray:
+            """
+            Compute the similarity matrix for a given set of traces.
+
+            Args:
+                traces (np.ndarray): Array of shape (num_cells, num_timepoints).
+
+            Returns:
+                np.ndarray: Similarity matrix of shape (num_cells, num_cells).
+            """
+            num_cells = len(traces)
+            sim_matrix = np.zeros((num_cells, num_cells))
+
+            for i in range(num_cells):
+                for j in range(i, num_cells):
+                    trace_i = traces[i] - np.mean(traces[i])
+                    trace_j = traces[j] - np.mean(traces[j])
+
+                    corr = correlate(trace_i, trace_j, mode='full')
+                    lags = np.arange(-len(trace_j) + 1, len(trace_i))
+                    valid = (lags >= -lag_range) & (lags <= lag_range)
+
+                    max_corr = np.max(corr[valid]) / (np.linalg.norm(trace_i) * np.linalg.norm(trace_j) + 1e-8)
+                    sim_matrix[i, j] = sim_matrix[j, i] = max_corr
+
+            return sim_matrix
+
+
+
+    def _correlation_analysis(self) -> list[np.ndarray]:
         """
-        Track events in the DataFrame using arcos4py's track_events_dataframe function.
+        Compute time-lagged sliding window cross-correlation correlation matrices.
 
         Args:
-            df (pd.DataFrame): DataFrame containing the binarized data.
+            window_size (int): Number of frames per sliding window.
+            lag_percent (float): Maximum lag as a percentage of window size (e.g., 0.25 = ±25%).
+            step_percent (float): step_percent size to move the sliding window.
+
+        Returns:
+            List[np.ndarray]: List of correlation matrices, one per window.
         """
+        method = self.config["CORRELATION_PARAMETERS"]["method"]
 
-        events_df, lineage_tracker = track_events_dataframe(
-            df,
-            **self.config["TRACKING_PARAMETERS"]
-        )
-        save_pickle_file(events_df, self.output_path / "tracked_events.pkl")
-        save_pickle_file(lineage_tracker, self.output_path / "lineage_tracker.pkl")
+        if method == "cross_correlation":
+            window_size = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["window_size"]
+            lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["lag_percent"]
+            step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["step_percent"]
 
-        # === Summary ===
-        if not isinstance(events_df, pd.DataFrame):
-            print("❌ Not a valid DataFrame.")
-        else:
-            print("✅ Tracked events summary:")
-            print("📋 Columns:", events_df.columns.tolist())
+            binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
+            trace_length = len(binary_traces[0])
 
-            # Defensive column checking
-            has_event_col = "event_id" in events_df.columns
-            has_frame_col = "frame" in events_df.columns
-            has_cell_col = "trackID" in events_df.columns
+            # Pre-slice all windows
+            all_window_traces = [
+                [trace[start:start + window_size] for trace in binary_traces]
+                for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
+    ]
 
-            if has_frame_col:
-                print(f"\n🔹 Total unique frames: {events_df['frame'].nunique()}")
+            with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
+                    similarity_matrices = list(tqdm(
+                        executor.map(partial(self._compute_similarity_matrix, lag_range=int(lag_percent * window_size)), all_window_traces),
+                        total=len(all_window_traces),
+                        desc="Computing similarity matrices in parallel"
+                    ))
 
-            if has_event_col:
-                print(f"🔹 Total unique events: {events_df['event_id'].nunique()}")
-                print(f"🔹 Event durations (frames):")
-                print(events_df.groupby("event_id")["frame"].agg(["min", "max", "count"]).head())
+            return similarity_matrices
 
-            if has_cell_col:
-                print(f"🔹 Total unique cells: {events_df['lineage'].nunique()}")
 
-            if has_frame_col and has_event_col:
-                print(f"\n🔹 Events per frame:")
-                print(events_df.groupby("frame")["event_id"].nunique().head())
+   
 
-                print(f"\n🔹 Example frame data:")
-                first_frame = events_df["frame"].min()
-                print(events_df[events_df["frame"] == first_frame].head())
+    def plot_similarity_matrices(self, similarity_matrices: list[np.ndarray]) -> None:
+        """
+        Plot all similarity matrices as heatmaps.
+
+        Args:
+            similarity_matrices (list[np.ndarray]): List of similarity matrices (N x N).
+        """
+        for idx, sim in enumerate(similarity_matrices):
+            plt.figure(figsize=(6, 5))
+            plt.imshow(sim, cmap='viridis', vmin=0, vmax=1)
+            plt.colorbar(label='Similarity')
+            plt.title(f"Similarity Matrix - Window {idx}")
+            plt.xlabel("Cell")
+            plt.ylabel("Cell")
+            plt.tight_layout()
+            plt.show()
+
+    def _cluster_high_similarity_groups(self, similarity_matrices: list[np.ndarray]) -> list[np.ndarray]:
+        """
+        Cluster cells based on high similarity using DBSCAN.
+
+        Args:
+            similarity_matrices (list[np.ndarray]): List of similarity matrices (N x N).
+            eps (float): DBSCAN radius threshold for clustering (on distance matrix).
+            min_samples (int): Minimum number of points required to form a cluster.
+
+        Returns:
+            list[np.ndarray]: List of label arrays (one per window), with -1 for unclustered cells.
+        """
+        clustered_labels = []
+        method = self.config["CLUSTERING_PARAMETERS"]["method"]
+
+        for sim in similarity_matrices:
+            if method == "dbscan":
+                eps = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["eps"]
+                min_samples = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["min_samples"]
+                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["metric"]
+
+                dist = 1.0 - sim  # convert similarity to distance
+                clustering = DBSCAN(eps=eps, min_samples=min_samples, metric=metric)
+                labels = clustering.fit_predict(dist)
+                clustered_labels.append(labels)
+
+            for idx, labels in enumerate(clustered_labels):
+                label_counts = Counter(labels)
+                num_clusters = sum(1 for k in label_counts if k != -1)
+                num_noise = label_counts.get(-1, 0)
+                print(f"[Window {idx}] Clusters found: {num_clusters}, Noise cells: {num_noise}")
+
+                for cluster_id, count in sorted(label_counts.items()):
+                    label_str = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
+                    print(f"    {label_str}: {count} cells")
+
+        return clustered_labels
+    
+
+    def plot_clusters_on_overlay(self, clustered_labels: list[np.ndarray]) -> None:
+        """
+        Overlay and save clustering results on the grayscale background image for each time window.
+
+        Args:
+            overlay_path (Path): Path to grayscale overlay image (TIF).
+            clustered_labels (list[np.ndarray]): List of cluster label arrays (one per window).
+            output_dir (Path): Directory to save colored overlays.
+        """
+        overlay_img = tifffile.imread(str(self.overlay_path))
+        h, w = overlay_img.shape
+        self.output_path.mkdir(parents=True, exist_ok=True)
+
+        for window_idx, cluster_labels in enumerate(clustered_labels):
+            color_overlay = np.stack([overlay_img]*3, axis=-1).astype(np.uint8)
+            unique_labels = sorted(set(cluster_labels))
+            base_cmap = plt.get_cmap('tab10')
+            color_map = {
+                label: np.array(base_cmap(i % 10)[:3]) * 255 if label != -1 else np.array([0, 0, 0])
+                for i, label in enumerate(unique_labels)
+            }
+
+            for cell, label in zip(self.active_cells, cluster_labels):
+                color = color_map[label].astype(np.uint8)
+                for y, x in cell.pixel_coords:
+                    color_overlay[y, x] = color
+
+            save_path = self.output_path / f"cluster_overlay_window_{window_idx:03d}.png"
+            plt.imsave(save_path, color_overlay)
+            print(f"✅ Saved: {save_path}")
 
