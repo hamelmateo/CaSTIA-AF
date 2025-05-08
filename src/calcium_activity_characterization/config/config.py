@@ -1,3 +1,7 @@
+# TODO: Normalization parameters dictionary
+# TODO: deal with deprecated pixel values
+# TODO: discard too big cells (big object threshold)
+
 # ==========================
 # FLAGS
 # ==========================
@@ -19,6 +23,7 @@ HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
 # ==========================
 ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
 SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
+BIG_OBJECT_THRESHOLD = 10000  # Maximum pixel count for valid cell
 PADDING = 5  # Filename zero-padding digits
 
 # ==========================
@@ -36,7 +41,7 @@ SIGNAL_PROCESSING = {
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
 }
 
-# TODO: Normalization parameters dictionary
+
 
 SIGNAL_PROCESSING_PARAMETERS = {
     "sigma": 15.0,          # Global Gaussian smoothing σ
