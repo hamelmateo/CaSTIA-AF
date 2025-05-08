@@ -83,8 +83,11 @@ class CalciumPipeline:
         self._segment_cells()
         self._compute_intensity()
         arcos_input_df = self._signal_processing_pipeline()
-        self._track_events(arcos_input_df) # ARCOS4py tracking
+        if self.config["ARCOS_TRACKING"]:
+            self._arcos_track_events(arcos_input_df) # ARCOS4py tracking
         #self._run_umap()
+
+
 
     def _init_paths(self, data_path: Path, output_path: Path) -> None:
         """
@@ -109,6 +112,7 @@ class CalciumPipeline:
         self.cells_file_path = output_path / "cells.pkl"
         self.raw_cells_file_path = output_path / "raw_active_cells.pkl"
         self.processed_cells_file_path = output_path / "processed_active_cells.pkl"
+        self.binarized_cells_file_path = output_path / "binarized_active_cells.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.umap_file_path = output_path / "umap.npy"
 
@@ -259,7 +263,10 @@ class CalciumPipeline:
             
             save_pickle_file(self.active_cells, self.processed_cells_file_path)
             
-            arcos_input_df = self._custom_binarization_pipeline()
+            self._custom_binarization_pipeline()
+            save_pickle_file(self.active_cells, self.binarized_cells_file_path)
+
+            arcos_input_df = self._prepare_arcos_input()
             save_pickle_file(arcos_input_df, self.arcos_input_df)
             return arcos_input_df
 
@@ -320,7 +327,7 @@ class CalciumPipeline:
         return df_processed
     
 
-    def _custom_binarization_pipeline(self) -> pd.DataFrame: 
+    def _custom_binarization_pipeline(self): 
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
@@ -330,14 +337,11 @@ class CalciumPipeline:
             cell.detect_peaks(detector)
             cell.binarize_trace_from_peaks()
 
-        df = self._prepare_arcos_input()
+        
         logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
 
-        return df
 
-
-
-    def _track_events(self, df: pd.DataFrame) -> None:
+    def _arcos_track_events(self, df: pd.DataFrame) -> None:
         """
         Track events in the DataFrame using arcos4py's track_events_dataframe function.
 

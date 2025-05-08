@@ -21,7 +21,8 @@ from calcium_activity_characterization.config.config import (
     SIGNAL_PROCESSING_PARAMETERS,
     BINDATA_PARAMETERS,
     TRACKING_PARAMETERS,
-    SIGNAL_PROCESSING
+    SIGNAL_PROCESSING,
+    ARCOS_TRACKING
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -40,7 +41,8 @@ CONFIG = {
     "SIGNAL_PROCESSING_PARAMETERS": SIGNAL_PROCESSING_PARAMETERS,
     "BINDATA_PARAMETERS": BINDATA_PARAMETERS,
     "TRACKING_PARAMETERS": TRACKING_PARAMETERS,
-    "SIGNAL_PROCESSING": SIGNAL_PROCESSING
+    "SIGNAL_PROCESSING": SIGNAL_PROCESSING,
+    "ARCOS_TRACKING": ARCOS_TRACKING
 }
 
 def find_isx_folders(folder: Path) -> list[Path]:

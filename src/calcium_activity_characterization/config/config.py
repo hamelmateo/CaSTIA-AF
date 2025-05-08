@@ -8,7 +8,7 @@ EXISTING_CELLS = True  # Load precomputed cells from file
 EXISTING_MASK = True  # Load precomputed mask from file
 EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
 EXISTING_PROCESSED_INTENSITY = False  # Load intensity traces if available
-
+ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
 PARALLELELIZE = True  # Use parallel processing for intensity extraction
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
@@ -39,7 +39,7 @@ SIGNAL_PROCESSING = {
 # TODO: Normalization parameters dictionary
 
 SIGNAL_PROCESSING_PARAMETERS = {
-    "sigma": 4.0,          # Global Gaussian smoothing σ
+    "sigma": 15.0,          # Global Gaussian smoothing σ
 
     "methods": {
         "wavelet": {
@@ -92,7 +92,7 @@ PEAK_DETECTION = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.6 # Relative height for FWHM calculation
+            "relative_height": 0.3 # Relative height for FWHM calculation
         }
     },
     "peak_grouping": {
