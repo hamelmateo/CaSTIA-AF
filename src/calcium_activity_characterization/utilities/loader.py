@@ -256,3 +256,85 @@ def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Inten
     plt.savefig(output_path)
     plt.close()
     logger.info(f"Histogram saved to {output_path}")
+
+
+def plot_binarized_raster(output_path: Path, cells: List[Cell]) -> None:
+    if not cells:
+        logger.warning("No cells provided for raster plot.")
+        return
+
+    binarized_matrix = np.array([cell.binary_trace for cell in cells])
+    plt.figure(figsize=(12, 6))
+    plt.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+    plt.xlabel("Time")
+    plt.ylabel("Cell Index")
+    plt.title("Binarized Activity Raster Plot")
+    plt.colorbar(label="Activity (0/1)")
+    plt.tight_layout()
+    save_path = output_path / "raster_plot.png"
+    plt.savefig(save_path, dpi=600)
+    plt.close()
+    logger.info(f"Raster plot saved to {output_path}")
+
+
+
+def plot_similarity_matrices(output_path: Path, similarity_matrices: list[np.ndarray]) -> None:
+    """
+    Plot all similarity matrices as heatmaps.
+
+    Args:
+        output_path (Path): Directory to save the plots.
+        similarity_matrices (list[np.ndarray]): List of similarity matrices (N x N).
+    """
+    if not similarity_matrices:
+        logger.warning("No similarity matrices to plot.")
+        return
+
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    for i, sim in enumerate(similarity_matrices):
+        plt.figure(figsize=(8, 6))
+        plt.imshow(sim, cmap='viridis', vmin=0, vmax=1)
+        plt.colorbar(label="Similarity")
+        plt.title(f"Cell-Cell Similarity Matrix - Window {i}")
+        plt.xlabel("Cell Index")
+        plt.ylabel("Cell Index")
+        plt.tight_layout()
+        save_path = output_path / f"similarity_matrix_window_{i:03d}.png"
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+        logger.info(f"Saved similarity matrix: {save_path}")
+
+
+
+def save_clusters_on_overlay(overlay_path: Path, output_path: Path, clustered_labels: list[np.ndarray], cells: list[Cell]) -> None:
+    """
+    Overlay and save clustering results on the grayscale background image for each time window.
+
+    Args:
+        overlay_path (Path): Path to grayscale overlay image (TIF).
+        cells (list[Cell]): List of active Cell objects.
+        clustered_labels (list[np.ndarray]): List of cluster label arrays (one per window).
+        output_dir (Path): Directory to save colored overlays.
+    """
+    overlay_img = tifffile.imread(str(overlay_path))
+    h, w = overlay_img.shape
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    for window_idx, cluster_labels in enumerate(clustered_labels):
+        color_overlay = np.stack([overlay_img]*3, axis=-1).astype(np.uint8)
+        unique_labels = sorted(set(cluster_labels))
+        base_cmap = plt.get_cmap('tab10')
+        color_map = {
+            label: np.array(base_cmap(i % 10)[:3]) * 255 if label != -1 else np.array([0, 0, 0])
+            for i, label in enumerate(unique_labels)
+        }
+
+        for cell, label in zip(cells, cluster_labels):
+            color = color_map[label].astype(np.uint8)
+            for y, x in cell.pixel_coords:
+                color_overlay[y, x] = color
+
+        save_path = output_path / f"cluster_overlay_window_{window_idx:03d}.png"
+        plt.imsave(save_path, color_overlay)
+        print(f"✅ Saved: {save_path}")

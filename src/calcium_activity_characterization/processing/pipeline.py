@@ -30,7 +30,10 @@ from calcium_activity_characterization.utilities.loader import (
     load_images,
     crop_image,
     save_pickle_file,
-    load_cells_from_pickle
+    load_cells_from_pickle,
+    save_clusters_on_overlay,
+    plot_similarity_matrices,
+    plot_binarized_raster
 )
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
@@ -94,9 +97,7 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         correlation_matrices = self._correlation_analysis()
-        #self.plot_similarity_matrices(correlation_matrices)
-        clustered_labels = self._cluster_high_similarity_groups(correlation_matrices)
-        self.save_clusters_on_overlay(clustered_labels)
+        self._cluster_high_similarity_groups(correlation_matrices)
 
 
 
@@ -318,6 +319,9 @@ class CalciumPipeline:
         logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
         save_pickle_file(self.active_cells, self.binarized_cells_file_path)
 
+        # Plot the binarized traces
+        plot_binarized_raster(self.output_path, self.active_cells)
+
 
  
 
@@ -380,7 +384,7 @@ class CalciumPipeline:
             all_window_traces = [
                 [trace[start:start + window_size] for trace in binary_traces]
                 for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
-    ]
+            ]
 
             with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
                     similarity_matrices = list(tqdm(
@@ -389,29 +393,17 @@ class CalciumPipeline:
                         desc="Computing similarity matrices in parallel"
                     ))
 
+            # Save the similarity matrices
+            plot_similarity_matrices(self.output_path, similarity_matrices)
+
             return similarity_matrices
 
 
    
 
-    def plot_similarity_matrices(self, similarity_matrices: list[np.ndarray]) -> None:
-        """
-        Plot all similarity matrices as heatmaps.
 
-        Args:
-            similarity_matrices (list[np.ndarray]): List of similarity matrices (N x N).
-        """
-        for idx, sim in enumerate(similarity_matrices):
-            plt.figure(figsize=(6, 5))
-            plt.imshow(sim, cmap='viridis', vmin=0, vmax=1)
-            plt.colorbar(label='Similarity')
-            plt.title(f"Similarity Matrix - Window {idx}")
-            plt.xlabel("Cell")
-            plt.ylabel("Cell")
-            plt.tight_layout()
-            plt.show()
 
-    def _cluster_high_similarity_groups(self, similarity_matrices: list[np.ndarray]) -> list[np.ndarray]:
+    def _cluster_high_similarity_groups(self, similarity_matrices: list[np.ndarray]) -> None:
         """
         Cluster cells based on high similarity using DBSCAN.
 
@@ -469,37 +461,11 @@ class CalciumPipeline:
                     label_str = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
                     print(f"    {label_str}: {count} cells")
 
-        return clustered_labels
+        # Save the clustered labels on the overlay
+        save_clusters_on_overlay(self.overlay_path, self.output_path, clustered_labels, self.active_cells)
+
+        return 
     
 
-    def save_clusters_on_overlay(self, clustered_labels: list[np.ndarray]) -> None:
-        """
-        Overlay and save clustering results on the grayscale background image for each time window.
 
-        Args:
-            overlay_path (Path): Path to grayscale overlay image (TIF).
-            clustered_labels (list[np.ndarray]): List of cluster label arrays (one per window).
-            output_dir (Path): Directory to save colored overlays.
-        """
-        overlay_img = tifffile.imread(str(self.overlay_path))
-        h, w = overlay_img.shape
-        self.output_path.mkdir(parents=True, exist_ok=True)
-
-        for window_idx, cluster_labels in enumerate(clustered_labels):
-            color_overlay = np.stack([overlay_img]*3, axis=-1).astype(np.uint8)
-            unique_labels = sorted(set(cluster_labels))
-            base_cmap = plt.get_cmap('tab10')
-            color_map = {
-                label: np.array(base_cmap(i % 10)[:3]) * 255 if label != -1 else np.array([0, 0, 0])
-                for i, label in enumerate(unique_labels)
-            }
-
-            for cell, label in zip(self.active_cells, cluster_labels):
-                color = color_map[label].astype(np.uint8)
-                for y, x in cell.pixel_coords:
-                    color_overlay[y, x] = color
-
-            save_path = self.output_path / f"cluster_overlay_window_{window_idx:03d}.png"
-            plt.imsave(save_path, color_overlay)
-            print(f"✅ Saved: {save_path}")
 

@@ -4,7 +4,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = True  # Enable debugging mode
+DEBUGGING = False  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
 EXISTING_CELLS = True  # Load precomputed cells from file
@@ -114,8 +114,8 @@ CORRELATION_PARAMETERS = {
     "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'euclidean', 'cosine'
     "params": {
         "cross_correlation": {
-            "window_size": 450,  # Window size for cross-correlation
-            "lag_percent": 0.25,    # Percentage of window size for lag calculation
+            "window_size": 250,  # Window size for cross-correlation
+            "lag_percent": 0.5,    # Percentage of window size for lag calculation
             "step_percent": 0.5,   # Percentage of window size for step size calculation
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
             "method": "direct",  # Method for cross-correlation: 'direct', 'fft'
@@ -124,7 +124,7 @@ CORRELATION_PARAMETERS = {
 }
 
 CLUSTERING_PARAMETERS = {
-    "method": "hdbscan",  # Clustering method: 'dbscan', 'hdbscan'
+    "method": "dbscan",  # Clustering method: 'dbscan', 'hdbscan'
     "params": {
         "dbscan": {
             "eps": 0.03,  # Maximum distance between two samples for them to be considered as in the same cluster
@@ -133,10 +133,11 @@ CLUSTERING_PARAMETERS = {
         },
         "hdbscan": {
             "min_cluster_size": 3,  # Minimum size of clusters
-            "min_samples": 1,  # Minimum number of samples in a neighborhood for a point to be considered as a core point
+            "min_samples": 3,  # Minimum number of samples in a neighborhood for a point to be considered as a core point
             "metric": "precomputed",  # Distance metric to use
             "clustering_method": "eom",  # Clustering method: 'eom' or 'leaf'
-            "probability_threshold": 0.85  # Probability threshold for cluster assignment
+            "probability_threshold": 0.85,  # Probability threshold for cluster assignment
+            "cluster_selection_epsilon": 0.5  # Epsilon for cluster selection
         },
         "agglomerative": {
             "n_clusters": 3,  # Number of clusters to form
