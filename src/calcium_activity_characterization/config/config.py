@@ -114,20 +114,34 @@ CORRELATION_PARAMETERS = {
     "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'euclidean', 'cosine'
     "params": {
         "cross_correlation": {
-            "window_size": 200,  # Window size for cross-correlation
-            "lag_percent": 0.5,    # Percentage of window size for lag calculation
-            "step_percent": 0.5   # Percentage of window size for step size calculation
+            "window_size": 450,  # Window size for cross-correlation
+            "lag_percent": 0.25,    # Percentage of window size for lag calculation
+            "step_percent": 0.5,   # Percentage of window size for step size calculation
+            "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
+            "method": "direct",  # Method for cross-correlation: 'direct', 'fft'
         }
     }
 }
 
 CLUSTERING_PARAMETERS = {
-    "method": "dbscan",  # Clustering method: 'dbscan', 'hdbscan'
+    "method": "hdbscan",  # Clustering method: 'dbscan', 'hdbscan'
     "params": {
         "dbscan": {
-            "eps": 0.05,  # Maximum distance between two samples for them to be considered as in the same neighborhood
-            "min_samples": 5,  # Number of samples in a neighborhood for a point to be considered as a core point
+            "eps": 0.03,  # Maximum distance between two samples for them to be considered as in the same cluster
+            "min_samples": 3,  # Number of samples in a neighborhood for a point to be considered as a core point
             "metric": "precomputed"  # Distance metric to use
+        },
+        "hdbscan": {
+            "min_cluster_size": 3,  # Minimum size of clusters
+            "min_samples": 1,  # Minimum number of samples in a neighborhood for a point to be considered as a core point
+            "metric": "precomputed",  # Distance metric to use
+            "clustering_method": "eom",  # Clustering method: 'eom' or 'leaf'
+            "probability_threshold": 0.85  # Probability threshold for cluster assignment
+        },
+        "agglomerative": {
+            "n_clusters": 3,  # Number of clusters to form
+            "linkage": "ward",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
+            "affinity": "euclidean"  # Metric used to compute the linkage
         }
     }
 }

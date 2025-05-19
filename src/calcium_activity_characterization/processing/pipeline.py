@@ -20,6 +20,7 @@ from sklearn.cluster import DBSCAN
 from collections import Counter
 import matplotlib.pyplot as plt
 import pandas as pd
+import hdbscan
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -93,9 +94,9 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         correlation_matrices = self._correlation_analysis()
-        self.plot_similarity_matrices(correlation_matrices)
+        #self.plot_similarity_matrices(correlation_matrices)
         clustered_labels = self._cluster_high_similarity_groups(correlation_matrices)
-        self.plot_clusters_on_overlay(clustered_labels)
+        self.save_clusters_on_overlay(clustered_labels)
 
 
 
@@ -331,19 +332,22 @@ class CalciumPipeline:
             Returns:
                 np.ndarray: Similarity matrix of shape (num_cells, num_cells).
             """
+            mode = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["mode"]
+            method = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["method"]
+
             num_cells = len(traces)
             sim_matrix = np.zeros((num_cells, num_cells))
 
             for i in range(num_cells):
                 for j in range(i, num_cells):
-                    trace_i = traces[i] - np.mean(traces[i])
-                    trace_j = traces[j] - np.mean(traces[j])
+                    trace_i = traces[i]
+                    trace_j = traces[j]
 
-                    corr = correlate(trace_i, trace_j, mode='full')
+                    corr = correlate(trace_i, trace_j, mode=mode, method=method)
                     lags = np.arange(-len(trace_j) + 1, len(trace_i))
                     valid = (lags >= -lag_range) & (lags <= lag_range)
 
-                    max_corr = np.max(corr[valid]) / (np.linalg.norm(trace_i) * np.linalg.norm(trace_j) + 1e-8)
+                    max_corr = np.max(corr[valid]) / (np.sqrt(np.sum(trace_i)) * np.sqrt(np.sum(trace_j)) + 1e-8)
                     sim_matrix[i, j] = sim_matrix[j, i] = max_corr
 
             return sim_matrix
@@ -433,6 +437,28 @@ class CalciumPipeline:
                 labels = clustering.fit_predict(dist)
                 clustered_labels.append(labels)
 
+            elif method == "hdbscan":
+                min_cluster_size = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["min_cluster_size"]
+                min_samples = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["min_samples"]
+                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["metric"]
+                clustering_method = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["clustering_method"]
+                probability_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["probability_threshold"]
+                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["metric"]
+
+                dist = 1.0 - sim
+                clustering = hdbscan.HDBSCAN(
+                    min_samples=min_samples,
+                    metric=metric,
+                    min_cluster_size=min_cluster_size,
+                    cluster_selection_method=clustering_method
+                    )
+                labels = clustering.fit_predict(dist)
+                probabilities = clustering.probabilities_
+                labels[probabilities < probability_threshold] = -1  # Mark low-probability points as noise
+                clustered_labels.append(labels)
+            else:
+                raise ValueError(f"Unsupported clustering method: {method}")
+
             for idx, labels in enumerate(clustered_labels):
                 label_counts = Counter(labels)
                 num_clusters = sum(1 for k in label_counts if k != -1)
@@ -446,7 +472,7 @@ class CalciumPipeline:
         return clustered_labels
     
 
-    def plot_clusters_on_overlay(self, clustered_labels: list[np.ndarray]) -> None:
+    def save_clusters_on_overlay(self, clustered_labels: list[np.ndarray]) -> None:
         """
         Overlay and save clustering results on the grayscale background image for each time window.
 
