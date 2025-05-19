@@ -32,6 +32,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.resize(1800, 900)
         self.cells = cells
         self.random_cells = random.sample(cells, 5)
+        self.selected_cells = []
 
         # Layouts
         main_widget = QWidget()
@@ -90,6 +91,14 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.refresh_button = QPushButton("Randomize Cells")
         self.refresh_button.clicked.connect(self.refresh_cells)
         control_layout.addWidget(self.refresh_button)
+
+        self.selection_input = QLineEdit()
+        self.selection_input.setPlaceholderText("Enter cell labels (e.g., 12, 25, 100)")
+        control_layout.addWidget(self.selection_input)
+
+        self.select_button = QPushButton("Load Selected Cells")
+        self.select_button.clicked.connect(self.load_selected_cells)
+        control_layout.addWidget(self.select_button)
 
         self.update_button = QPushButton("Update Plots")
         self.update_button.clicked.connect(self.update_plots)
@@ -153,16 +162,30 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         return parsed
 
     def refresh_cells(self):
+        self.selected_cells = []
         self.random_cells = random.sample(self.cells, 5)
         self.update_plots()
 
+    def load_selected_cells(self):
+        try:
+            label_text = self.selection_input.text()
+            label_ids = [int(val.strip()) for val in label_text.split(",") if val.strip().isdigit()]
+            label_set = set(label_ids)
+            self.selected_cells = [cell for cell in self.cells if cell.label in label_set]
+        except Exception as e:
+            print(f"Invalid input: {e}")
+            self.selected_cells = []
+        self.update_plots()
+
     def update_plots(self):
+        cells_to_plot = self.selected_cells if self.selected_cells else self.random_cells
+
         self.figure.clf()
-        self.axs = self.figure.subplots(5, 3, squeeze=False)
+        self.axs = self.figure.subplots(len(cells_to_plot), 3, squeeze=False)
         self.peak_text.clear()
         colors = plt.cm.tab10.colors
 
-        for i, cell in enumerate(self.random_cells):
+        for i, cell in enumerate(cells_to_plot):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
