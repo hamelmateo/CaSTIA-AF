@@ -16,7 +16,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
 from scipy.signal import correlate
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, AgglomerativeClustering
 from collections import Counter
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -33,7 +33,7 @@ from calcium_activity_characterization.utilities.loader import (
     load_cells_from_pickle,
     save_clusters_on_overlay,
     plot_similarity_matrices,
-    plot_binarized_raster
+    plot_raster
 )
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
@@ -125,6 +125,7 @@ class CalciumPipeline:
         self.raw_cells_file_path = output_path / "raw_active_cells.pkl"
         self.processed_cells_file_path = output_path / "processed_active_cells.pkl"
         self.binarized_cells_file_path = output_path / "binarized_active_cells.pkl"
+        self.similarity_matrices_path = output_path / "similarity_matrices.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.umap_file_path = output_path / "umap.npy"
 
@@ -260,12 +261,13 @@ class CalciumPipeline:
             self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
             return
 
-        processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
+        else:
+            processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
 
-        for cell in self.active_cells:
-            cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
-        
-        save_pickle_file(self.active_cells, self.processed_cells_file_path)
+            for cell in self.active_cells:
+                cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
+            
+            save_pickle_file(self.active_cells, self.processed_cells_file_path)
 
 
     def _run_umap(self):
@@ -309,26 +311,31 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        detector = PeakDetector(params=self.config.get("PEAK_DETECTION", {}))
-
-        for cell in self.active_cells:
-            cell.detect_peaks(detector)
-            cell.binarize_trace_from_peaks()
-
+        if self.config["EXISTING_BINARIZED_INTENSITY"] and self.binarized_cells_file_path.exists():
+            self.active_cells = load_cells_from_pickle(self.binarized_cells_file_path, True)
+            return
         
-        logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
-        save_pickle_file(self.active_cells, self.binarized_cells_file_path)
+        else:
+            detector = PeakDetector(params=self.config.get("PEAK_DETECTION", {}))
+
+            for cell in self.active_cells:
+                cell.detect_peaks(detector)
+                cell.binarize_trace_from_peaks()
+
+            
+            logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
+            save_pickle_file(self.active_cells, self.binarized_cells_file_path)
 
         # Plot the binarized traces
-        plot_binarized_raster(self.output_path, self.active_cells)
+        plot_raster(self.output_path, self.active_cells)
 
 
  
 
 
-    def _compute_similarity_matrix(self, traces: np.ndarray, lag_range: int) -> np.ndarray:
+    def _compute_cross_corr(self, traces: np.ndarray, lag_range: int) -> np.ndarray:
             """
-            Compute the similarity matrix for a given set of traces.
+            Compute the cross-correlation similarity matrix for a given set of traces.
 
             Args:
                 traces (np.ndarray): Array of shape (num_cells, num_timepoints).
@@ -357,6 +364,31 @@ class CalciumPipeline:
             return sim_matrix
 
 
+    def _compute_jaccard(self, traces: np.ndarray) -> np.ndarray:
+        """
+        Compute the jaccard similarity matrix for a given set of traces.
+
+        Args:
+            traces (np.ndarray): Array of shape (num_cells, num_timepoints).
+
+        Returns:
+            np.ndarray: Similarity matrix of shape (num_cells, num_cells).
+        """
+        n_cells = traces.shape[0]
+        sim_matrix = np.zeros((n_cells, n_cells), dtype=float)
+
+        for i in range(n_cells):
+            for j in range(i, n_cells):
+                a = traces[i]
+                b = traces[j]
+                intersection = np.logical_and(a, b).sum()
+                union = np.logical_or(a, b).sum()
+                similarity = intersection / union if union != 0 else 0.0
+                sim_matrix[i, j] = similarity
+                sim_matrix[j, i] = similarity 
+
+        return sim_matrix
+
 
     def _correlation_analysis(self) -> list[np.ndarray]:
         """
@@ -370,33 +402,63 @@ class CalciumPipeline:
         Returns:
             List[np.ndarray]: List of correlation matrices, one per window.
         """
-        method = self.config["CORRELATION_PARAMETERS"]["method"]
+        if self.config["EXISTING_SIMILARITY_MATRICES"] and self.similarity_matrices_path.exists():
+            similarity_matrices = load_cells_from_pickle(self.similarity_matrices_path, True)
+        
+        else:
+            method = self.config["CORRELATION_PARAMETERS"]["method"]
 
-        if method == "cross_correlation":
-            window_size = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["window_size"]
-            lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["lag_percent"]
-            step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["step_percent"]
+            if method == "cross_correlation":
+                window_size = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["window_size"]
+                lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["lag_percent"]
+                step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["step_percent"]
 
-            binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
-            trace_length = len(binary_traces[0])
+                binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
+                trace_length = len(binary_traces[0])
 
-            # Pre-slice all windows
-            all_window_traces = [
-                [trace[start:start + window_size] for trace in binary_traces]
-                for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
-            ]
+                # Pre-slice all windows
+                all_window_traces = [
+                    [trace[start:start + window_size] for trace in binary_traces]
+                    for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
+                ]
 
-            with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
+                with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
+                        similarity_matrices = list(tqdm(
+                            executor.map(partial(self._compute_cross_corr, lag_range=int(lag_percent * window_size)), all_window_traces),
+                            total=len(all_window_traces),
+                            desc="Computing similarity matrices in parallel"
+                        ))
+
+            elif method == "jaccard":
+                window_size = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["window_size"]
+                lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["lag_percent"]
+                step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["step_percent"]
+
+                binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
+                trace_length = len(binary_traces[0])
+
+                # Pre-slice all windows
+                all_window_traces = [
+                    [trace[start:start + window_size] for trace in binary_traces]
+                    for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
+                ]
+                with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
                     similarity_matrices = list(tqdm(
-                        executor.map(partial(self._compute_similarity_matrix, lag_range=int(lag_percent * window_size)), all_window_traces),
+                        executor.map(self._compute_jaccard, all_window_traces),
                         total=len(all_window_traces),
                         desc="Computing similarity matrices in parallel"
                     ))
+        
+            else:
+                raise ValueError(f"Unsupported similarity method: {method}")
+            
+            # Save the similarity matrices to a file
+            save_pickle_file(similarity_matrices, self.similarity_matrices_path)
 
-            # Save the similarity matrices
-            plot_similarity_matrices(self.output_path, similarity_matrices)
+        # Save the similarity matrices
+        plot_similarity_matrices(self.output_path, similarity_matrices)
 
-            return similarity_matrices
+        return similarity_matrices
 
 
    
@@ -448,20 +510,45 @@ class CalciumPipeline:
                 probabilities = clustering.probabilities_
                 labels[probabilities < probability_threshold] = -1  # Mark low-probability points as noise
                 clustered_labels.append(labels)
+
+            elif method == "agglomerative":
+                n_clusters = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["n_clusters"]
+                distance_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["distance_threshold"]
+                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["metric"]
+                linkage = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["linkage"]
+
+                dist = 1.0 - sim
+                clustering = AgglomerativeClustering(
+                    n_clusters=n_clusters,
+                    distance_threshold=distance_threshold,
+                    metric=metric,
+                    linkage=linkage
+                )
+
+                labels = clustering.fit_predict(dist)
+
+                # Filter out single cell clusters
+                label_counts = Counter(labels)
+                labels = np.array([label if label_counts[label] > 1 else -1 for label in labels])
+
+                clustered_labels.append(labels)
+
             else:
                 raise ValueError(f"Unsupported clustering method: {method}")
+
 
             for idx, labels in enumerate(clustered_labels):
                 label_counts = Counter(labels)
                 num_clusters = sum(1 for k in label_counts if k != -1)
                 num_noise = label_counts.get(-1, 0)
-                print(f"[Window {idx}] Clusters found: {num_clusters}, Noise cells: {num_noise}")
 
+                print(f"[Clustering Result] Clusters found: {num_clusters}, Noise cells: {num_noise}")
                 for cluster_id, count in sorted(label_counts.items()):
-                    label_str = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
-                    print(f"    {label_str}: {count} cells")
+                    name = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
+                    print(f"    {name}: {count} cells")
 
         # Save the clustered labels on the overlay
+        plot_raster(output_path=self.output_path, cells=self.active_cells, cluster_labels=labels, clustered=True)
         save_clusters_on_overlay(self.overlay_path, self.output_path, clustered_labels, self.active_cells)
 
         return 

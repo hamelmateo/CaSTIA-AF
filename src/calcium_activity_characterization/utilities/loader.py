@@ -4,9 +4,10 @@ import numpy as np
 import re
 import pickle
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import random
 import logging
-from typing import List
+from typing import List, Optional
 
 from calcium_activity_characterization.data.cells import Cell
 
@@ -258,23 +259,76 @@ def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Inten
     logger.info(f"Histogram saved to {output_path}")
 
 
-def plot_binarized_raster(output_path: Path, cells: List[Cell]) -> None:
+def plot_raster(
+    output_path: Path,
+    cells: List[Cell],
+    clustered: bool = False,
+    cluster_labels: Optional[np.ndarray] = None
+) -> None:
+    """
+    Plot a raster plot of binary traces for cells.
+    
+    Args:
+        output_path (Path): Directory to save the plot.
+        cells (List[Cell]): List of Cell objects.
+        clustered (bool): Whether to plot clustered data.
+        cluster_labels (Optional[np.ndarray]): Cluster labels for each cell.
+    """
     if not cells:
         logger.warning("No cells provided for raster plot.")
         return
 
     binarized_matrix = np.array([cell.binary_trace for cell in cells])
-    plt.figure(figsize=(12, 6))
-    plt.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
-    plt.xlabel("Time")
-    plt.ylabel("Cell Index")
-    plt.title("Binarized Activity Raster Plot")
-    plt.colorbar(label="Activity (0/1)")
+
+    if clustered:
+        if cluster_labels is None or len(cluster_labels) != len(cells):
+            logger.error("Clustered plot requested but valid cluster_labels not provided.")
+            return
+
+        cluster_labels = np.array(cluster_labels)
+        sorted_indices = np.argsort(cluster_labels)
+        binarized_matrix = binarized_matrix[sorted_indices]
+        cluster_labels = cluster_labels[sorted_indices]
+
+        # Assign color per cluster
+        unique_labels = sorted(set(cluster_labels))
+        color_map = plt.get_cmap('tab20')
+        cluster_color_dict = {
+            label: np.array(color_map(i % 20)[:3])
+            for i, label in enumerate(unique_labels)
+        }
+
+        # Build RGB image
+        h, w = binarized_matrix.shape
+        rgb_image = np.zeros((h, w, 3), dtype=np.float32)  # default: black background
+
+        for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, cluster_labels)):
+            color = cluster_color_dict[cluster_id]
+            for col_idx, value in enumerate(row):
+                if value == 1:
+                    rgb_image[row_idx, col_idx] = color
+
+        # Plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.imshow(rgb_image, aspect='auto', interpolation='nearest')
+        ax.set_yticks([])
+        ax.set_yticklabels([])
+        ax.set_ylabel("")
+        ax.set_title("Binarized Activity Raster Plot (Clustered)")
+    else:
+        # Non-clustered grayscale plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+        ax.set_ylabel("Cell Index")
+        ax.set_title("Binarized Activity Raster Plot")
+
+    ax.set_xlabel("Time")
     plt.tight_layout()
-    save_path = output_path / "raster_plot.png"
+    filename = "clustered_raster_plot.png" if clustered else "raster_plot.png"
+    save_path = output_path / filename
     plt.savefig(save_path, dpi=600)
     plt.close()
-    logger.info(f"Raster plot saved to {output_path}")
+    logger.info(f"Raster plot saved to {save_path}")
 
 
 
@@ -338,3 +392,26 @@ def save_clusters_on_overlay(overlay_path: Path, output_path: Path, clustered_la
         save_path = output_path / f"cluster_overlay_window_{window_idx:03d}.png"
         plt.imsave(save_path, color_overlay)
         print(f"✅ Saved: {save_path}")
+
+
+def plot_dendrogram(output_path: Path, dendrogram_data: dict) -> None:
+    """
+    Plot and save a dendrogram.
+
+    Args:
+        output_path (Path): Directory to save the dendrogram.
+        dendrogram_data (dict): Dendrogram data.
+    """
+    from scipy.cluster.hierarchy import dendrogram
+    from scipy.spatial.distance import squareform
+
+    plt.figure(figsize=(10, 6))
+    dendrogram(dendrogram_data)
+    plt.title("Dendrogram")
+    plt.xlabel("Cell Index")
+    plt.ylabel("Distance")
+    plt.tight_layout()
+    save_path = output_path / "dendrogram.png"
+    plt.savefig(save_path, dpi=300)
+    plt.close()
+    logger.info(f"Dendrogram saved to {save_path}")
