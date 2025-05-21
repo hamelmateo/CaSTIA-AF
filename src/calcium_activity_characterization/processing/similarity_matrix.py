@@ -13,8 +13,11 @@ Example usage:
 import numpy as np
 from scipy.signal import correlate
 from scipy.stats import pearsonr, spearmanr
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 import logging
+import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -35,165 +38,208 @@ class SimilarityMatrixComputer:
 
     def __init__(self, config: dict):
         """
-        Initialize the SimilarityMatrixComputer with configuration parameters.
+        Initialize the SimilarityMatrixComputer.
 
         Args:
-            config (dict): Configuration dictionary containing method and parameter definitions.
+            config (dict): Configuration dictionary.
         """
         self.method: str = config["method"]
         self.params: dict = config["params"].get(self.method, {})
+        self.parallelize: bool = config.get("parallelize", True)
 
     def compute(self, traces: np.ndarray, lag_range: Optional[int] = None) -> np.ndarray:
         """
-        Compute a similarity matrix from an array of traces.
+        Compute similarity matrix using selected method and config parallelization flag.
 
         Args:
-            traces (np.ndarray): Array of shape (num_cells, num_timepoints).
-            lag_range (int, optional): Maximum time lag to consider for similarity.
-
+            traces (np.ndarray): Input signals (num_cells x num_timepoints).
+            lag_range (int, optional): Lag window for similarity.
+        
         Returns:
-            np.ndarray: Symmetric similarity matrix of shape (num_cells, num_cells).
+            np.ndarray: Similarity matrix.
         """
-        if self.method == "cross_correlation":
-            return self._compute_cross_correlation(traces, lag_range)
-        elif self.method == "jaccard":
-            return self._compute_lagged_similarity(traces, self._jaccard_similarity, lag_range)
-        elif self.method == "pearson":
-            return self._compute_lagged_similarity(traces, self._pearson_similarity, lag_range)
-        elif self.method == "spearman":
-            return self._compute_lagged_similarity(traces, self._spearman_similarity, lag_range)
+        if self.parallelize:
+            return self._compute_parallel(traces, lag_range)
         else:
-            raise ValueError(f"Unsupported similarity method: {self.method}")
+            return self._compute_serial(traces, lag_range)
 
-    def _compute_cross_correlation(self, traces: np.ndarray, lag_range: Optional[int]) -> np.ndarray:
+    def _compute_parallel(self, traces: np.ndarray, lag_range: Optional[int] = None, n_jobs: int = None) -> np.ndarray:
+            """
+            Compute similarity matrix in parallel.
+
+            Args:
+                traces (np.ndarray): Input signals (num_cells x num_timepoints).
+                lag_range (int, optional): Lag window for similarity.
+                n_jobs (int, optional): Number of parallel workers.
+
+            Returns:
+                np.ndarray: Similarity matrix.
+            """
+            n = traces.shape[0]
+            pairs = [(i, j) for i in range(n) for j in range(i, n)]
+            tasks = [(i, j, traces[i], traces[j], self.method, self.params, lag_range) for (i, j) in pairs]
+
+            results = [None] * len(tasks)
+
+            with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+                futures = {
+                    executor.submit(SimilarityMatrixComputer.compute_similarity_pair, task): idx
+                    for idx, task in enumerate(tasks)
+                }
+                for future in tqdm(as_completed(futures), total=len(futures), desc="Computing similarity matrix"):
+                    idx = futures[future]
+                    results[idx] = future.result()
+
+            sim_matrix = np.zeros((n, n))
+            for (i, j), val in zip(pairs, results):
+                sim_matrix[i, j] = sim_matrix[j, i] = val
+            return sim_matrix
+
+    def _compute_serial(self, traces: np.ndarray, lag_range: Optional[int] = None) -> np.ndarray:
         """
-        Compute cross-correlation-based similarity matrix.
-
-        For each pair of traces, shifts one relative to the other across lag_range,
-        computes normalized cross-correlation, and returns the maximum value.
+        Compute similarity matrix in serial using tqdm.
 
         Args:
-            traces (np.ndarray): 2D array of shape (n_cells, timepoints).
-            lag_range (int): Max number of timepoints to lag for comparison.
+            traces (np.ndarray): Input signals (num_cells x num_timepoints).
+            lag_range (int, optional): Lag window for similarity.
 
         Returns:
-            np.ndarray: Similarity matrix of shape (n_cells, n_cells).
+            np.ndarray: Similarity matrix.
         """
-        mode = self.params.get("mode", "full")
-        method = self.params.get("method", "direct")
+        n = traces.shape[0]
+        sim_matrix = np.zeros((n, n))
 
-        n_cells = traces.shape[0]
-        sim_matrix = np.zeros((n_cells, n_cells), dtype=float)
+        print(f"Serial computing similarity matrix for {n*(n+1)//2} pairs of traces using {self.method} method...")
 
-        for i in range(n_cells):
-            for j in range(i, n_cells):
-                trace_i = traces[i]
-                trace_j = traces[j]
-                corr = correlate(trace_i, trace_j, mode=mode, method=method)
-                lags = np.arange(-len(trace_j) + 1, len(trace_i))
-                if lag_range is not None:
-                    valid = (lags >= -lag_range) & (lags <= lag_range)
-                    corr = corr[valid]
-                max_corr = np.max(corr) / ((np.linalg.norm(trace_i) * np.linalg.norm(trace_j)) + 1e-8)
-                sim_matrix[i, j] = sim_matrix[j, i] = max_corr
+        for i in tqdm(range(n), desc=f"Computing (serial, {self.method})"):
+            for j in range(i, n):
+                args = (i, j, traces[i], traces[j], self.method, self.params, lag_range)
+                sim = self.compute_similarity_pair(args)
+                sim_matrix[i, j] = sim_matrix[j, i] = sim
 
         return sim_matrix
+
+    @staticmethod
+    def compute_similarity_pair(args: Tuple[int, int, np.ndarray, np.ndarray, str, dict, Optional[int]]) -> float:
+        """
+        Compute similarity for a pair of traces.
+
+        Args:
+            args (tuple): (i, j, trace_i, trace_j, method, params, lag_range)
+
+        Returns:
+            float: Similarity score.
+        """
+        i, j, a, b, method, params, lag_range = args
+        def norm_cross_corr(a, b):
+            mode = params.get("mode", "full")
+            method_type = params.get("method", "direct")
+            corr = correlate(a, b, mode=mode, method=method_type)
+            lags = np.arange(-len(b) + 1, len(a))
+            if lag_range is not None:
+                corr = corr[(lags >= -lag_range) & (lags <= lag_range)]
+            return np.max(corr) / ((np.linalg.norm(a) * np.linalg.norm(b)) + 1e-8)
+
+        def jaccard(a, b):
+            a_bin, b_bin = a > 0, b > 0
+            inter = np.logical_and(a_bin, b_bin).sum()
+            union = np.logical_or(a_bin, b_bin).sum()
+            return inter / union if union > 0 else 0.0
+
+        def max_lagged(a, b, fn):
+            T = len(a)
+            max_sim = -np.inf
+            for lag in range(-lag_range, lag_range + 1):
+                if lag < 0:
+                    a_lag, b_lag = a[:lag], b[-lag:]
+                elif lag > 0:
+                    a_lag, b_lag = a[lag:], b[:-lag]
+                else:
+                    a_lag, b_lag = a, b
+                if len(a_lag) < 2: continue
+                try:
+                    max_sim = max(max_sim, fn(a_lag, b_lag))
+                except Exception: continue
+            return max_sim if max_sim != -np.inf else 0.0
+
+        if method == "cross_correlation":
+            return norm_cross_corr(a, b)
+        elif method == "jaccard":
+            return max_lagged(a, b, jaccard)
+        elif method == "pearson":
+            return max_lagged(a, b, lambda x, y: pearsonr(x, y)[0])
+        elif method == "spearman":
+            return max_lagged(a, b, lambda x, y: spearmanr(x, y)[0])
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+    def _compute_cross_correlation(self, traces: np.ndarray, lag_range: Optional[int] = None) -> np.ndarray:
+        """
+        Compute normalized cross-correlation similarity matrix.
+
+        Args:
+            traces (np.ndarray): Calcium traces.
+            lag_range (int, optional): Time lag window.
+
+        Returns:
+            np.ndarray: Similarity matrix.
+        """
+        return self.compute_parallel(traces, lag_range)
 
     def _compute_lagged_similarity(self, traces: np.ndarray, metric_fn: Callable[[np.ndarray, np.ndarray], float], lag_range: int) -> np.ndarray:
         """
-        Compute pairwise similarity matrix using custom metric function across time lags.
+        Compute lagged metric-based similarity matrix.
 
         Args:
-            traces (np.ndarray): 2D array of shape (n_cells, timepoints).
-            metric_fn (Callable): Function to compute similarity between two aligned traces.
-            lag_range (int): Maximum lag to consider in both directions.
+            traces (np.ndarray): Input traces.
+            metric_fn (Callable): Metric function.
+            lag_range (int): Max lag.
 
         Returns:
-            np.ndarray: Similarity matrix of shape (n_cells, n_cells).
+            np.ndarray: Similarity matrix.
         """
-        n_cells = traces.shape[0]
-        sim_matrix = np.zeros((n_cells, n_cells), dtype=float)
-
-        for i in range(n_cells):
-            for j in range(i, n_cells):
-                a, b = traces[i], traces[j]
-                max_sim = self._max_lagged_similarity(a, b, metric_fn, lag_range)
-                sim_matrix[i, j] = sim_matrix[j, i] = max_sim
-
-        return sim_matrix
-
-    def _max_lagged_similarity(self, a: np.ndarray, b: np.ndarray, metric_fn: Callable[[np.ndarray, np.ndarray], float], lag_range: int) -> float:
-        """
-        Compute the maximum similarity between two signals across lags.
-
-        Args:
-            a, b (np.ndarray): Signals to compare.
-            metric_fn (Callable): Similarity function.
-            lag_range (int): Maximum shift to apply.
-
-        Returns:
-            float: Maximum similarity score across all valid lags.
-        """
-        T = len(a)
-        max_sim = -np.inf
-
-        for lag in range(-lag_range, lag_range + 1):
-            if lag < 0:
-                a_lag, b_lag = a[:lag], b[-lag:]
-            elif lag > 0:
-                a_lag, b_lag = a[lag:], b[:-lag]
-            else:
-                a_lag, b_lag = a, b
-
-            if len(a_lag) < 2:
-                continue
-
-            try:
-                sim = metric_fn(a_lag, b_lag)
-                max_sim = max(max_sim, sim)
-            except Exception:
-                continue
-
-        return max_sim if max_sim != -np.inf else 0.0
+        return self.compute_parallel(traces, lag_range)
 
     def _pearson_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """
-        Compute Pearson correlation coefficient between two signals.
+        Compute Pearson correlation.
 
         Args:
-            a, b (np.ndarray): Aligned 1D arrays.
+            a (np.ndarray): Signal 1.
+            b (np.ndarray): Signal 2.
 
         Returns:
-            float: Pearson correlation.
+            float: Correlation score.
         """
         r, _ = pearsonr(a, b)
         return r
 
     def _spearman_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """
-        Compute Spearman rank correlation between two signals.
+        Compute Spearman rank correlation.
 
         Args:
-            a, b (np.ndarray): Aligned 1D arrays.
+            a (np.ndarray): Signal 1.
+            b (np.ndarray): Signal 2.
 
         Returns:
-            float: Spearman rank correlation.
+            float: Rank correlation.
         """
         r, _ = spearmanr(a, b)
         return r
 
     def _jaccard_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
         """
-        Compute Jaccard similarity between binarized versions of two signals.
+        Compute Jaccard index.
 
         Args:
-            a, b (np.ndarray): Aligned 1D arrays.
+            a (np.ndarray): Signal 1.
+            b (np.ndarray): Signal 2.
 
         Returns:
-            float: Jaccard index.
+            float: Jaccard similarity.
         """
-        a_bin = np.array(a > 0, dtype=bool)
-        b_bin = np.array(b > 0, dtype=bool)
+        a_bin, b_bin = a > 0, b > 0
         intersection = np.logical_and(a_bin, b_bin).sum()
         union = np.logical_or(a_bin, b_bin).sum()
         return intersection / union if union > 0 else 0.0

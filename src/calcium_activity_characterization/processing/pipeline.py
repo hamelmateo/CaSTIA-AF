@@ -15,13 +15,6 @@ from typing import List
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
-from scipy.signal import correlate
-from sklearn.cluster import DBSCAN, AgglomerativeClustering
-from sklearn.metrics import silhouette_score
-from collections import Counter
-import hdbscan
-from scipy.cluster.hierarchy import linkage
-from scipy.spatial.distance import squareform
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -347,7 +340,7 @@ class CalciumPipeline:
             self.similarity_matrices = load_pickle_file(self.similarity_matrices_path)
         
         else:
-            analyzer = CorrelationAnalyzer(self.config["CORRELATION_PARAMETERS"])
+            analyzer = CorrelationAnalyzer(self.config["CORRELATION_PARAMETERS"], self.DEVICE_CORES)
             self.similarity_matrices = analyzer.run(self.active_cells, single_window=True)
             
             logger.info(f"Similarity matrices computed for {len(self.active_cells)} active cells.")

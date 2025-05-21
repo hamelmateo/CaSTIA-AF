@@ -26,19 +26,22 @@ class CorrelationAnalyzer:
     All traces used are binarized (cell.binary_trace).
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, DEVICES_CORES: int = 4):
         """
         Initialize the CorrelationAnalyzer with time windowing and similarity settings.
 
         Args:
             config (dict): CORRELATION_PARAMETERS config block
         """
+        self.DEVICES_CORES = DEVICES_CORES
+
         self.method = config["method"]
         self.params = config["params"].get(self.method, {})
 
         self.window_size = self.params.get("window_size", 1800)
         self.step_percent = self.params.get("step_percent", 0.1)
         self.lag_percent = self.params.get("lag_percent", 0.1)
+        self.parallelize = self.params.get("parallelize", True)
 
         self.step_size = int(self.step_percent * self.window_size)
         self.lag_range = int(self.lag_percent * self.window_size)
@@ -76,7 +79,7 @@ class CorrelationAnalyzer:
         similarity_matrices = []
         for start in range(0, trace_length - self.window_size + 1, self.step_size):
             window = trace_matrix[:, start : start + self.window_size]
-            sim = self.similarity_computer.compute(window, lag_range=self.lag_range)
+            sim = self.similarity_computer.compute(traces=window, lag_range=self.lag_range)
             similarity_matrices.append(sim)
 
         return similarity_matrices

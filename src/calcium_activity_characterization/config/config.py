@@ -113,10 +113,11 @@ PEAK_DETECTION = {
 # ==========================
 
 CORRELATION_PARAMETERS = {
+    "parallelize": True,  # Use parallel processing for similarity calculation
     "window_size": 1750,  # Window size for similarity calculation
     "step_percent": 0.1,  # Percentage of window size for step size calculation
     "lag_percent": 0.1,   # Percentage of window size for lag calculation
-    "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
+    "method": "jaccard",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
     "params": {
         "cross_correlation": {
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
@@ -150,7 +151,7 @@ CLUSTERING_PARAMETERS = {
         "agglomerative": {
             "n_clusters": None,  # Number of clusters to form - if None, the number of clusters is determined by the distance threshold
             "distance_threshold": 0.5,  # Distance threshold to apply when forming clusters
-            "linkage": "complete",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
+            "linkage": "average",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
             "metric": "precomputed",  # Metric used to compute the linkage: 'precomputed', 'euclidean', 'manhattan', etc.
             "auto_threshold": False  # Automatically determine the distance threshold based on the data
         },
