@@ -116,14 +116,14 @@ CORRELATION_PARAMETERS = {
     "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
     "params": {
         "cross_correlation": {
-            "window_size": 1800,  # Window size for cross-correlation
+            "window_size": 1750,  # Window size for cross-correlation
             "lag_percent": 0.1,    # Percentage of window size for lag calculation
             "step_percent": 0.1,   # Percentage of window size for step size calculation
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
             "method": "direct",  # Method for cross-correlation: 'direct', 'fft'
         },
         "jaccard": {
-            "window_size": 1800,  # Window size for Jaccard similarity
+            "window_size": 1750,  # Window size for Jaccard similarity
             "lag_percent": 0.1,    # Percentage of window size for lag calculation
             "step_percent": 0.1,   # Percentage of window size for step size calculation
         }
@@ -148,9 +148,10 @@ CLUSTERING_PARAMETERS = {
         },
         "agglomerative": {
             "n_clusters": None,  # Number of clusters to form - if None, the number of clusters is determined by the distance threshold
-            "distance_threshold": 0.4,  # Distance threshold to apply when forming clusters
-            "linkage": "average",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
-            "metric": "precomputed"  # Metric used to compute the linkage: 'precomputed', 'euclidean', 'manhattan', etc.
+            "distance_threshold": 0.5,  # Distance threshold to apply when forming clusters
+            "linkage": "complete",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
+            "metric": "precomputed",  # Metric used to compute the linkage: 'precomputed', 'euclidean', 'manhattan', etc.
+            "auto_threshold": True  # Automatically determine the distance threshold based on the data
         }
     }
 }

@@ -17,10 +17,11 @@ from functools import partial
 from tqdm import tqdm
 from scipy.signal import correlate
 from sklearn.cluster import DBSCAN, AgglomerativeClustering
+from sklearn.metrics import silhouette_score
 from collections import Counter
-import matplotlib.pyplot as plt
-import pandas as pd
 import hdbscan
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -31,6 +32,7 @@ from calcium_activity_characterization.utilities.loader import (
     crop_image,
     save_pickle_file,
     load_cells_from_pickle,
+    load_pickle_file,
     save_clusters_on_overlay,
     plot_similarity_matrices,
     plot_raster
@@ -60,6 +62,7 @@ class CalciumPipeline:
         # data
         self.cells: List[Cell] = []
         self.active_cells: List[Cell] = []
+        self.similarity_matrices: List[np.ndarray] = []
 
         # folder paths
         self.data_path: Path = None
@@ -96,8 +99,8 @@ class CalciumPipeline:
 
         self._signal_processing_pipeline()
         self._binarization_pipeline()
-        correlation_matrices = self._correlation_analysis()
-        self._cluster_high_similarity_groups(correlation_matrices)
+        self._correlation_analysis()
+        self._clustering_cells()
 
 
 
@@ -390,20 +393,15 @@ class CalciumPipeline:
         return sim_matrix
 
 
-    def _correlation_analysis(self) -> list[np.ndarray]:
+    def _correlation_analysis(self):
         """
-        Compute time-lagged sliding window cross-correlation correlation matrices.
-
-        Args:
-            window_size (int): Number of frames per sliding window.
-            lag_percent (float): Maximum lag as a percentage of window size (e.g., 0.25 = ±25%).
-            step_percent (float): step_percent size to move the sliding window.
+        Compute correlation matrices.
 
         Returns:
             List[np.ndarray]: List of correlation matrices, one per window.
         """
         if self.config["EXISTING_SIMILARITY_MATRICES"] and self.similarity_matrices_path.exists():
-            similarity_matrices = load_cells_from_pickle(self.similarity_matrices_path, True)
+            self.similarity_matrices = load_pickle_file(self.similarity_matrices_path)
         
         else:
             method = self.config["CORRELATION_PARAMETERS"]["method"]
@@ -423,7 +421,7 @@ class CalciumPipeline:
                 ]
 
                 with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
-                        similarity_matrices = list(tqdm(
+                        self.similarity_matrices = list(tqdm(
                             executor.map(partial(self._compute_cross_corr, lag_range=int(lag_percent * window_size)), all_window_traces),
                             total=len(all_window_traces),
                             desc="Computing similarity matrices in parallel"
@@ -443,7 +441,7 @@ class CalciumPipeline:
                     for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
                 ]
                 with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
-                    similarity_matrices = list(tqdm(
+                    self.similarity_matrices = list(tqdm(
                         executor.map(self._compute_jaccard, all_window_traces),
                         total=len(all_window_traces),
                         desc="Computing similarity matrices in parallel"
@@ -453,34 +451,21 @@ class CalciumPipeline:
                 raise ValueError(f"Unsupported similarity method: {method}")
             
             # Save the similarity matrices to a file
-            save_pickle_file(similarity_matrices, self.similarity_matrices_path)
+            save_pickle_file(self.similarity_matrices, self.similarity_matrices_path)
 
         # Save the similarity matrices
-        plot_similarity_matrices(self.output_path, similarity_matrices)
-
-        return similarity_matrices
-
-
-   
+        plot_similarity_matrices(self.output_path, self.similarity_matrices)
 
 
 
-    def _cluster_high_similarity_groups(self, similarity_matrices: list[np.ndarray]) -> None:
+    def _clustering_cells(self) -> None:
         """
-        Cluster cells based on high similarity using DBSCAN.
-
-        Args:
-            similarity_matrices (list[np.ndarray]): List of similarity matrices (N x N).
-            eps (float): DBSCAN radius threshold for clustering (on distance matrix).
-            min_samples (int): Minimum number of points required to form a cluster.
-
-        Returns:
-            list[np.ndarray]: List of label arrays (one per window), with -1 for unclustered cells.
+        Cluster cells based on their similarity matrices over a specific time-window.
         """
         clustered_labels = []
         method = self.config["CLUSTERING_PARAMETERS"]["method"]
 
-        for sim in similarity_matrices:
+        for sim in self.similarity_matrices:
             if method == "dbscan":
                 eps = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["eps"]
                 min_samples = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["min_samples"]
@@ -516,8 +501,17 @@ class CalciumPipeline:
                 distance_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["distance_threshold"]
                 metric = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["metric"]
                 linkage = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["linkage"]
-
+                auto_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["auto_threshold"]
+                
                 dist = 1.0 - sim
+                np.fill_diagonal(dist, 0)
+
+                if auto_threshold:
+                    #best_threshold = find_best_agglomerative_threshold(dist)
+                    best_threshold = find_dendrogram_jump_threshold(dist, linkage_method=linkage)                        
+                    distance_threshold = best_threshold
+
+                
                 clustering = AgglomerativeClustering(
                     n_clusters=n_clusters,
                     distance_threshold=distance_threshold,
@@ -555,4 +549,59 @@ class CalciumPipeline:
     
 
 
+def find_best_agglomerative_threshold(dist: np.ndarray) -> float:
+    best_score = -1
+    best_threshold = None
+    for threshold in np.arange(0.05, 1.0, 0.05):
+        try:
+            clustering = AgglomerativeClustering(
+                n_clusters=None,
+                distance_threshold=threshold,
+                metric="precomputed",
+                linkage="complete"
+            )
+            labels = clustering.fit_predict(dist)
+            if len(set(labels)) > 1:  # silhouette needs >1 cluster
+                score = silhouette_score(X=dist, labels=labels, metric="precomputed")
+                print(f"[Threshold {threshold:.2f}] Silhouette Score: {score:.4f}")
+                if score > best_score:
+                    best_score = score
+                    best_threshold = threshold
+        except Exception as e:
+            print(f"[Threshold {threshold:.2f}] Failed: {e}")
 
+    return best_threshold
+
+
+
+def find_dendrogram_jump_threshold(dist: np.ndarray, linkage_method="complete", jump_window=30) -> float:
+    """
+    Find optimal distance threshold based on the largest jump in the dendrogram merge distances.
+
+    Args:
+        dist (np.ndarray): Precomputed square distance matrix (NxN).
+        linkage_method (str): Linkage method to use ('complete', 'average', etc.)
+        jump_window (int): Number of last merges to inspect for jump
+
+    Returns:
+        float: Suggested distance threshold.
+    """
+    if not (dist.shape[0] == dist.shape[1]):
+        raise ValueError("Distance matrix must be square")
+
+    condensed = squareform(dist)
+    Z = linkage(condensed, method=linkage_method)
+    merge_distances = Z[:, 2]
+
+    # Focus on the last 'jump_window' merges
+    if len(merge_distances) < jump_window:
+        window = merge_distances
+    else:
+        window = merge_distances[-jump_window:]
+
+    diffs = np.diff(window)
+    max_jump_idx = np.argmax(diffs)
+    suggested_threshold = window[max_jump_idx + 1]  # after the jump
+
+    print(f"📈 Dendrogram jump detected: Δ={diffs[max_jump_idx]:.4f} at threshold={suggested_threshold:.4f}")
+    return suggested_threshold
