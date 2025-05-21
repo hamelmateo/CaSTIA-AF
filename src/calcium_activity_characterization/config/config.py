@@ -113,25 +113,26 @@ PEAK_DETECTION = {
 # ==========================
 
 CORRELATION_PARAMETERS = {
+    "window_size": 1750,  # Window size for similarity calculation
+    "step_percent": 0.1,  # Percentage of window size for step size calculation
+    "lag_percent": 0.1,   # Percentage of window size for lag calculation
     "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
     "params": {
         "cross_correlation": {
-            "window_size": 1750,  # Window size for cross-correlation
-            "lag_percent": 0.1,    # Percentage of window size for lag calculation
-            "step_percent": 0.1,   # Percentage of window size for step size calculation
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
             "method": "direct",  # Method for cross-correlation: 'direct', 'fft'
         },
         "jaccard": {
-            "window_size": 1750,  # Window size for Jaccard similarity
-            "lag_percent": 0.1,    # Percentage of window size for lag calculation
-            "step_percent": 0.1,   # Percentage of window size for step size calculation
+        },
+        "pearson": {
+        },
+        "spearman": {
         }
     }
 }
 
 CLUSTERING_PARAMETERS = {
-    "method": "agglomerative",  # Clustering method: 'dbscan', 'hdbscan'
+    "method": "agglomerative",  # Clustering method: 'dbscan', 'hdbscan', 'agglomerative', 'affinity_propagation', 'graph_community'
     "params": {
         "dbscan": {
             "eps": 0.03,  # Maximum distance between two samples for them to be considered as in the same cluster
@@ -151,7 +152,17 @@ CLUSTERING_PARAMETERS = {
             "distance_threshold": 0.5,  # Distance threshold to apply when forming clusters
             "linkage": "complete",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
             "metric": "precomputed",  # Metric used to compute the linkage: 'precomputed', 'euclidean', 'manhattan', etc.
-            "auto_threshold": True  # Automatically determine the distance threshold based on the data
+            "auto_threshold": False  # Automatically determine the distance threshold based on the data
+        },
+        "affinity_propagation": {
+            "damping": 0.9,  # Damping factor for affinity propagation
+            "max_iter": 200,  # Maximum number of iterations
+            "convergence_iter": 15,  # Number of iterations with no change to declare convergence
+            "preference": None,  # Preference parameter for affinity propagation
+            "affinity": "precomputed"  # Affinity metric: 'euclidean', 'manhattan', 'precomputed', etc.
+        },
+        "graph_community": {
+            "threshold": 0.7,  # Threshold for community detection
         }
     }
 }

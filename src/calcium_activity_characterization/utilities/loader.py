@@ -4,10 +4,10 @@ import numpy as np
 import re
 import pickle
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 import random
 import logging
 from typing import List, Optional
+import colorsys
 
 from calcium_activity_characterization.data.cells import Cell
 
@@ -259,6 +259,33 @@ def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Inten
     logger.info(f"Histogram saved to {output_path}")
 
 
+
+def generate_distinct_colors(n_colors=60, min_s=0.6, max_v=0.9):
+    """
+    Generate distinct colors by sweeping hue space in HSV.
+
+    Args:
+        n_colors (int): Number of colors.
+        min_s (float): Minimum saturation.
+        max_v (float): Maximum brightness.
+
+    Returns:
+        List[Tuple[float, float, float]]: RGB colors in 0–1 range.
+    """
+    colors = []
+    for i in range(n_colors * 2):  # Oversample and filter
+        h = i / (n_colors * 2)
+        s = np.random.uniform(min_s, 1.0)
+        v = np.random.uniform(0.6, max_v)
+        r, g, b = colorsys.hsv_to_rgb(h, s, v)
+        if (r + g + b) / 3 < max_v:  # discard overly bright
+            colors.append((r, g, b))
+        if len(colors) >= n_colors:
+            break
+    random.shuffle(colors)
+    return colors
+
+
 def plot_raster(
     output_path: Path,
     cells: List[Cell],
@@ -267,18 +294,17 @@ def plot_raster(
 ) -> None:
     """
     Plot a raster plot of binary traces for cells.
-    
+
     Args:
         output_path (Path): Directory to save the plot.
         cells (List[Cell]): List of Cell objects.
         clustered (bool): Whether to plot clustered data.
         cluster_labels (Optional[np.ndarray]): Cluster labels for each cell.
     """
+    logger = logging.getLogger(__name__)
     if not cells:
         logger.warning("No cells provided for raster plot.")
         return
-
-    binarized_matrix = np.array([cell.binary_trace for cell in cells])
 
     if clustered:
         if cluster_labels is None or len(cluster_labels) != len(cells):
@@ -286,43 +312,41 @@ def plot_raster(
             return
 
         cluster_labels = np.array(cluster_labels)
-        sorted_indices = np.argsort(cluster_labels)
-        binarized_matrix = binarized_matrix[sorted_indices]
-        cluster_labels = cluster_labels[sorted_indices]
+        cells_sorted = [cell for _, cell in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
+        label_order = [label for label, _ in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
+        binarized_matrix = np.array([cell.binary_trace for cell in cells_sorted])
 
-        # Assign color per cluster
-        unique_labels = sorted(set(cluster_labels))
-        color_map = plt.get_cmap('tab20')
-        cluster_color_dict = {
-            label: np.array(color_map(i % 20)[:3])
-            for i, label in enumerate(unique_labels)
-        }
+        n_clusters = len([l for l in set(label_order) if l != -1])
+        filtered_colors = generate_distinct_colors(n_clusters)
+        label_to_color = {}
+        for i, label in enumerate([l for l in sorted(set(label_order)) if l != -1]):
+            color = filtered_colors[i % len(filtered_colors)]
+            label_to_color[label] = color
 
-        # Build RGB image
         h, w = binarized_matrix.shape
-        rgb_image = np.zeros((h, w, 3), dtype=np.float32)  # default: black background
+        rgb_image = np.ones((h, w, 3), dtype=np.float32)
 
-        for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, cluster_labels)):
-            color = cluster_color_dict[cluster_id]
-            for col_idx, value in enumerate(row):
-                if value == 1:
-                    rgb_image[row_idx, col_idx] = color
+        for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, label_order)):
+            if cluster_id == -1:
+                continue
+            color = label_to_color.get(cluster_id, np.array([0.8, 0.8, 0.8]))
+            rgb_image[row_idx, row == 1] = color
 
-        # Plot
         fig, ax = plt.subplots(figsize=(12, 6))
-        ax.imshow(rgb_image, aspect='auto', interpolation='nearest')
+        ax.imshow(rgb_image, aspect='auto')
+        ax.set_title("Binarized Activity (sorted by cluster)")
+        ax.set_xlabel("Time")
         ax.set_yticks([])
         ax.set_yticklabels([])
-        ax.set_ylabel("")
-        ax.set_title("Binarized Activity Raster Plot (Clustered)")
+
     else:
-        # Non-clustered grayscale plot
+        binarized_matrix = np.array([cell.binary_trace for cell in cells])
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
-        ax.set_ylabel("Cell Index")
         ax.set_title("Binarized Activity Raster Plot")
+        ax.set_ylabel("Cell Index")
+        ax.set_xlabel("Time")
 
-    ax.set_xlabel("Time")
     plt.tight_layout()
     filename = "clustered_raster_plot.png" if clustered else "raster_plot.png"
     save_path = output_path / filename

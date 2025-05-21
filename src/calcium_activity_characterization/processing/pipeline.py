@@ -39,9 +39,11 @@ from calcium_activity_characterization.utilities.loader import (
 )
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
-from calcium_activity_characterization.processing.event_detection import ArcosEventDetector
+from calcium_activity_characterization.processing.arcos_event_detection import ArcosEventDetector
 from calcium_activity_characterization.analysis.umap_analysis import run_umap_on_cells
 from calcium_activity_characterization.data.peaks import PeakDetector
+from calcium_activity_characterization.processing.correlation import CorrelationAnalyzer
+from calcium_activity_characterization.processing.clustering import ClusteringEngine
 
 
 logger = logging.getLogger(__name__)
@@ -333,65 +335,6 @@ class CalciumPipeline:
         plot_raster(self.output_path, self.active_cells)
 
 
- 
-
-
-    def _compute_cross_corr(self, traces: np.ndarray, lag_range: int) -> np.ndarray:
-            """
-            Compute the cross-correlation similarity matrix for a given set of traces.
-
-            Args:
-                traces (np.ndarray): Array of shape (num_cells, num_timepoints).
-
-            Returns:
-                np.ndarray: Similarity matrix of shape (num_cells, num_cells).
-            """
-            mode = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["mode"]
-            method = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["method"]
-
-            num_cells = len(traces)
-            sim_matrix = np.zeros((num_cells, num_cells))
-
-            for i in range(num_cells):
-                for j in range(i, num_cells):
-                    trace_i = traces[i]
-                    trace_j = traces[j]
-
-                    corr = correlate(trace_i, trace_j, mode=mode, method=method)
-                    lags = np.arange(-len(trace_j) + 1, len(trace_i))
-                    valid = (lags >= -lag_range) & (lags <= lag_range)
-
-                    max_corr = np.max(corr[valid]) / (np.sqrt(np.sum(trace_i)) * np.sqrt(np.sum(trace_j)) + 1e-8)
-                    sim_matrix[i, j] = sim_matrix[j, i] = max_corr
-
-            return sim_matrix
-
-
-    def _compute_jaccard(self, traces: np.ndarray) -> np.ndarray:
-        """
-        Compute the jaccard similarity matrix for a given set of traces.
-
-        Args:
-            traces (np.ndarray): Array of shape (num_cells, num_timepoints).
-
-        Returns:
-            np.ndarray: Similarity matrix of shape (num_cells, num_cells).
-        """
-        n_cells = traces.shape[0]
-        sim_matrix = np.zeros((n_cells, n_cells), dtype=float)
-
-        for i in range(n_cells):
-            for j in range(i, n_cells):
-                a = traces[i]
-                b = traces[j]
-                intersection = np.logical_and(a, b).sum()
-                union = np.logical_or(a, b).sum()
-                similarity = intersection / union if union != 0 else 0.0
-                sim_matrix[i, j] = similarity
-                sim_matrix[j, i] = similarity 
-
-        return sim_matrix
-
 
     def _correlation_analysis(self):
         """
@@ -404,51 +347,10 @@ class CalciumPipeline:
             self.similarity_matrices = load_pickle_file(self.similarity_matrices_path)
         
         else:
-            method = self.config["CORRELATION_PARAMETERS"]["method"]
-
-            if method == "cross_correlation":
-                window_size = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["window_size"]
-                lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["lag_percent"]
-                step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["cross_correlation"]["step_percent"]
-
-                binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
-                trace_length = len(binary_traces[0])
-
-                # Pre-slice all windows
-                all_window_traces = [
-                    [trace[start:start + window_size] for trace in binary_traces]
-                    for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
-                ]
-
-                with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
-                        self.similarity_matrices = list(tqdm(
-                            executor.map(partial(self._compute_cross_corr, lag_range=int(lag_percent * window_size)), all_window_traces),
-                            total=len(all_window_traces),
-                            desc="Computing similarity matrices in parallel"
-                        ))
-
-            elif method == "jaccard":
-                window_size = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["window_size"]
-                lag_percent = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["lag_percent"]
-                step_percent = self.config["CORRELATION_PARAMETERS"]["params"]["jaccard"]["step_percent"]
-
-                binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in self.active_cells]
-                trace_length = len(binary_traces[0])
-
-                # Pre-slice all windows
-                all_window_traces = [
-                    [trace[start:start + window_size] for trace in binary_traces]
-                    for start in range(0, trace_length - window_size + 1, int(step_percent * window_size))
-                ]
-                with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
-                    self.similarity_matrices = list(tqdm(
-                        executor.map(self._compute_jaccard, all_window_traces),
-                        total=len(all_window_traces),
-                        desc="Computing similarity matrices in parallel"
-                    ))
-        
-            else:
-                raise ValueError(f"Unsupported similarity method: {method}")
+            analyzer = CorrelationAnalyzer(self.config["CORRELATION_PARAMETERS"])
+            self.similarity_matrices = analyzer.run(self.active_cells, single_window=True)
+            
+            logger.info(f"Similarity matrices computed for {len(self.active_cells)} active cells.")
             
             # Save the similarity matrices to a file
             save_pickle_file(self.similarity_matrices, self.similarity_matrices_path)
@@ -462,146 +364,14 @@ class CalciumPipeline:
         """
         Cluster cells based on their similarity matrices over a specific time-window.
         """
-        clustered_labels = []
-        method = self.config["CLUSTERING_PARAMETERS"]["method"]
+        engine = ClusteringEngine(self.config["CLUSTERING_PARAMETERS"])
+        labels = engine.run(self.similarity_matrices)
+    
+        logger.info(f"Clustering completed for {len(self.active_cells)} active cells.")
 
-        for sim in self.similarity_matrices:
-            if method == "dbscan":
-                eps = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["eps"]
-                min_samples = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["min_samples"]
-                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["dbscan"]["metric"]
-
-                dist = 1.0 - sim  # convert similarity to distance
-                clustering = DBSCAN(eps=eps, min_samples=min_samples, metric=metric)
-                labels = clustering.fit_predict(dist)
-                clustered_labels.append(labels)
-
-            elif method == "hdbscan":
-                min_cluster_size = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["min_cluster_size"]
-                min_samples = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["min_samples"]
-                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["metric"]
-                clustering_method = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["clustering_method"]
-                probability_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["probability_threshold"]
-                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["hdbscan"]["metric"]
-
-                dist = 1.0 - sim
-                clustering = hdbscan.HDBSCAN(
-                    min_samples=min_samples,
-                    metric=metric,
-                    min_cluster_size=min_cluster_size,
-                    cluster_selection_method=clustering_method
-                    )
-                labels = clustering.fit_predict(dist)
-                probabilities = clustering.probabilities_
-                labels[probabilities < probability_threshold] = -1  # Mark low-probability points as noise
-                clustered_labels.append(labels)
-
-            elif method == "agglomerative":
-                n_clusters = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["n_clusters"]
-                distance_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["distance_threshold"]
-                metric = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["metric"]
-                linkage = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["linkage"]
-                auto_threshold = self.config["CLUSTERING_PARAMETERS"]["params"]["agglomerative"]["auto_threshold"]
-                
-                dist = 1.0 - sim
-                np.fill_diagonal(dist, 0)
-
-                if auto_threshold:
-                    #best_threshold = find_best_agglomerative_threshold(dist)
-                    best_threshold = find_dendrogram_jump_threshold(dist, linkage_method=linkage)                        
-                    distance_threshold = best_threshold
-
-                
-                clustering = AgglomerativeClustering(
-                    n_clusters=n_clusters,
-                    distance_threshold=distance_threshold,
-                    metric=metric,
-                    linkage=linkage
-                )
-
-                labels = clustering.fit_predict(dist)
-
-                # Filter out single cell clusters
-                label_counts = Counter(labels)
-                labels = np.array([label if label_counts[label] > 1 else -1 for label in labels])
-
-                clustered_labels.append(labels)
-
-            else:
-                raise ValueError(f"Unsupported clustering method: {method}")
-
-
-            for idx, labels in enumerate(clustered_labels):
-                label_counts = Counter(labels)
-                num_clusters = sum(1 for k in label_counts if k != -1)
-                num_noise = label_counts.get(-1, 0)
-
-                print(f"[Clustering Result] Clusters found: {num_clusters}, Noise cells: {num_noise}")
-                for cluster_id, count in sorted(label_counts.items()):
-                    name = "Noise" if cluster_id == -1 else f"Cluster {cluster_id}"
-                    print(f"    {name}: {count} cells")
 
         # Save the clustered labels on the overlay
-        plot_raster(output_path=self.output_path, cells=self.active_cells, cluster_labels=labels, clustered=True)
-        save_clusters_on_overlay(self.overlay_path, self.output_path, clustered_labels, self.active_cells)
+        plot_raster(output_path=self.output_path, cells=self.active_cells, cluster_labels=labels[0], clustered=True)
+        save_clusters_on_overlay(self.overlay_path, self.output_path, labels, self.active_cells)
 
         return 
-    
-
-
-def find_best_agglomerative_threshold(dist: np.ndarray) -> float:
-    best_score = -1
-    best_threshold = None
-    for threshold in np.arange(0.05, 1.0, 0.05):
-        try:
-            clustering = AgglomerativeClustering(
-                n_clusters=None,
-                distance_threshold=threshold,
-                metric="precomputed",
-                linkage="complete"
-            )
-            labels = clustering.fit_predict(dist)
-            if len(set(labels)) > 1:  # silhouette needs >1 cluster
-                score = silhouette_score(X=dist, labels=labels, metric="precomputed")
-                print(f"[Threshold {threshold:.2f}] Silhouette Score: {score:.4f}")
-                if score > best_score:
-                    best_score = score
-                    best_threshold = threshold
-        except Exception as e:
-            print(f"[Threshold {threshold:.2f}] Failed: {e}")
-
-    return best_threshold
-
-
-
-def find_dendrogram_jump_threshold(dist: np.ndarray, linkage_method="complete", jump_window=30) -> float:
-    """
-    Find optimal distance threshold based on the largest jump in the dendrogram merge distances.
-
-    Args:
-        dist (np.ndarray): Precomputed square distance matrix (NxN).
-        linkage_method (str): Linkage method to use ('complete', 'average', etc.)
-        jump_window (int): Number of last merges to inspect for jump
-
-    Returns:
-        float: Suggested distance threshold.
-    """
-    if not (dist.shape[0] == dist.shape[1]):
-        raise ValueError("Distance matrix must be square")
-
-    condensed = squareform(dist)
-    Z = linkage(condensed, method=linkage_method)
-    merge_distances = Z[:, 2]
-
-    # Focus on the last 'jump_window' merges
-    if len(merge_distances) < jump_window:
-        window = merge_distances
-    else:
-        window = merge_distances[-jump_window:]
-
-    diffs = np.diff(window)
-    max_jump_idx = np.argmax(diffs)
-    suggested_threshold = window[max_jump_idx + 1]  # after the jump
-
-    print(f"📈 Dendrogram jump detected: Δ={diffs[max_jump_idx]:.4f} at threshold={suggested_threshold:.4f}")
-    return suggested_threshold
