@@ -134,6 +134,7 @@ CORRELATION_PARAMETERS = {
 
 CLUSTERING_PARAMETERS = {
     "method": "agglomerative",  # Clustering method: 'dbscan', 'hdbscan', 'agglomerative', 'affinity_propagation', 'graph_community'
+    "min_cluster_size": 3,  # Minimum size of clusters
     "params": {
         "dbscan": {
             "eps": 0.03,  # Maximum distance between two samples for them to be considered as in the same cluster
@@ -151,9 +152,9 @@ CLUSTERING_PARAMETERS = {
         "agglomerative": {
             "n_clusters": None,  # Number of clusters to form - if None, the number of clusters is determined by the distance threshold
             "distance_threshold": 0.5,  # Distance threshold to apply when forming clusters
-            "linkage": "average",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
+            "linkage": "complete",  # Linkage criterion: 'ward', 'complete', 'average', 'single'
             "metric": "precomputed",  # Metric used to compute the linkage: 'precomputed', 'euclidean', 'manhattan', etc.
-            "auto_threshold": False  # Automatically determine the distance threshold based on the data
+            "auto_threshold": True  # Automatically determine the distance threshold based on the data
         },
         "affinity_propagation": {
             "damping": 0.9,  # Damping factor for affinity propagation

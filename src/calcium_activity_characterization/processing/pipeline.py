@@ -358,8 +358,9 @@ class CalciumPipeline:
         Cluster cells based on their similarity matrices over a specific time-window.
         """
         engine = ClusteringEngine(self.config["CLUSTERING_PARAMETERS"])
-        labels = engine.run(self.similarity_matrices)
-    
+        engine.run(self.similarity_matrices)
+        labels = engine.get_labels()
+
         logger.info(f"Clustering completed for {len(self.active_cells)} active cells.")
 
 
