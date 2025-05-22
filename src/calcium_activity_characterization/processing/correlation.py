@@ -35,13 +35,10 @@ class CorrelationAnalyzer:
         """
         self.DEVICES_CORES = DEVICES_CORES
 
-        self.method = config["method"]
-        self.params = config["params"].get(self.method, {})
-
-        self.window_size = self.params.get("window_size", 1800)
-        self.step_percent = self.params.get("step_percent", 0.1)
-        self.lag_percent = self.params.get("lag_percent", 0.1)
-        self.parallelize = self.params.get("parallelize", True)
+        self.window_size = config.get("window_size", 1800)
+        self.step_percent = config.get("step_percent", 0.1)
+        self.lag_percent = config.get("lag_percent", 0.1)
+        self.parallelize = config.get("parallelize", True)
 
         self.step_size = int(self.step_percent * self.window_size)
         self.lag_range = int(self.lag_percent * self.window_size)

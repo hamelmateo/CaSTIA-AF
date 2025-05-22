@@ -12,7 +12,7 @@ EXISTING_MASK = True  # Load precomputed mask from file
 EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
 EXISTING_PROCESSED_INTENSITY = True  # Load processed intensity traces if available
 EXISTING_BINARIZED_INTENSITY = True  # Load binarized traces if available
-EXISTING_SIMILARITY_MATRICES = True  # Load precomputed similarity matrices if available
+EXISTING_SIMILARITY_MATRICES = False  # Load precomputed similarity matrices if available
 ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
 PARALLELELIZE = True  # Use parallel processing for intensity extraction
@@ -114,10 +114,10 @@ PEAK_DETECTION = {
 
 CORRELATION_PARAMETERS = {
     "parallelize": True,  # Use parallel processing for similarity calculation
-    "window_size": 1750,  # Window size for similarity calculation
-    "step_percent": 0.1,  # Percentage of window size for step size calculation
-    "lag_percent": 0.1,   # Percentage of window size for lag calculation
-    "method": "jaccard",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
+    "window_size": 100,  # Window size for similarity calculation
+    "step_percent": 0.75,  # Percentage of window size for step size calculation
+    "lag_percent": 0.25,   # Percentage of window size for lag calculation
+    "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
     "params": {
         "cross_correlation": {
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'

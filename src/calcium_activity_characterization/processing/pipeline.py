@@ -341,7 +341,7 @@ class CalciumPipeline:
         
         else:
             analyzer = CorrelationAnalyzer(self.config["CORRELATION_PARAMETERS"], self.DEVICE_CORES)
-            self.similarity_matrices = analyzer.run(self.active_cells, single_window=True)
+            self.similarity_matrices = analyzer.run(self.active_cells, single_window=False)
             
             logger.info(f"Similarity matrices computed for {len(self.active_cells)} active cells.")
             
