@@ -19,6 +19,26 @@ logger = logging.getLogger(__name__)
 # DIVERSE FUNCTIONS
 # ==========================
 
+
+def get_config_with_fallback(config: dict, key: str, default: dict = None) -> dict:
+    """
+    Try to retrieve a config block. Log a warning and return default if not found.
+
+    Args:
+        config (dict): Top-level config dictionary.
+        key (str): Name of the config block to retrieve.
+        default (dict): Fallback value if key is missing.
+
+    Returns:
+        dict: The found or default config.
+    """
+    if key not in config:
+        logging.warning(f"⚠️ Config parameter '{key}' not found. Using default: {default}")
+        return default if default is not None else {}
+    return config[key]
+
+
+
 def preprocess_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
     """
     Preprocess .tif images by renaming, loading, and cropping.

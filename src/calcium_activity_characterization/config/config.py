@@ -88,7 +88,7 @@ SIGNAL_PROCESSING_PARAMETERS = {
 # PEAK DETECTION PARAMETERS
 # ==========================
 
-PEAK_DETECTION = {
+PEAK_DETECTION_PARAMETERS = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
@@ -104,6 +104,19 @@ PEAK_DETECTION = {
     "peak_grouping": {
         "overlap_margin": 0,  # Margin for grouping overlapping peaks
         "verbose": False  # Print grouping information
+    }
+}
+
+
+# ==========================
+# PEAK CLUSTERING PARAMETERS
+# ==========================
+
+PEAK_CLUSTERING_PARAMETERS = {
+    "window_size": 20,     # how wide the window is around each peak
+    "score_weights": {
+        "time": 0.7,
+        "duration": 0.3
     }
 }
 

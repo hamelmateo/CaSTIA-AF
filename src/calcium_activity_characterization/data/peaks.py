@@ -40,6 +40,9 @@ class Peak:
 
         self.scale_class: Optional[str] = None  # e.g., 'minor', 'major', 'super'
 
+        self.in_cluster: bool = False  # Set True once this peak is added to a cluster
+        self.cluster_id: Optional[int] = None  # ID of the assigned cluster
+
     def __repr__(self):
         return (
             f"Peak(id={self.id}, time={self.peak_time}, height={self.height:.2f}, "

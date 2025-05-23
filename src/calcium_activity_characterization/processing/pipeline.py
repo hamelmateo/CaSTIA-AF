@@ -15,6 +15,7 @@ from typing import List
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
+from collections import Counter
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -28,7 +29,8 @@ from calcium_activity_characterization.utilities.loader import (
     load_pickle_file,
     save_clusters_on_overlay,
     plot_similarity_matrices,
-    plot_raster
+    plot_raster,
+    get_config_with_fallback
 )
 from calcium_activity_characterization.processing.segmentation import segmented
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
@@ -37,7 +39,8 @@ from calcium_activity_characterization.analysis.umap_analysis import run_umap_on
 from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.processing.correlation import CorrelationAnalyzer
 from calcium_activity_characterization.processing.clustering import ClusteringEngine
-
+from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
+from calcium_activity_characterization.data.cluster import Cluster
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,7 @@ class CalciumPipeline:
         self.cells: List[Cell] = []
         self.active_cells: List[Cell] = []
         self.similarity_matrices: List[np.ndarray] = []
+        self.peak_clusters: List[Cluster] = []
 
         # folder paths
         self.data_path: Path = None
@@ -74,6 +78,10 @@ class CalciumPipeline:
         self.cells_file_path: Path = None
         self.raw_cells_file_path: Path = None
         self.processed_cells_file_path: Path = None
+        self.binarized_cells_file_path: Path = None
+        self.similarity_matrices_path: Path = None
+        self.arcos_input_df: Path = None
+        self.peak_clusters_path: Path = None
         self.umap_file_path: Path = None
 
     def run(self, data_path: Path, output_path: Path) -> None:
@@ -89,13 +97,30 @@ class CalciumPipeline:
         self._segment_cells()
         self._compute_intensity()
 
-        if self.config["ARCOS_TRACKING"]:
+        if get_config_with_fallback(self.config,"ARCOS_TRACKING"):
             self._arcos_event_pipeline()
 
         self._signal_processing_pipeline()
         self._binarization_pipeline()
-        self._correlation_analysis()
-        self._clustering_cells()
+
+        # Debug: Print peaks for Cell 498
+        debug_cell = next((c for c in self.active_cells if c.label == 498), None)
+        if debug_cell:
+            print(f"\n📌 Peaks for Cell 498 (total: {len(debug_cell.peaks)}):")
+            for i, peak in enumerate(debug_cell.peaks):
+                print(f"  [{i}] start={peak.start_time}, peak={peak.peak_time}, "
+                    f"end={peak.end_time}, duration={peak.duration}, "
+                    f"height={peak.height:.2f}, prom={peak.prominence:.2f}, "
+                    f"scale={peak.scale_class}, in_cluster={peak.in_cluster}")
+        else:
+            print("⚠️ Cell 498 not found in active_cells.")
+
+
+        self._run_peak_clustering()
+
+        #self._run_umap()
+        #self._correlation_analysis()
+        #self._clustering_cells()
 
 
 
@@ -125,6 +150,7 @@ class CalciumPipeline:
         self.binarized_cells_file_path = output_path / "binarized_active_cells.pkl"
         self.similarity_matrices_path = output_path / "similarity_matrices.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
+        self.peak_clusters_path = output_path / "peak_clusters.pkl"
         self.umap_file_path = output_path / "umap.npy"
 
     def _segment_cells(self):
@@ -132,17 +158,17 @@ class CalciumPipeline:
         Perform segmentation on DAPI images if needed and convert the mask to Cell objects.
         Reloads from file if available and permitted.
         """
-        if not self.config["EXISTING_CELLS"] or not self.cells_file_path.exists():
-            if not self.config["EXISTING_MASK"] or not self.nuclei_mask_path.exists():
+        if not get_config_with_fallback(self.config,"EXISTING_CELLS") or not self.cells_file_path.exists():
+            if not get_config_with_fallback(self.config,"EXISTING_MASK") or not self.nuclei_mask_path.exists():
                 nuclei_mask = segmented(
                     preprocess_images(
                         self.hoechst_img_path,
-                        self.config["ROI_SCALE"],
+                        get_config_with_fallback(self.config,"ROI_SCALE"),
                         self.hoechst_file_pattern,
-                        self.config["PADDING"]
+                        get_config_with_fallback(self.config,"PADDING")
                     ),
                     self.overlay_path,
-                    self.config["SAVE_OVERLAY"]
+                    get_config_with_fallback(self.config,"SAVE_OVERLAY")
                 )
                 save_tif_image(nuclei_mask, self.nuclei_mask_path)
             else:
@@ -172,7 +198,7 @@ class CalciumPipeline:
             pixel_coords = np.argwhere(nuclei_mask == label)
             if pixel_coords.size > 0:
                 centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int)
-                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords, small_object_threshold=self.config["SMALL_OBJECT_THRESHOLD"], big_object_threshold=self.config["BIG_OBJECT_THRESHOLD"])
+                cell = Cell(label=label, centroid=centroid, pixel_coords=pixel_coords, small_object_threshold=get_config_with_fallback(self.config,"SMALL_OBJECT_THRESHOLD"), big_object_threshold=get_config_with_fallback(self.config,"BIG_OBJECT_THRESHOLD"))
                 if (
                     centroid[0] < 20 or centroid[1] < 20 or
                     centroid[0] > nuclei_mask.shape[0] - 20 or
@@ -188,8 +214,8 @@ class CalciumPipeline:
         Compute raw intensity traces for all cells, either serially or in parallel.
         Reloads from pickle if permitted.
         """
-        if not self.config["EXISTING_RAW_INTENSITY"] or not self.raw_cells_file_path.exists():
-            if self.config["PARALLELELIZE"]:
+        if not get_config_with_fallback(self.config,"EXISTING_RAW_INTENSITY") or not self.raw_cells_file_path.exists():
+            if get_config_with_fallback(self.config,"PARALLELELIZE"):
                 self._get_intensity_parallel()
             else:
                 self._get_intensity_serial()
@@ -203,9 +229,9 @@ class CalciumPipeline:
         """
         calcium_imgs = preprocess_images(
             self.fitc_img_path,
-            self.config["ROI_SCALE"],
+            get_config_with_fallback(self.config,"ROI_SCALE"),
             self.fitc_file_pattern,
-            self.config["PADDING"]
+            get_config_with_fallback(self.config,"PADDING")
         )
         if calcium_imgs.size > 0:
             for img in calcium_imgs:
@@ -216,10 +242,10 @@ class CalciumPipeline:
         """
         Compute mean cell intensities in parallel using multiprocessing.
         """
-        rename_files_with_padding(self.fitc_img_path, self.fitc_file_pattern, self.config["PADDING"])
+        rename_files_with_padding(self.fitc_img_path, self.fitc_file_pattern, get_config_with_fallback(self.config,"PADDING"))
         image_paths = sorted(self.fitc_img_path.glob("*.TIF"))
         cell_coords = [cell.pixel_coords for cell in self.active_cells]
-        func = partial(self._compute_intensity_single, cell_coords=cell_coords, roi_scale=self.config["ROI_SCALE"])
+        func = partial(self._compute_intensity_single, cell_coords=cell_coords, roi_scale=get_config_with_fallback(self.config,"ROI_SCALE"))
 
         try:
             with ProcessPoolExecutor(max_workers=self.DEVICE_CORES) as executor:
@@ -255,12 +281,12 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if self.config["EXISTING_PROCESSED_INTENSITY"] and self.processed_cells_file_path.exists():
+        if get_config_with_fallback(self.config,"EXISTING_PROCESSED_INTENSITY") and self.processed_cells_file_path.exists():
             self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
             return
 
         else:
-            processor = SignalProcessor(params=self.config["SIGNAL_PROCESSING_PARAMETERS"], pipeline=self.config["SIGNAL_PROCESSING"])
+            processor = SignalProcessor(params=get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"), pipeline=get_config_with_fallback(self.config,"SIGNAL_PROCESSING"))
 
             for cell in self.active_cells:
                 cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
@@ -294,8 +320,8 @@ class CalciumPipeline:
         """
 
         arcos_pipeline = ArcosEventDetector(
-            bindata_params=self.config["BINDATA_PARAMETERS"],
-            tracking_params=self.config["TRACKING_PARAMETERS"]
+            bindata_params=get_config_with_fallback(self.config,"BINDATA_PARAMETERS"),
+            tracking_params=get_config_with_fallback(self.config,"TRACKING_PARAMETERS")
         )
 
         events_df, lineage_tracker = arcos_pipeline.run(active_cells=self.active_cells)
@@ -309,12 +335,12 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        if self.config["EXISTING_BINARIZED_INTENSITY"] and self.binarized_cells_file_path.exists():
+        if get_config_with_fallback(self.config,"EXISTING_BINARIZED_INTENSITY") and self.binarized_cells_file_path.exists():
             self.active_cells = load_cells_from_pickle(self.binarized_cells_file_path, True)
             return
         
         else:
-            detector = PeakDetector(params=self.config.get("PEAK_DETECTION", {}))
+            detector = PeakDetector(params=get_config_with_fallback(self.config,"PEAK_DETECTION_PARAMETERS"))
 
             for cell in self.active_cells:
                 cell.detect_peaks(detector)
@@ -336,11 +362,11 @@ class CalciumPipeline:
         Returns:
             List[np.ndarray]: List of correlation matrices, one per window.
         """
-        if self.config["EXISTING_SIMILARITY_MATRICES"] and self.similarity_matrices_path.exists():
+        if get_config_with_fallback(self.config,"EXISTING_SIMILARITY_MATRICES") and self.similarity_matrices_path.exists():
             self.similarity_matrices = load_pickle_file(self.similarity_matrices_path)
         
         else:
-            analyzer = CorrelationAnalyzer(self.config["CORRELATION_PARAMETERS"], self.DEVICE_CORES)
+            analyzer = CorrelationAnalyzer(get_config_with_fallback(self.config,"CORRELATION_PARAMETERS"), self.DEVICE_CORES)
             self.similarity_matrices = analyzer.run(self.active_cells, single_window=False)
             
             logger.info(f"Similarity matrices computed for {len(self.active_cells)} active cells.")
@@ -357,7 +383,7 @@ class CalciumPipeline:
         """
         Cluster cells based on their similarity matrices over a specific time-window.
         """
-        engine = ClusteringEngine(self.config["CLUSTERING_PARAMETERS"])
+        engine = ClusteringEngine(get_config_with_fallback(self.config,"CLUSTERING_PARAMETERS"))
         engine.run(self.similarity_matrices)
         labels = engine.get_labels()
 
@@ -369,3 +395,22 @@ class CalciumPipeline:
         save_clusters_on_overlay(self.overlay_path, self.output_path, labels, self.active_cells)
 
         return 
+    
+
+
+    def _run_peak_clustering(self):
+        """
+        Run custom peak-based clustering algorithm and store clusters.
+        """
+        clustering_engine = PeakClusteringEngine(get_config_with_fallback(self.config,"PEAK_CLUSTERING_PARAMETERS"))
+        self.peak_clusters = clustering_engine.run(self.active_cells)
+
+        logger.info(f"Custom peak clustering found {len(self.peak_clusters)} clusters.")
+
+
+        # Log cluster size distribution
+        size_counts = Counter(len(c.members) for c in self.peak_clusters)
+        for size, count in sorted(size_counts.items()):
+            logger.info(f"🔹 {count} clusters with {size} peak(s)")
+
+        save_pickle_file(self.peak_clusters, self.peak_clusters_path)
