@@ -130,15 +130,15 @@ class SignalProcessor:
             return np.diff(trace, prepend=trace[0])
 
         elif self.detrending_mode == "savgol":
-            window_length = self.params.get("window_length", 101)
-            polyorder = self.params.get("polyorder", 2)
+            window_length = self.detrending_params.get("window_length", 101)
+            polyorder = self.detrending_params.get("polyorder", 2)
             if window_length % 2 == 0:
                 window_length += 1
             baseline = savgol_filter(trace, window_length, polyorder)
             return trace - baseline
 
         elif self.detrending_mode == "movingaverage":
-            window = self.params.get("window_size", 101)
+            window = self.detrending_params.get("window_size", 101)
             baseline = np.convolve(trace, np.ones(window)/window, mode='same')
             return trace - baseline
 
