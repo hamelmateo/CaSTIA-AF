@@ -40,7 +40,7 @@ from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.processing.correlation import CorrelationAnalyzer
 from calcium_activity_characterization.processing.clustering import ClusteringEngine
 from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
-from calcium_activity_characterization.data.cluster import Cluster
+from calcium_activity_characterization.data.clusters import Cluster
 
 logger = logging.getLogger(__name__)
 

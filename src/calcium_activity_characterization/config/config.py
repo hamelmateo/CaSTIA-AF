@@ -113,7 +113,9 @@ PEAK_DETECTION_PARAMETERS = {
 # ==========================
 
 PEAK_CLUSTERING_PARAMETERS = {
-    "window_size": 20,     # how wide the window is around each peak
+    "method": "fixed",  # Clustering method: 'adaptive', 'fixed'
+    "adaptive_window_factor": 0.5,  # Factor to determine time window size for adaptive clustering
+    "fixed_window_size": 20,     # how wide the window is around each peak
     "score_weights": {
         "time": 0.7,
         "duration": 0.3

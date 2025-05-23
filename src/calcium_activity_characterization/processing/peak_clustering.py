@@ -1,6 +1,6 @@
 from typing import List
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.cluster import Cluster
+from calcium_activity_characterization.data.clusters import Cluster
 
 
 class PeakClusteringEngine:
@@ -14,11 +14,13 @@ class PeakClusteringEngine:
 
         Args:
             config (dict): Should contain:
-                - "time_window_factor": float
+                - "method": str ("adaptive" or "fixed")
+                - "fixed_window_size": int
                 - "score_weights": dict with keys "time" and "duration"
         """
-        self.window_size = config.get("window_size", 25)
-        self.time_window_factor = config.get("time_window_factor", 0.25)
+        self.method = config.get("method", "adaptive")
+        self.fixed_window_size = config.get("fixed_window_size", 25)
+        self.adaptive_window_factor = config.get("adaptive_window_factor", 0.25)
 
         weights = config.get("score_weights", {})
         self.time_weight = weights.get("time", 0.7)
@@ -28,15 +30,12 @@ class PeakClusteringEngine:
         self.cluster_id_counter = 0
 
     def run(self, cells: List[Cell]) -> List[Cluster]:
-        """
-        Run the clustering algorithm on all peaks of all cells.
+        if self.method == "fixed":
+            return self.run_fixed_time_window(cells)
+        else:
+            return self.run_adaptive_time_window(cells)
 
-        Args:
-            cells (List[Cell]): List of active Cell objects with .peaks.
-
-        Returns:
-            List[Cluster]: List of detected peak clusters.
-        """
+    def run_adaptive_time_window(self, cells: List[Cell]) -> List[Cluster]:
         n = len(cells)
 
         for i in range(n):
@@ -45,8 +44,7 @@ class PeakClusteringEngine:
                 if origin_peak.in_cluster:
                     continue
 
-                #lag_margin = int(self.time_window_factor * origin_peak.duration)
-                lag_margin = int(self.window_size)
+                lag_margin = int(self.fixed_window_size)
                 window_start = origin_peak.start_time - lag_margin
                 window_end = origin_peak.start_time + lag_margin
 
@@ -81,21 +79,42 @@ class PeakClusteringEngine:
 
         return self.clusters
 
+    def run_fixed_time_window(self, cells: List[Cell]) -> List[Cluster]:
+        trace_length = max(len(cell.binary_trace) for cell in cells)
+        peak_spread_flags = {}  # (cell.label, peak.id): bool
+
+        for window_start in range(0, trace_length, self.fixed_window_size):
+            window_end = window_start + self.fixed_window_size
+            cluster = Cluster(self.cluster_id_counter, window_start, window_end)
+            added_any = False
+
+            for cell in cells:
+                for peak_idx, peak in enumerate(cell.peaks):
+                    key = (cell.label, peak.id)
+
+                    # Add to current window if start_time in window
+                    if window_start <= peak.start_time < window_end:
+                        cluster.add(cell, peak_idx)
+                        added_any = True
+                        peak_spread_flags[key] = peak.end_time > window_end
+
+                    # Add only if flagged to spread to next window
+                    elif peak_spread_flags.get(key, False) and window_start == ((peak.start_time // self.fixed_window_size + 1) * self.fixed_window_size):
+                        cluster.add(cell, peak_idx)
+                        added_any = True
+                        peak_spread_flags[key] = False
+
+            if added_any:
+                self.clusters.append(cluster)
+                self.cluster_id_counter += 1
+
+        return self.clusters
+
     def _compute_score(self, peak1, peak2) -> float:
-        """
-        Compute a similarity score between two peaks.
-
-        Args:
-            peak1 (Peak)
-            peak2 (Peak)
-
-        Returns:
-            float: Score between 0 and 1.
-        """
         time_diff = abs(peak1.start_time - peak2.start_time)
         duration_diff = abs(peak1.duration - peak2.duration)
 
-        max_time_window = self.time_window_factor * peak1.duration
+        max_time_window = self.adaptive_window_factor * peak1.duration
         if max_time_window == 0:
             return 0.0
 
