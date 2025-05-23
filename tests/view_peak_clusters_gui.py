@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pickle
 
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.cluster import Cluster
+from calcium_activity_characterization.data.clusters import Cluster
 
 
 class ClusterViewer(QMainWindow):

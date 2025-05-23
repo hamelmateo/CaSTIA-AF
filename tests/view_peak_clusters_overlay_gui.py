@@ -11,7 +11,7 @@ from PyQt5.QtGui import QPixmap, QImage, QColor
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.cluster import Cluster
+from calcium_activity_characterization.data.clusters import Cluster
 from calcium_activity_characterization.utilities.loader import generate_distinct_colors
 
 class ClusterOverlayViewer(QMainWindow):
