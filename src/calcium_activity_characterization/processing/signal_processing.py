@@ -8,7 +8,7 @@ Example:
 
 import numpy as np
 from scipy.signal import butter, firwin, savgol_filter, sosfilt, filtfilt
-from scipy.ndimage import gaussian_filter1d
+from scipy.ndimage import gaussian_filter1d, uniform_filter1d
 from scipy.optimize import curve_fit
 from sklearn.metrics import r2_score
 import pywt
@@ -23,7 +23,7 @@ class SignalProcessor:
         params (dict): Dictionary of parameters specific to the selected method
     """
 
-    def __init__(self, params: dict, pipeline: dict):
+    def __init__(self, params: dict):
         """
         Initialize the SignalProcessor.
 
@@ -31,16 +31,16 @@ class SignalProcessor:
             mode (str): The detrending method to use.
             params (dict): Parameters specific to the selected method.
         """
-        apply = pipeline.get("apply", {})
+        apply = params.get("apply", {})
         self.use_detrending = apply.get("detrending", False)
         self.use_smoothing = apply.get("smoothing", False)
         self.use_normalization = apply.get("normalization", False)
         self.use_cut_trace = apply.get("cut_trace", False)
 
-        self.detrending_mode = pipeline.get("detrending_mode", "butterworth")
+        self.detrending_mode = params.get("detrending_mode", "butterworth")
         self.detrending_params = params.get("methods", {}).get(self.detrending_mode, {})
 
-        self.normalize_method = pipeline.get("normalizing_method", "deltaf")
+        self.normalize_method = params.get("normalizing_method", "deltaf")
 
         self.sigma = params.get("sigma", 1.0)
 
@@ -139,7 +139,11 @@ class SignalProcessor:
 
         elif self.detrending_mode == "movingaverage":
             window = self.detrending_params.get("window_size", 101)
-            baseline = np.convolve(trace, np.ones(window)/window, mode='same')
+            half_window = window // 2
+            padded = np.pad(trace, (half_window, half_window), mode='reflect')
+            baseline = np.convolve(padded, np.ones(window)/window, mode='valid')
+            #baseline = np.convolve(trace, np.ones(window)/window, mode='same')
+            #baseline = uniform_filter1d(trace, size=window, mode='reflect')
             return trace - baseline
 
         else:

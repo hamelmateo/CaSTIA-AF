@@ -172,7 +172,7 @@ class SignalProcessingTestGUI(QMainWindow):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
-            cell.processed_intensity_trace = processed.tolist()
+            cell.smoothed_intensity_trace = processed.tolist()
 
             detector = PeakDetector(self.get_peak_params())
             cell.detect_peaks(detector)

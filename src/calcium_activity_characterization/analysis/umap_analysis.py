@@ -34,8 +34,8 @@ def run_umap_on_cells(
     Returns:
         np.ndarray: 2D array representing UMAP embedding.
     """
-    traces = [cell.processed_intensity_trace for cell in active_cells
-          if len(cell.processed_intensity_trace) > 0 and not cell.exclude_from_umap]
+    traces = [cell.smoothed_intensity_trace for cell in active_cells
+          if len(cell.smoothed_intensity_trace) > 0 and not cell.exclude_from_umap]
 
     if normalize:
         traces = StandardScaler().fit_transform(traces)
@@ -77,7 +77,7 @@ def run_umap_with_clustering(
     Returns:
         Tuple[np.ndarray, np.ndarray]: UMAP embeddings and DBSCAN cluster labels.
     """
-    traces = [cell.processed_intensity_trace for cell in active_cells if len(cell.processed_intensity_trace) > 0]
+    traces = [cell.smoothed_intensity_trace for cell in active_cells if len(cell.smoothed_intensity_trace) > 0]
 
     if normalize:
         traces = StandardScaler().fit_transform(traces)

@@ -13,6 +13,7 @@ EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
 EXISTING_PROCESSED_INTENSITY = True  # Load processed intensity traces if available
 EXISTING_BINARIZED_INTENSITY = True  # Load binarized traces if available
 EXISTING_SIMILARITY_MATRICES = False  # Load precomputed similarity matrices if available
+EXISTING_PEAK_CLUSTERS = True  # Load precomputed peak clusters if available
 ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
 PARALLELELIZE = True  # Use parallel processing for intensity extraction
@@ -31,20 +32,17 @@ PADDING = 5  # Filename zero-padding digits
 # SIGNAL PROCESSING PARAMETERS
 # ==========================
 
-SIGNAL_PROCESSING = {
+
+SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
         "detrending": False,
         "smoothing": True,
         "normalization": False,
         "cut_trace": False
     },
+
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
-}
-
-
-
-SIGNAL_PROCESSING_PARAMETERS = {
     "sigma": 15.0,          # Global Gaussian smoothing σ
 
     "methods": {
@@ -121,6 +119,53 @@ PEAK_CLUSTERING_PARAMETERS = {
         "duration": 0.3
     }
 }
+
+
+# ==========================
+# MVGC PARAMETERS
+# ==========================
+
+
+GC_PREPROCESSING = {
+    "apply": {
+        "detrending": True,
+        "smoothing": True,
+        "normalization": True,
+        "cut_trace": False
+    },
+
+    "detrending_mode": "movingaverage",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
+    "normalizing_method": "zscore",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
+    "sigma": 2.0,
+
+    "method": {
+        "movingaverage": {
+            "window_size": 351  # Window size for moving average detrending
+        }
+    }
+}
+
+GC_PARAMETERS = {
+    "mode": "pairwise",  # or "multivariate"
+
+    "parameters": {
+        "pairwise": {
+            "window_size": 400,
+            "lag_order": 5,
+            "min_cells": 3,
+            "threshold_links": True,
+            "pvalue_threshold": 0.05,
+            "community_method": "louvain"
+        },
+        "multivariate": {
+            "window_size": 400,
+            "lag_order": 5,
+            "min_cells": 3
+            # Add MVGC-specific controls here later if needed
+        }
+    }
+}
+
 
 
 # ==========================

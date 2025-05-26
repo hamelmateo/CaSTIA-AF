@@ -8,6 +8,7 @@ import random
 import logging
 from typing import List, Optional
 import colorsys
+import networkx as nx
 
 from calcium_activity_characterization.data.cells import Cell
 

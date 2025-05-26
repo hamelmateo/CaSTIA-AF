@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
 
-from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION
+from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION_PARAMETERS
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
 from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
@@ -82,7 +82,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
         self.peak_params = {}
         control_layout.addWidget(QLabel("Peak Detection Parameters:"))
-        for key, val in PEAK_DETECTION["params"]["skimage"].items():
+        for key, val in PEAK_DETECTION_PARAMETERS["params"]["skimage"].items():
             field = QLineEdit(str(val))
             control_layout.addWidget(QLabel(key))
             control_layout.addWidget(field)
@@ -189,7 +189,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
-            cell.processed_intensity_trace = processed.tolist()
+            cell.smoothed_intensity_trace = processed.tolist()
 
             detector = PeakDetector(self.get_peak_params())
             cell.detect_peaks(detector)

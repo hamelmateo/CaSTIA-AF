@@ -16,6 +16,7 @@ from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from tqdm import tqdm
 from collections import Counter
+import networkx as nx
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.utilities.loader import (
@@ -41,6 +42,7 @@ from calcium_activity_characterization.processing.correlation import Correlation
 from calcium_activity_characterization.processing.clustering import ClusteringEngine
 from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
 from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.processing.causality import GCAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +79,13 @@ class CalciumPipeline:
         self.overlay_path: Path = None
         self.cells_file_path: Path = None
         self.raw_cells_file_path: Path = None
-        self.processed_cells_file_path: Path = None
+        self.smoothed_cells_file_path: Path = None
         self.binarized_cells_file_path: Path = None
         self.similarity_matrices_path: Path = None
         self.arcos_input_df: Path = None
         self.peak_clusters_path: Path = None
         self.umap_file_path: Path = None
+        self.gc_graph: Path = None
 
     def run(self, data_path: Path, output_path: Path) -> None:
         """
@@ -102,21 +105,9 @@ class CalciumPipeline:
 
         self._signal_processing_pipeline()
         self._binarization_pipeline()
-
-        # Debug: Print peaks for Cell 498
-        debug_cell = next((c for c in self.active_cells if c.label == 498), None)
-        if debug_cell:
-            print(f"\n📌 Peaks for Cell 498 (total: {len(debug_cell.peaks)}):")
-            for i, peak in enumerate(debug_cell.peaks):
-                print(f"  [{i}] start={peak.start_time}, peak={peak.peak_time}, "
-                    f"end={peak.end_time}, duration={peak.duration}, "
-                    f"height={peak.height:.2f}, prom={peak.prominence:.2f}, "
-                    f"scale={peak.scale_class}, in_cluster={peak.in_cluster}")
-        else:
-            print("⚠️ Cell 498 not found in active_cells.")
-
-
         self._run_peak_clustering()
+
+        self._causality_analysis()
 
         #self._run_umap()
         #self._correlation_analysis()
@@ -146,12 +137,13 @@ class CalciumPipeline:
         self.overlay_path = output_path / "overlay.TIF"
         self.cells_file_path = output_path / "cells.pkl"
         self.raw_cells_file_path = output_path / "raw_active_cells.pkl"
-        self.processed_cells_file_path = output_path / "processed_active_cells.pkl"
+        self.smoothed_cells_file_path = output_path / "smoothed_active_cells.pkl"
         self.binarized_cells_file_path = output_path / "binarized_active_cells.pkl"
         self.similarity_matrices_path = output_path / "similarity_matrices.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.peak_clusters_path = output_path / "peak_clusters.pkl"
         self.umap_file_path = output_path / "umap.npy"
+        self.gc_graph = self.output_path / "gc_graphs.pkl"
 
     def _segment_cells(self):
         """
@@ -281,17 +273,17 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if get_config_with_fallback(self.config,"EXISTING_PROCESSED_INTENSITY") and self.processed_cells_file_path.exists():
-            self.active_cells = load_cells_from_pickle(self.processed_cells_file_path, True)
+        if get_config_with_fallback(self.config,"EXISTING_PROCESSED_INTENSITY") and self.smoothed_cells_file_path.exists():
+            self.active_cells = load_cells_from_pickle(self.smoothed_cells_file_path, True)
             return
 
         else:
-            processor = SignalProcessor(params=get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"), pipeline=get_config_with_fallback(self.config,"SIGNAL_PROCESSING"))
+            processor = SignalProcessor(params=get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"))
 
             for cell in self.active_cells:
-                cell.processed_intensity_trace = processor.run(cell.raw_intensity_trace)
+                cell.smoothed_intensity_trace = processor.run(cell.raw_intensity_trace)
             
-            save_pickle_file(self.active_cells, self.processed_cells_file_path)
+            save_pickle_file(self.active_cells, self.smoothed_cells_file_path)
 
 
     def _run_umap(self):
@@ -402,15 +394,60 @@ class CalciumPipeline:
         """
         Run custom peak-based clustering algorithm and store clusters.
         """
-        clustering_engine = PeakClusteringEngine(get_config_with_fallback(self.config,"PEAK_CLUSTERING_PARAMETERS"))
-        self.peak_clusters = clustering_engine.run(self.active_cells)
+        if get_config_with_fallback(self.config,"EXISTING_PEAK_CLUSTERS") and self.peak_clusters_path.exists():
+            self.peak_clusters = load_pickle_file(self.peak_clusters_path)
 
-        logger.info(f"Custom peak clustering found {len(self.peak_clusters)} clusters.")
+        else:
+            clustering_engine = PeakClusteringEngine(get_config_with_fallback(self.config,"PEAK_CLUSTERING_PARAMETERS"))
+            self.peak_clusters = clustering_engine.run(self.active_cells)
+
+            logger.info(f"Custom peak clustering found {len(self.peak_clusters)} clusters.")
 
 
-        # Log cluster size distribution
-        size_counts = Counter(len(c.members) for c in self.peak_clusters)
-        for size, count in sorted(size_counts.items()):
-            logger.info(f"🔹 {count} clusters with {size} peak(s)")
+            # Log cluster size distribution
+            size_counts = Counter(len(c.members) for c in self.peak_clusters)
+            for size, count in sorted(size_counts.items()):
+                logger.info(f"🔹 {count} clusters with {size} peak(s)")
 
-        save_pickle_file(self.peak_clusters, self.peak_clusters_path)
+            save_pickle_file(self.peak_clusters, self.peak_clusters_path)
+
+
+
+    def _causality_analysis(self):
+        """
+        For each existing peak cluster, preprocess cell signals, run pairwise GC,
+        and build + save a directed GC graph.
+        """
+        gc_output_dir = self.gc_graph
+        gc_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Analyzer + signal processor
+        analyzer = GCAnalyzer(get_config_with_fallback(self.config, "GC_PARAMETERS"), self.DEVICE_CORES)
+        processor = SignalProcessor(get_config_with_fallback(self.config, "GC_PREPROCESSING"))
+
+        for cluster in self.peak_clusters:
+            logger.info(f"Processing cluster {cluster.id} with {len(cluster.members)} members from {cluster.start_time} to {cluster.end_time}")
+            cells = [cell for cell, _ in cluster.members]
+            center_time = int((cluster.start_time + cluster.end_time) // 2)
+
+            # Preprocess each cell's trace for GC
+            for cell in cells:
+                cell.gc_trace = processor.run(cell.raw_intensity_trace)
+
+            gc_matrix = analyzer.run(cells, center_time)
+            if gc_matrix is None:
+                continue
+
+            # Build directed graph from GC matrix
+            G = nx.DiGraph()
+            labels = [cell.label for cell in cells]
+            for i, src in enumerate(labels):
+                G.add_node(src)
+                for j, tgt in enumerate(labels):
+                    if i != j and gc_matrix[i, j] > 0:
+                        G.add_edge(src, tgt, weight=gc_matrix[i, j])
+
+            # Save graph
+            save_path = gc_output_dir / f"gc_graph_cluster_{cluster.id:03d}.gpickle"
+            save_pickle_file(G, save_path)
+            print(f"Saved GC graph for cluster {cluster.id} → {save_path}")

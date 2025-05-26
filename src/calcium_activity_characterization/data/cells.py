@@ -35,7 +35,7 @@ class Cell:
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.raw_intensity_trace: list[float] = []
-        self.processed_intensity_trace: list[float] = []
+        self.smoothed_intensity_trace: list[float] = []
         self.binary_trace: list[int] = []
         self.peaks: list["Peak"] = []
         self.is_valid: bool = len(self.pixel_coords) >= small_object_threshold and len(self.pixel_coords) <= big_object_threshold
@@ -78,12 +78,12 @@ class Cell:
         """
         Plot the mean intensity profile of the cell over time.
         """
-        if len(self.processed_intensity_trace) == 0:
+        if len(self.smoothed_intensity_trace) == 0:
             logger.info(f"Cell {self.label} has no intensity data to plot.")
             return
 
         plt.figure(figsize=(10, 6))
-        plt.plot(self.processed_intensity_trace, label=f"Cell {self.label}")
+        plt.plot(self.smoothed_intensity_trace, label=f"Cell {self.label}")
         plt.title(f"Processed Intensity Profile for Cell {self.label}")
         plt.xlabel("Timepoint")
         plt.ylabel("Mean Intensity")
@@ -122,21 +122,21 @@ class Cell:
     
 
     def detect_peaks(self, detector) -> None:
-        if len(self.processed_intensity_trace) == 0:
+        if len(self.smoothed_intensity_trace) == 0:
             self.peaks = []
             return
 
-        self.peaks = detector.run(self.processed_intensity_trace)
+        self.peaks = detector.run(self.smoothed_intensity_trace)
 
     def binarize_trace_from_peaks(self) -> None:
         """
         Generate binarized trace where values are 1 during peak durations, 0 otherwise.
         """
-        if self.processed_intensity_trace is None or len(self.processed_intensity_trace) == 0:
+        if self.smoothed_intensity_trace is None or len(self.smoothed_intensity_trace) == 0:
             self.binary_trace = []
             return
 
-        trace_length = len(self.processed_intensity_trace)
+        trace_length = len(self.smoothed_intensity_trace)
         binary = np.zeros(trace_length, dtype=int)
 
         for peak in self.peaks:
