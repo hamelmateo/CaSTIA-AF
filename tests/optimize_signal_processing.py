@@ -1,27 +1,43 @@
+"""
+Signal Processing + Peaks + Binarized GUI
+This GUI allows users to process calcium imaging data, detect peaks, and visualize results.
+"""
+
 import sys
 import random
 import numpy as np
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QComboBox, QCheckBox, QLineEdit, QFileDialog, QFormLayout, QScrollArea
+    QLabel, QComboBox, QCheckBox, QLineEdit, QFileDialog, QFormLayout, QScrollArea, QTextEdit
 )
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
 
-from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS
+from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION_PARAMETERS
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
 
+def _safe_parse(text):
+    text = text.strip()
+    if text.lower() == "none":
+        return None
+    try:
+        return eval(text, {"__builtins__": {}})
+    except Exception:
+        return text
 
-class SignalProcessingTestGUI(QMainWindow):
+
+class SignalProcessingBinarizedGUI(QMainWindow):
     def __init__(self, cells):
         super().__init__()
-        self.setWindowTitle("Signal Processing Test GUI")
-        self.resize(1400, 800)
+        self.setWindowTitle("Signal Processing + Peaks + Binarized GUI")
+        self.resize(1800, 900)
         self.cells = cells
         self.random_cells = random.sample(cells, 5)
+        self.selected_cells = []
 
         # Layouts
         main_widget = QWidget()
@@ -66,12 +82,28 @@ class SignalProcessingTestGUI(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(dynamic_container)
-        control_layout.addWidget(QLabel("Method Parameters:"))
+        control_layout.addWidget(QLabel("Detrending Parameters:"))
         control_layout.addWidget(scroll)
+
+        self.peak_params = {}
+        control_layout.addWidget(QLabel("Peak Detection Parameters:"))
+        for key, val in PEAK_DETECTION_PARAMETERS["params"]["skimage"].items():
+            field = QLineEdit(str(val))
+            control_layout.addWidget(QLabel(key))
+            control_layout.addWidget(field)
+            self.peak_params[key] = field
 
         self.refresh_button = QPushButton("Randomize Cells")
         self.refresh_button.clicked.connect(self.refresh_cells)
         control_layout.addWidget(self.refresh_button)
+
+        self.selection_input = QLineEdit()
+        self.selection_input.setPlaceholderText("Enter cell labels (e.g., 12, 25, 100)")
+        control_layout.addWidget(self.selection_input)
+
+        self.select_button = QPushButton("Load Selected Cells")
+        self.select_button.clicked.connect(self.load_selected_cells)
+        control_layout.addWidget(self.select_button)
 
         self.update_button = QPushButton("Update Plots")
         self.update_button.clicked.connect(self.update_plots)
@@ -81,13 +113,17 @@ class SignalProcessingTestGUI(QMainWindow):
         self.save_button.clicked.connect(self.save_figure)
         control_layout.addWidget(self.save_button)
 
+        self.peak_text = QTextEdit()
+        self.peak_text.setReadOnly(True)
+        control_layout.addWidget(QLabel("Detected Peaks Summary:"))
+        control_layout.addWidget(self.peak_text)
+
         # Right: Plot area
-        self.figure, self.axs = plt.subplots(5, 2, figsize=(12, 10))
+        self.figure, self.axs = plt.subplots(5, 3, figsize=(16, 10))
         self.canvas = FigureCanvas(self.figure)
 
-        # Assemble
         main_layout.addLayout(control_layout, 1)
-        main_layout.addWidget(self.canvas, 4)
+        main_layout.addWidget(self.canvas, 5)
 
         self.reset_parameter_fields(self.detrending_combo.currentText())
         self.update_plots()
@@ -97,7 +133,6 @@ class SignalProcessingTestGUI(QMainWindow):
             self.dynamic_form.removeRow(0)
 
         self.dynamic_fields = {}
-
         defaults = SIGNAL_PROCESSING_PARAMETERS["methods"].get(method, {})
         for key, value in defaults.items():
             input_field = QLineEdit(str(value))
@@ -121,40 +156,54 @@ class SignalProcessingTestGUI(QMainWindow):
         }
 
         method_name = self.detrending_combo.currentText()
-        method_params = {}
-
-        for key, field in self.dynamic_fields.items():
-            text = field.text().strip()
-            if text.lower() == "none":
-                method_params[key] = None
-            else:
-                try:
-                    method_params[key] = int(text)
-                except ValueError:
-                    try:
-                        method_params[key] = float(text)
-                    except ValueError:
-                        method_params[key] = text
-
+        method_params = {key: _safe_parse(field.text()) for key, field in self.dynamic_fields.items()}
         params["methods"][method_name] = method_params
+        return SignalProcessor(params=params)
 
-        return SignalProcessor(params=params, pipeline=pipeline)
+    def get_peak_params(self):
+        parsed = {"method": "skimage", "params": {"skimage": {}}}
+        for key, field in self.peak_params.items():
+            parsed["params"]["skimage"][key] = _safe_parse(field.text())
+        return parsed
 
     def refresh_cells(self):
+        self.selected_cells = []
         self.random_cells = random.sample(self.cells, 5)
         self.update_plots()
 
-    def update_plots(self):
-        self.figure.clf()
-        self.axs = self.figure.subplots(5, 2, squeeze=False)
+    def load_selected_cells(self):
+        try:
+            label_text = self.selection_input.text()
+            label_ids = [int(val.strip()) for val in label_text.split(",") if val.strip().isdigit()]
+            label_set = set(label_ids)
+            self.selected_cells = [cell for cell in self.cells if cell.label in label_set]
+        except Exception as e:
+            print(f"Invalid input: {e}")
+            self.selected_cells = []
+        self.update_plots()
 
-        for i, cell in enumerate(self.random_cells):
+    def update_plots(self):
+        cells_to_plot = self.selected_cells if self.selected_cells else self.random_cells
+
+        self.figure.clf()
+        self.axs = self.figure.subplots(len(cells_to_plot), 3, squeeze=False)
+        self.peak_text.clear()
+        colors = plt.cm.tab10.colors
+
+        for i, cell in enumerate(cells_to_plot):
             raw = np.array(cell.raw_intensity_trace, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
+            cell.smoothed_intensity_trace = processed.tolist()
 
-            ax_raw = self.axs[i][0]
-            ax_proc = self.axs[i][1]
+            detector = PeakDetector(self.get_peak_params())
+            cell.detect_peaks(detector)
+            cell.binarize_trace_from_peaks()
+
+            ax_raw, ax_proc, ax_bin = self.axs[i]
+            ax_raw.cla()
+            ax_proc.cla()
+            ax_bin.cla()
 
             ax_raw.plot(raw, color='black')
             ax_raw.set_title(f"Cell {cell.label} - Raw")
@@ -162,17 +211,33 @@ class SignalProcessingTestGUI(QMainWindow):
             ax_raw.set_ylabel("Intensity")
             ax_raw.grid(True)
 
-            ax_proc.plot(processed, color='blue')
-            ax_proc.set_title("Processed")
+            ax_proc.plot(processed, color='blue', label="Processed")
+            for peak in cell.peaks:
+                ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
+                ax_proc.axvspan(peak.start_time, peak.end_time,
+                                color=colors[peak.id % len(colors)], alpha=0.3)
+            ax_proc.set_title("Processed + Peaks")
             ax_proc.set_xlabel("Time")
             ax_proc.set_ylabel("Intensity")
             ax_proc.grid(True)
+
+            ax_bin.plot(cell.binary_trace, color='green')
+            ax_bin.set_title("Binarized (zscore>2)")
+            ax_bin.set_xlabel("Time")
+            ax_bin.set_ylabel("0/1")
+            ax_bin.grid(True)
+
+            peak_lines = [
+                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rise_time}, prom={p.prominence:.2f}, duration={p.duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
+                for p in cell.peaks
+            ]
+            self.peak_text.append("\n".join(peak_lines) + "\n")
 
         self.figure.tight_layout()
         self.canvas.draw()
 
     def save_figure(self):
-        output_dir = Path("testing/SignalProcessingTest")
+        output_dir = Path("tests/signal_peaks_test/figures")
         output_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = output_dir / f"result_plot_{timestamp}.png"
@@ -182,7 +247,6 @@ class SignalProcessingTestGUI(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     file_dialog = QFileDialog()
     file_path, _ = file_dialog.getOpenFileName(None, "Select raw_active_cells.pkl", "", "Pickle Files (*.pkl)")
     if not file_path:
@@ -190,7 +254,6 @@ if __name__ == "__main__":
         sys.exit(0)
 
     cells = load_cells_from_pickle(Path(file_path), load=True)
-
-    window = SignalProcessingTestGUI(cells)
+    window = SignalProcessingBinarizedGUI(cells)
     window.show()
     sys.exit(app.exec_())

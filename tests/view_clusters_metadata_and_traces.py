@@ -1,3 +1,7 @@
+"""
+Viewer for binary traces of cells in a cluster, showing peaks and allowing navigation through clusters.
+"""
+
 import sys
 import random
 from pathlib import Path

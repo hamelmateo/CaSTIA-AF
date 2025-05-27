@@ -1,3 +1,7 @@
+"""
+Viewer for cluster visualation on an overlay image across time frames.
+This script provides a GUI application to visualize calcium activity clusters on an overlay image, allowing users to navigate through frames, toggle between cluster and peak visualizations, and view active clusters' information.
+"""
 import sys
 import numpy as np
 import pickle

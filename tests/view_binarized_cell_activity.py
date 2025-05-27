@@ -1,3 +1,8 @@
+"""
+Viewer for binarized cell activity signals.
+This script provides a GUI to visualize binarized signals of calcium activity from cells.
+"""
+
 import sys
 from pathlib import Path
 import numpy as np
