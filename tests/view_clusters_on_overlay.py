@@ -1,7 +1,3 @@
-"""
-Viewer for cluster visualation on an overlay image across time frames.
-This script provides a GUI application to visualize calcium activity clusters on an overlay image, allowing users to navigate through frames, toggle between cluster and peak visualizations, and view active clusters' information.
-"""
 import sys
 import numpy as np
 import pickle
@@ -11,12 +7,25 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSlider, QFileDialog, QLineEdit, QTextEdit, QCheckBox
 )
-from PyQt5.QtGui import QPixmap, QImage, QColor
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPixmap, QImage, QColor, QPainter, QPen
+from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.clusters import Cluster
 from calcium_activity_characterization.utilities.loader import generate_distinct_colors
+
+class HoverableGraphicsView(QGraphicsView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.hover_pos = QPoint()
+        self.label_callback = None
+
+    def mouseMoveEvent(self, event):
+        self.hover_pos = event.pos()
+        if self.label_callback:
+            self.label_callback(event)
+        super().mouseMoveEvent(event)
 
 class ClusterOverlayViewer(QMainWindow):
     def __init__(self):
@@ -33,6 +42,9 @@ class ClusterOverlayViewer(QMainWindow):
         self.cluster_colors = {}
         self.show_peak_durations = False
 
+        self.hovered_cell_label = QLabel("Hovered Cell: -")
+        self.hovered_cell = None
+
         self.timer = QTimer()
         self.timer.setInterval(50)
         self.timer.timeout.connect(self.next_frame)
@@ -44,7 +56,9 @@ class ClusterOverlayViewer(QMainWindow):
         main_layout = QHBoxLayout(main_widget)
 
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene, self)
+        self.view = HoverableGraphicsView(self)
+        self.view.setScene(self.scene)
+        self.view.label_callback = self.update_hover_label
         main_layout.addWidget(self.view, 5)
 
         controls = QVBoxLayout()
@@ -73,6 +87,10 @@ class ClusterOverlayViewer(QMainWindow):
         self.stop_btn.clicked.connect(self.stop)
         controls.addWidget(self.stop_btn)
 
+        self.next_btn = QPushButton("Next Frame")
+        self.next_btn.clicked.connect(self.next_frame)
+        controls.addWidget(self.next_btn)
+
         self.load_btn = QPushButton("Load Folder")
         self.load_btn.clicked.connect(self.load_folder)
         controls.addWidget(self.load_btn)
@@ -85,6 +103,8 @@ class ClusterOverlayViewer(QMainWindow):
         self.info_box.setReadOnly(True)
         controls.addWidget(QLabel("Active Clusters Info:"))
         controls.addWidget(self.info_box)
+
+        controls.addWidget(self.hovered_cell_label)
 
         controls.addStretch()
         main_layout.addLayout(controls, 1)
@@ -120,18 +140,41 @@ class ClusterOverlayViewer(QMainWindow):
             color = (np.array(colors[i % len(colors)]) * 255).astype(np.uint8)
             self.cluster_colors[cluster.id] = color
 
-            # Cluster-wide duration
             for t in range(cluster.start_time, cluster.end_time + 1):
                 for cell, _ in cluster.members:
                     self.frame_cluster_map.setdefault(t, []).append((cell, color, cluster))
 
-            # Peak-specific durations
             for cell, peak_idx in cluster.members:
                 peak = cell.peaks[peak_idx]
                 for t in range(peak.start_time, peak.end_time + 1):
                     self.frame_peak_map.setdefault(t, []).append((cell, color, cluster, peak))
 
+    def update_hover_label(self, event):
+        if self.overlay is None or not self.cells:
+            return
+
+        pos = self.view.mapToScene(event.pos()).toPoint()
+        x, y = pos.x(), pos.y()
+        hovered = None
+
+        for cell in self.cells:
+            if any(px == x and py == y for py, px in cell.pixel_coords):
+                hovered = cell
+                break
+
+        if hovered:
+            self.hovered_cell = hovered
+            self.hovered_cell_label.setText(f"Hovered Cell: {hovered.label}")
+        else:
+            self.hovered_cell = None
+            self.hovered_cell_label.setText("Hovered Cell: -")
+
+        self.update_frame()
+
     def update_frame(self):
+        if self.overlay is None or not self.cells:
+            return
+
         frame = self.slider.value()
         self.frame_label.setText(f"Frame: {frame}")
 
@@ -150,6 +193,10 @@ class ClusterOverlayViewer(QMainWindow):
                 for y, x in cell.pixel_coords:
                     rgb[y, x] = color
                 active_clusters.add(cluster)
+
+        if self.hovered_cell:
+            for y, x in self.hovered_cell.pixel_coords:
+                rgb[y, x] = [255, 0, 0]
 
         html_lines = []
         for cluster in sorted(active_clusters, key=lambda c: c.id):

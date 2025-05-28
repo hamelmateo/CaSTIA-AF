@@ -39,6 +39,7 @@ class GCAnalyzer:
         self.DEVICES_CORES = DEVICES_CORES
 
         self.mode = config.get("mode", "pairwise")
+        self.trace = config.get("trace", "gc_trace")
         self.params = config.get("parameters", {}).get(self.mode, {})
 
 
@@ -67,7 +68,7 @@ class GCAnalyzer:
 
     def _extract_trace_matrix(self, cells: List[Cell], center_time: int) -> Optional[np.ndarray]:
         """
-        Extract a trace matrix from the cells' GC traces.
+        Extract a trace matrix from the cells' GC traces, sorted by label.
 
         Args:
             cells (List[Cell]): Cluster member cells.
@@ -76,10 +77,12 @@ class GCAnalyzer:
         Returns:
             Optional[np.ndarray]: Trace matrix (T, N) or None if insufficient data.
         """
-        self.window_size = self.params.get("window_size", 400)
+        self.window_size = self.params.get("window_size", 150)
         self.min_cells = self.params.get("min_cells", 3)
 
-        trace_length = max(len(cell.gc_trace) for cell in cells if hasattr(cell, "gc_trace"))
+        # Sort cells by label
+        sorted_cells = sorted(cells, key=lambda cell: cell.label)
+        trace_length = max(len(cell.gc_trace) for cell in sorted_cells if hasattr(cell, self.trace))
         half = self.window_size // 2
         start = max(0, center_time - half)
         end = start + self.window_size
@@ -88,18 +91,18 @@ class GCAnalyzer:
             start = max(0, end - self.window_size)
 
         traces = []
-        for cell in cells:
-            trace = cell.gc_trace if hasattr(cell, "gc_trace") else []
-            if len(trace) < end:
-                return None
-            window = trace[start:end]
-            if np.std(window) > 0:
-                traces.append(window)
+        for cell in sorted_cells:
+                trace = getattr(cell, self.trace, [])
+                if len(trace) < end:
+                    return None
+                window = trace[start:end]
+                if np.std(window) > 0:
+                    traces.append(window)
 
         if len(traces) < self.min_cells:
             return None
 
-        return np.array(traces).T  # shape: (T, N)
+        return np.array(traces).T  # shape (T, N)
 
     def _run_multivariate_gc(self, trace_matrix: np.ndarray) -> np.ndarray:
         """
@@ -141,8 +144,8 @@ class GCAnalyzer:
         Returns:
             np.ndarray: GC matrix (N, N) with causality test statistics.
         """
-        self.lag_order = self.params.get("lag_order", 5)
-        self.pvalue_threshold = self.params.get("pvalue_threshold", 0.05)
+        self.lag_order = self.params.get("lag_order", 3)
+        self.pvalue_threshold = self.params.get("pvalue_threshold", 0.001)
         self.threshold_links = self.params.get("threshold_links", True)
 
         N = trace_matrix.shape[1]
@@ -176,4 +179,4 @@ class GCAnalyzer:
         data = np.column_stack([y, x])  # y, x
         result = grangercausalitytests(data, maxlag=lag_order, verbose=False)
         pvalue = result[lag_order][0]['ssr_ftest'][1]
-        return 1 - pvalue if not threshold_links or pvalue < pvalue_threshold else 0.0
+        return pvalue if not threshold_links or pvalue < pvalue_threshold else 0.0

@@ -143,7 +143,7 @@ class CalciumPipeline:
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.peak_clusters_path = output_path / "peak_clusters.pkl"
         self.umap_file_path = output_path / "umap.npy"
-        self.gc_graph = self.output_path / "gc_graphs.pkl"
+        self.gc_graph = self.output_path / "gc_graphs"
 
     def _segment_cells(self):
         """

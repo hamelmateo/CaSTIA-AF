@@ -136,7 +136,7 @@ GC_PREPROCESSING = {
 
     "detrending_mode": "movingaverage",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "zscore",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
-    "sigma": 2.0,
+    "sigma":2.0,
 
     "method": {
         "movingaverage": {
@@ -147,15 +147,14 @@ GC_PREPROCESSING = {
 
 GC_PARAMETERS = {
     "mode": "pairwise",  # or "multivariate"
-
+    "trace": "binary_trace",  # Name of the trace attribute - "binary_trace", "gc_trace", or "raw_intensity_trace"
     "parameters": {
         "pairwise": {
-            "window_size": 400,
-            "lag_order": 5,
-            "min_cells": 3,
-            "threshold_links": True,
-            "pvalue_threshold": 0.05,
-            "community_method": "louvain"
+            "window_size": 150,
+            "lag_order": 3,
+            "min_cells": 1,
+            "threshold_links": False,
+            "pvalue_threshold": 0.001
         },
         "multivariate": {
             "window_size": 400,

@@ -140,17 +140,14 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             self.dynamic_fields[key] = input_field
 
     def get_processor(self):
-        pipeline = {
+        params = {
             "apply": {
                 "detrending": self.detrend_checkbox.isChecked(),
                 "smoothing": self.smooth_checkbox.isChecked(),
                 "normalization": self.normalize_checkbox.isChecked()
             },
             "detrending_mode": self.detrending_combo.currentText(),
-            "normalizing_method": self.norm_combo.currentText()
-        }
-
-        params = {
+            "normalizing_method": self.norm_combo.currentText(),
             "sigma": float(self.sigma_input.text()),
             "methods": {}
         }
