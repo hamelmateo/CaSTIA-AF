@@ -335,7 +335,7 @@ def plot_raster(
         cluster_labels = np.array(cluster_labels)
         cells_sorted = [cell for _, cell in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
         label_order = [label for label, _ in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
-        binarized_matrix = np.array([cell.binary_trace for cell in cells_sorted])
+        binarized_matrix = np.array([cell.trace.binary for cell in cells_sorted])
 
         n_clusters = len([l for l in set(label_order) if l != -1])
         filtered_colors = generate_distinct_colors(n_clusters)
@@ -361,7 +361,7 @@ def plot_raster(
         ax.set_yticklabels([])
 
     else:
-        binarized_matrix = np.array([cell.binary_trace for cell in cells])
+        binarized_matrix = np.array([cell.trace.binary for cell in cells])
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
         ax.set_title("Binarized Activity Raster Plot")

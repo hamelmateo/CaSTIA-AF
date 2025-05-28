@@ -3,8 +3,23 @@ Module for running Granger causality (pairwise or multivariate) on calcium activ
 
 Example usage:
     >>> from calcium_activity_characterization.analysis.gc_analyzer import GCAnalyzer
-    >>> analyzer = GCAnalyzer(GC_PARAMETERS)
-    >>> gc_matrix = analyzer.run(cluster_cells, cluster_center_time)
+    >>> config = {
+    ...     "mode": "pairwise",
+    ...     "trace": "gc_trace",
+    ...     "parameters": {
+    ...         "pairwise": {
+    ...             "lag_order": 3,
+    ...             "pvalue_threshold": 0.001,
+    ...             "threshold_links": True,
+    ...             "window_size": 150,
+    ...             "min_cells": 3
+    ...         }
+    ...     }
+    }
+    >>> analyzer = GCAnalyzer(config)
+    >>> cells = [...]  # List of Cell objects
+    >>> center_time = 1000  # Example center time
+    >>> gc_matrix = analyzer.run(cells, center_time)
 """
 
 import logging
@@ -82,7 +97,7 @@ class GCAnalyzer:
 
         # Sort cells by label
         sorted_cells = sorted(cells, key=lambda cell: cell.label)
-        trace_length = max(len(cell.gc_trace) for cell in sorted_cells if hasattr(cell, self.trace))
+        trace_length = max(len(cell.trace.versions["gc_trace"]) for cell in sorted_cells if hasattr(cell, self.trace))
         half = self.window_size // 2
         start = max(0, center_time - half)
         end = start + self.window_size

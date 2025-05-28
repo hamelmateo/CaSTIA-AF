@@ -116,9 +116,9 @@ class BinarizedSignalViewer(QMainWindow):
         mask = np.zeros((*self.image_shape, 3), dtype=np.uint8)
 
         for cell in self.cells:
-            if frame >= len(cell.binary_trace):
+            if frame >= len(cell.trace.binary):
                 continue
-            state = cell.binary_trace[frame]
+            state = cell.trace.binary[frame]
             color = [128, 128, 128] if state == 0 else [0, 255, 0]
             for y, x in cell.pixel_coords:
                 mask[y, x] = color

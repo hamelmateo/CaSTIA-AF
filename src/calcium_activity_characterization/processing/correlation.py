@@ -23,7 +23,7 @@ class CorrelationAnalyzer:
     Analyze cell-cell similarity over time by computing similarity matrices
     in a sliding-window, time-lagged manner.
 
-    All traces used are binarized (cell.binary_trace).
+    All traces used are binarized (cell.trace.binary).
     """
 
     def __init__(self, config: dict, DEVICES_CORES: int = 4):
@@ -60,7 +60,7 @@ class CorrelationAnalyzer:
             logger.warning("No cells provided for correlation analysis.")
             return []
 
-        binary_traces = [np.array(cell.binary_trace, dtype=int) for cell in cells]
+        binary_traces = [np.array(cell.trace.binary, dtype=int) for cell in cells]
         trace_length = len(binary_traces[0])
         trace_matrix = np.stack(binary_traces, axis=0)
 

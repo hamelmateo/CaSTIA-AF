@@ -40,7 +40,7 @@ class PeakClusteringEngine:
 
         for i in range(n):
             origin_cell = cells[i]
-            for origin_peak_idx, origin_peak in enumerate(origin_cell.peaks):
+            for origin_peak_idx, origin_peak in enumerate(origin_cell.trace.peaks):
                 if origin_peak.in_cluster:
                     continue
 
@@ -58,7 +58,7 @@ class PeakClusteringEngine:
                     best_score = -1
                     best_idx = None
 
-                    for other_idx, other_peak in enumerate(other_cell.peaks):
+                    for other_idx, other_peak in enumerate(other_cell.trace.peaks):
                         if other_peak.in_cluster:
                             continue
                         if window_start <= other_peak.start_time <= window_end:
@@ -80,7 +80,7 @@ class PeakClusteringEngine:
         return self.clusters
 
     def run_fixed_time_window(self, cells: List[Cell]) -> List[Cluster]:
-        trace_length = max(len(cell.binary_trace) for cell in cells)
+        trace_length = max(len(cell.trace.binary) for cell in cells)
         peak_spread_flags = {}  # (cell.label, peak.id): bool
 
         for window_start in range(0, trace_length, self.fixed_window_size):
@@ -89,7 +89,7 @@ class PeakClusteringEngine:
             added_any = False
 
             for cell in cells:
-                for peak_idx, peak in enumerate(cell.peaks):
+                for peak_idx, peak in enumerate(cell.trace.peaks):
                     key = (cell.label, peak.id)
 
                     # Add to current window if start_time in window

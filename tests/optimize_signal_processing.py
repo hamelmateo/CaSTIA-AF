@@ -188,14 +188,14 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         colors = plt.cm.tab10.colors
 
         for i, cell in enumerate(cells_to_plot):
-            raw = np.array(cell.raw_intensity_trace, dtype=float)
+            raw = np.array(cell.trace.raw, dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
-            cell.smoothed_intensity_trace = processed.tolist()
+            cell.trace.versions["smoothed"] = processed.tolist()
 
             detector = PeakDetector(self.get_peak_params())
-            cell.detect_peaks(detector)
-            cell.binarize_trace_from_peaks()
+            cell.trace.detect_peaks(detector)
+            cell.trace.binarize_trace_from_peaks()
 
             ax_raw, ax_proc, ax_bin = self.axs[i]
             ax_raw.cla()
@@ -209,7 +209,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_raw.grid(True)
 
             ax_proc.plot(processed, color='blue', label="Processed")
-            for peak in cell.peaks:
+            for peak in cell.trace.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
                 ax_proc.axvspan(peak.start_time, peak.end_time,
                                 color=colors[peak.id % len(colors)], alpha=0.3)
@@ -218,7 +218,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_proc.set_ylabel("Intensity")
             ax_proc.grid(True)
 
-            ax_bin.plot(cell.binary_trace, color='green')
+            ax_bin.plot(cell.trace.binary, color='green')
             ax_bin.set_title("Binarized (zscore>2)")
             ax_bin.set_xlabel("Time")
             ax_bin.set_ylabel("0/1")
@@ -226,7 +226,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
             peak_lines = [
                 f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rise_time}, prom={p.prominence:.2f}, duration={p.duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
-                for p in cell.peaks
+                for p in cell.trace.peaks
             ]
             self.peak_text.append("\n".join(peak_lines) + "\n")
 

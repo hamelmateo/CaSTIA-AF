@@ -19,6 +19,7 @@ from collections import Counter
 import networkx as nx
 
 from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.utilities.loader import (
     preprocess_images,
     save_tif_image,
@@ -62,8 +63,9 @@ class CalciumPipeline:
         # data
         self.cells: List[Cell] = []
         self.active_cells: List[Cell] = []
-        self.similarity_matrices: List[np.ndarray] = []
-        self.peak_clusters: List[Cluster] = []
+        self.global_trace: Trace = None
+        #self.similarity_matrices: List[np.ndarray] = []
+        #self.peak_clusters: List[Cluster] = []
 
         # folder paths
         self.data_path: Path = None
@@ -105,10 +107,10 @@ class CalciumPipeline:
 
         self._signal_processing_pipeline()
         self._binarization_pipeline()
-        self._run_peak_clustering()
-
-        self._causality_analysis()
-
+        
+        
+        #self._run_peak_clustering()
+        #self._causality_analysis()
         #self._run_umap()
         #self._correlation_analysis()
         #self._clustering_cells()
@@ -248,7 +250,7 @@ class CalciumPipeline:
 
         results_per_cell = list(zip(*results))
         for cell, trace in zip(self.active_cells, results_per_cell):
-            cell.raw_intensity_trace = list(map(int, trace))
+            cell.trace.raw = list(map(int, trace))
 
     @staticmethod
     def _compute_intensity_single(image_path: Path, cell_coords: List[np.ndarray], roi_scale: float) -> List[float]:
@@ -281,7 +283,8 @@ class CalciumPipeline:
             processor = SignalProcessor(params=get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"))
 
             for cell in self.active_cells:
-                cell.smoothed_intensity_trace = processor.run(cell.raw_intensity_trace)
+                cell.trace.versions["smoothed"] = processor.run(cell.trace.raw)
+                cell.trace.default_version = "smoothed"
             
             save_pickle_file(self.active_cells, self.smoothed_cells_file_path)
 
@@ -335,8 +338,8 @@ class CalciumPipeline:
             detector = PeakDetector(params=get_config_with_fallback(self.config,"PEAK_DETECTION_PARAMETERS"))
 
             for cell in self.active_cells:
-                cell.detect_peaks(detector)
-                cell.binarize_trace_from_peaks()
+                cell.trace.detect_peaks(detector)
+                cell.trace.binarize_trace_from_peaks()
 
             
             logger.info(f"Peaks detected for {len(self.active_cells)} active cells.")
@@ -432,7 +435,7 @@ class CalciumPipeline:
 
             # Preprocess each cell's trace for GC
             for cell in cells:
-                cell.gc_trace = processor.run(cell.raw_intensity_trace)
+                cell.trace.versions["gc_trace"] = processor.run(cell.trace.raw)
 
             gc_matrix = analyzer.run(cells, center_time)
             if gc_matrix is None:

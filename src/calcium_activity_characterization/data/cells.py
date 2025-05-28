@@ -5,8 +5,9 @@ import pandas as pd
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from calcium_activity_characterization.data.peaks import Peak
+from calcium_activity_characterization.data.traces import Trace
+
+
 
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class Cell:
         label (int): Unique label ID assigned to the cell.
         centroid (np.ndarray): Y, X coordinates of the center of mass.
         pixel_coords (np.ndarray): Array of (y, x) pixel coordinates belonging to the cell.
-        raw_intensity_trace (list[int]): Mean intensity values over time.
+        trace (Trace): Associated calcium trace and analysis results.
         is_valid (bool): Whether the cell passes quality control (e.g., pixel count >= threshold).
     """
 
@@ -34,14 +35,10 @@ class Cell:
         self.label = label
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
-        self.raw_intensity_trace: list[float] = []
-        self.smoothed_intensity_trace: list[float] = []
-        self.binary_trace: list[int] = []
-        self.peaks: list["Peak"] = []
         self.is_valid: bool = len(self.pixel_coords) >= small_object_threshold and len(self.pixel_coords) <= big_object_threshold
         self.exclude_from_umap = False
 
-
+        self.trace: Trace = Trace()
 
     def add_mean_intensity(self, image: np.ndarray) -> None:
         """
@@ -53,7 +50,7 @@ class Cell:
         try:
             intensities = [image[y, x] for y, x in self.pixel_coords]
             mean_intensity = np.mean(intensities)
-            self.raw_intensity_trace.append(mean_intensity)
+            self.trace.raw.append(mean_intensity)
         except Exception as e:
             logger.error(f"Failed to compute mean intensity for cell {self.label}: {e}")
 
@@ -61,12 +58,12 @@ class Cell:
         """
         Plot the mean intensity profile of the cell over time.
         """
-        if len(self.raw_intensity_trace) == 0:
+        if len(self.trace.raw) == 0:
             logger.info(f"Cell {self.label} has no intensity data to plot.")
             return
 
         plt.figure(figsize=(10, 6))
-        plt.plot(self.raw_intensity_trace, label=f"Cell {self.label}")
+        plt.plot(self.trace.raw, label=f"Cell {self.label}")
         plt.title(f"Raw Intensity Profile for Cell {self.label}")
         plt.xlabel("Timepoint")
         plt.ylabel("Mean Intensity")
@@ -78,12 +75,13 @@ class Cell:
         """
         Plot the mean intensity profile of the cell over time.
         """
-        if len(self.smoothed_intensity_trace) == 0:
-            logger.info(f"Cell {self.label} has no intensity data to plot.")
+        active = self.trace.active_trace
+        if len(active) == 0:
+            logger.info(f"Cell {self.label} has no processed intensity data to plot.")
             return
 
         plt.figure(figsize=(10, 6))
-        plt.plot(self.smoothed_intensity_trace, label=f"Cell {self.label}")
+        plt.plot(active, label=f"Cell {self.label}")
         plt.title(f"Processed Intensity Profile for Cell {self.label}")
         plt.xlabel("Timepoint")
         plt.ylabel("Mean Intensity")
@@ -92,56 +90,30 @@ class Cell:
         plt.show()
 
     def get_arcos_dataframe(self) -> pd.DataFrame:
-            """
-            Return a DataFrame formatted for arcos4py binarization and event tracking.
-
-            The DataFrame contains the following columns:
-                - frame: Timepoint index.
-                - trackID: Unique cell identifier.
-                - x: X-coordinate of centroid.
-                - y: Y-coordinate of centroid.
-                - intensity: Raw intensity trace.
-
-            Returns:
-                pd.DataFrame: DataFrame with cell information formatted for arcos4py.
-            """
-            if not self.binary_trace:
-                logger.warning(f"Cell {self.label} has no intensity data.")
-                return pd.DataFrame()
-
-            data = {
-                'frame': range(len(self.binary_trace)),
-                'trackID': [self.label] * len(self.binary_trace),
-                'x': [self.centroid[1]] * len(self.binary_trace),  # centroid[1] is X-coordinate
-                'y': [self.centroid[0]] * len(self.binary_trace),  # centroid[0] is Y-coordinate
-                'intensity': self.raw_intensity_trace,
-                'intensity.bin': self.binary_trace
-            }
-
-            return pd.DataFrame(data)
-    
-
-    def detect_peaks(self, detector) -> None:
-        if len(self.smoothed_intensity_trace) == 0:
-            self.peaks = []
-            return
-
-        self.peaks = detector.run(self.smoothed_intensity_trace)
-
-    def binarize_trace_from_peaks(self) -> None:
         """
-        Generate binarized trace where values are 1 during peak durations, 0 otherwise.
+        Return a DataFrame formatted for arcos4py binarization and event tracking.
+
+        The DataFrame contains the following columns:
+            - frame: Timepoint index.
+            - trackID: Unique cell identifier.
+            - x: X-coordinate of centroid.
+            - y: Y-coordinate of centroid.
+            - intensity: Raw intensity trace.
+
+        Returns:
+            pd.DataFrame: DataFrame with cell information formatted for arcos4py.
         """
-        if self.smoothed_intensity_trace is None or len(self.smoothed_intensity_trace) == 0:
-            self.binary_trace = []
-            return
+        if not self.trace.binary:
+            logger.warning(f"Cell {self.label} has no binary trace.")
+            return pd.DataFrame()
 
-        trace_length = len(self.smoothed_intensity_trace)
-        binary = np.zeros(trace_length, dtype=int)
+        data = {
+            'frame': range(len(self.trace.binary)),
+            'trackID': [self.label] * len(self.trace.binary),
+            'x': [self.centroid[1]] * len(self.trace.binary),
+            'y': [self.centroid[0]] * len(self.trace.binary),
+            'intensity': self.trace.raw,
+            'intensity.bin': self.trace.binary
+        }
 
-        for peak in self.peaks:
-            start = max(0, peak.start_time)
-            end = min(trace_length, peak.end_time + 1)
-            binary[start:end] = 1
-
-        self.binary_trace = binary.tolist()
+        return pd.DataFrame(data)

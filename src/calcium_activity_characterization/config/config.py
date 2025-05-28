@@ -43,7 +43,7 @@ SIGNAL_PROCESSING_PARAMETERS = {
 
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
-    "sigma": 15.0,          # Global Gaussian smoothing σ
+    "sigma": 10.0,          # Global Gaussian smoothing σ
 
     "methods": {
         "wavelet": {
