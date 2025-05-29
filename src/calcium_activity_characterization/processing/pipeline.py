@@ -110,6 +110,14 @@ class CalciumPipeline:
         self._binarization_pipeline()
         
         self._initialize_and_process_global_trace()
+
+        # Plot metadata and all traces for cell with label 678
+        cell_678 = next((cell for cell in self.active_cells if cell.label == 678), None)
+        if cell_678 is not None:
+            cell_678.trace.plot_metadata(self.output_path / "cell_678_metadata.png")
+            cell_678.trace.plot_all_traces(self.output_path / "cell_678_all_traces.png")
+        else:
+            logger.warning("Cell with label 678 not found among active cells.")
         
         #self._run_peak_clustering()
         #self._causality_analysis()
