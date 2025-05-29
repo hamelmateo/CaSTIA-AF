@@ -44,6 +44,7 @@ from calcium_activity_characterization.processing.clustering import ClusteringEn
 from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
 from calcium_activity_characterization.data.clusters import Cluster
 from calcium_activity_characterization.processing.causality import GCAnalyzer
+from calcium_activity_characterization.utilities.utils_trace import compute_global_trace
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
+        self._initialize_and_process_global_trace()
         
         #self._run_peak_clustering()
         #self._causality_analysis()
@@ -454,3 +456,21 @@ class CalciumPipeline:
             save_path = gc_output_dir / f"gc_graph_cluster_{cluster.id:03d}.gpickle"
             save_pickle_file(G, save_path)
             print(f"Saved GC graph for cluster {cluster.id} → {save_path}")
+
+
+    def _initialize_and_process_global_trace(self):
+        """
+        Compute the global trace from active cells and process it through smoothing,
+        peak detection, binarization, and metadata extraction.
+        """
+        version = "smoothed"
+        self.global_trace = compute_global_trace(self.active_cells, version=version , default_version=version)
+
+        processor = SignalProcessor(params=get_config_with_fallback(self.config, "SIGNAL_PROCESSING_PARAMETERS"))
+        detector = PeakDetector(params=get_config_with_fallback(self.config, "PEAK_DETECTION_PARAMETERS"))
+
+        self.global_trace.versions[version] = processor.run(self.global_trace.versions[version])
+        self.global_trace.detect_peaks(detector)
+        self.global_trace.binarize_trace_from_peaks()
+        self.global_trace.plot_all_traces(self.output_path / "global_trace_summary.png")
+

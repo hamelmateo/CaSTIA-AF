@@ -5,12 +5,13 @@ Example usage:
     >>> t.default_version = "smoothed"
     >>> t.detect_peaks(detector)
     >>> t.binarize_trace_from_peaks()
-    >>> print(t.metadata)
+    >>> t.plot_all_traces(save_path=Path("trace_summary.png"))
 """
 
 import numpy as np
-from typing import List, Dict, TYPE_CHECKING
-
+import matplotlib.pyplot as plt
+from pathlib import Path
+from typing import List, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
@@ -41,35 +42,25 @@ class Trace:
 
     @property
     def active_trace(self) -> List[float]:
-        """
-        Return the currently selected version of the trace for analysis.
-
-        This property behaves like an attribute, allowing you to call `trace.active_trace`
-        instead of `trace.get_active_trace()`. It uses the value of `default_version`
-        to return the corresponding preprocessed trace.
-        """
+        """Returns the currently selected version of the trace."""
         return self.versions.get(self.default_version, [])
 
     def detect_peaks(self, detector) -> None:
-        """
-        Detect peaks in the active trace version using the provided detector.
-
+        """Detect peaks in the active trace using the provided detector.
+        
         Args:
-            detector: An instance of a peak detector with a `.run(trace)` method.
+            detector: An instance of a peak detection algorithm that implements a `run` method.
         """
         trace = self.active_trace
-        if not trace:
+        if trace is None or len(trace) == 0:
             self.peaks = []
         else:
             self.peaks = detector.run(trace)
 
     def binarize_trace_from_peaks(self) -> None:
-        """
-        Generate binary trace (1 during peak intervals, 0 elsewhere) based on peak list.
-        Automatically triggers metadata computation.
-        """
+        """Convert detected peaks into a binary 0/1 trace and compute metadata."""
         trace = self.active_trace
-        if not trace:
+        if trace is None or len(trace) == 0:
             self.binary = []
             return
 
@@ -84,16 +75,15 @@ class Trace:
         self.compute_metadata()
 
     def compute_metadata(self) -> None:
-        """
-        Compute core activity features from the binary trace and peak list.
-
-        Stored in self.metadata as:
-            - fraction_active_time
-            - num_peaks
-            - burst_frequency
-            - mean/std of peak duration
-            - mean/std of inter-peak intervals
-            - periodicity_score (1 / (1 + CV of inter-peak intervals))
+        """Compute statistics based on the binary trace and detected peaks.
+        
+        This includes:
+            - Fraction of time the trace is active (binary = 1)
+            - Number of detected peaks
+            - Burst frequency (peaks per time unit)
+            - Mean and standard deviation of peak durations
+            - Mean and standard deviation of inter-peak intervals
+            - Periodicity score based on coefficient of variation of inter-peak intervals
         """
         n = len(self.binary)
         num_peaks = len(self.peaks)
@@ -127,8 +117,138 @@ class Trace:
             "periodicity_score": periodicity_score
         }
 
+    def plot_raw_trace(self, save_path: Optional[Path] = None):
+        """Plot or save the raw trace.
+        
+        Args:
+            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
+        """
+        if len(self.raw) > 0:
+            plt.figure()
+            plt.plot(self.raw)
+            plt.title("Raw Trace")
+            plt.xlabel("Time")
+            plt.ylabel("Intensity")
+            if save_path:
+                plt.savefig(save_path, dpi=300)
+                plt.close()
+            else:
+                plt.show()
+
+    def plot_version_trace(self, version: str, save_path: Optional[Path] = None):
+        """Plot or save a specific version of the trace.
+
+        Args:
+            version (str): Name of the version to plot.
+            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
+        """
+        trace = self.versions.get(version, [])
+        if len(trace) > 0:
+            plt.figure()
+            plt.plot(trace)
+            plt.title(f"Trace - Version: {version}")
+            plt.xlabel("Time")
+            plt.ylabel("Intensity")
+            if save_path:
+                plt.savefig(save_path, dpi=300)
+                plt.close()
+            else:
+                plt.show()
+
+    def plot_binary_trace(self, save_path: Optional[Path] = None):
+        """Plot or save the binary trace.
+        
+        Args:  
+            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
+        """
+        if len(self.binary) > 0:
+            plt.figure()
+            plt.plot(self.binary, drawstyle='steps-post')
+            plt.title("Binary Trace")
+            plt.xlabel("Time")
+            plt.ylabel("Binary")
+            if save_path:
+                plt.savefig(save_path, dpi=300)
+                plt.close()
+            else:
+                plt.show()
+
+    def plot_peaks_over_trace(self, save_path: Optional[Path] = None):
+        """Plot or save the active trace with detected peaks overlayed.
+        
+        Args:
+            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
+        """
+        trace = self.active_trace
+        if len(trace) == 0:
+            return
+
+        plt.figure()
+        plt.plot(trace, label=f"Trace: {self.default_version}")
+        for peak in self.peaks:
+            plt.axvspan(peak.start_time, peak.end_time, color='red', alpha=0.3)
+        plt.title("Peaks Over Trace")
+        plt.xlabel("Time")
+        plt.ylabel("Intensity")
+        plt.legend()
+        plt.tight_layout()
+
+        if save_path:
+            plt.savefig(save_path, dpi=300)
+            plt.close()
+        else:
+            plt.show()
+
+    def plot_all_traces(self, save_path: Optional[Path] = None) -> None:
+        """Plot or save all traces: raw, versions, binary, and peak overlay.
+
+        Args:
+            save_path (Optional[Path]): If provided, the full trace summary figure is saved.
+        """
+        fig, axs = plt.subplots(2 + len(self.versions), 1, figsize=(10, 3 * (2 + len(self.versions))))
+        axs = np.atleast_1d(axs).flatten()
+
+        idx = 0
+        if len(self.raw) > 0:
+            axs[idx].plot(self.raw)
+            axs[idx].set_title("Raw Trace")
+            axs[idx].set_ylabel("Intensity")
+            idx += 1
+
+        for version_name, trace in self.versions.items():
+            axs[idx].plot(trace)
+            axs[idx].set_title(f"Trace Version: {version_name}")
+            axs[idx].set_ylabel("Intensity")
+            idx += 1
+
+        if len(self.binary) > 0:
+            axs[idx].step(range(len(self.binary)), self.binary, where='post')
+            axs[idx].set_title("Binary Trace")
+            axs[idx].set_ylabel("0/1")
+            idx += 1
+
+        if len(self.peaks) > 0:
+            active_trace = self.active_trace
+            axs[idx].plot(active_trace, label="Active Trace")
+            for peak in self.peaks:
+                axs[idx].axvspan(peak.start_time, peak.end_time, color='red', alpha=0.3)
+            axs[idx].set_title("Peaks Overlay")
+            axs[idx].legend()
+            axs[idx].set_ylabel("Intensity")
+            idx += 1
+
+        for ax in axs:
+            ax.set_xlabel("Time")
+            ax.grid(True)
+
+        plt.tight_layout()
+
+        if save_path:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300)
+            plt.close()
+        else:
+            plt.show()
+
     def __repr__(self) -> str:
-        """
-        Return a summary string for debugging and display.
-        """
         return f"<Trace default='{self.default_version}', peaks={len(self.peaks)}, active={self.metadata.get('fraction_active_time', 0):.2f}>"
