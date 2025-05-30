@@ -1,3 +1,11 @@
+"""
+Peak class update to include symmetry score at the individual level.
+
+Example:
+    >>> peak = Peak(...)
+    >>> print(peak.symmetry_score)  # Already computed during creation
+"""
+
 from typing import Optional, Literal, List
 import numpy as np
 from scipy.signal import find_peaks, peak_widths
@@ -10,6 +18,24 @@ logger = logging.getLogger(__name__)
 class Peak:
     """
     Represents a calcium transient peak with timing, intensity, and hierarchical metadata.
+
+    Attributes:
+        id (int): Unique peak identifier.
+        start_time (int): Start frame of the peak.
+        peak_time (int): Frame of the peak maximum.
+        end_time (int): End frame of the peak.
+        duration (int): Duration of the peak.
+        height (float): Peak intensity.
+        prominence (float): Peak prominence.
+        rise_time (int): Time from start to peak.
+        decay_time (int): Time from peak to end.
+        symmetry_score (float): Symmetry of the peak shape based on rise vs decay.
+        group_id (Optional[int]): Overlapping group ID (if any).
+        parent_peak_id (Optional[int]): Parent peak ID in overlapping group.
+        role (Literal): Role in group ('individual', 'member', 'parent').
+        scale_class (Optional[str]): Prominence class ('minor', 'major', 'super').
+        in_cluster (bool): Whether the peak is clustered.
+        cluster_id (Optional[int]): Cluster assignment ID
     """
     def __init__(
         self,
@@ -33,6 +59,7 @@ class Peak:
 
         self.rise_time = peak_time - start_time
         self.decay_time = end_time - peak_time
+        self.symmetry_score: float = self._compute_symmetry_score()
 
         self.group_id = group_id
         self.parent_peak_id = parent_peak_id
@@ -43,10 +70,22 @@ class Peak:
         self.in_cluster: bool = False  # Set True once this peak is added to a cluster
         self.cluster_id: Optional[int] = None  # ID of the assigned cluster
 
+    def _compute_symmetry_score(self) -> Optional[float]:
+        """
+        Compute a symmetry score for the peak shape.
+
+        Returns:
+            Optional[float]: Symmetry score (1 = perfect symmetry), or None if invalid.
+        """
+        total_time = self.rise_time + self.decay_time
+        if total_time > 0:
+            return 1 - abs(self.rise_time - self.decay_time) / total_time
+        return None
+
     def __repr__(self):
         return (
             f"Peak(id={self.id}, time={self.peak_time}, height={self.height:.2f}, "
-            f"prominence={self.prominence:.2f}, role={self.role}, scale={self.scale_class})"
+            f"prominence={self.prominence:.2f}, role={self.role}, scale={self.scale_class}, symmetry={self.symmetry_score:.2f})"
         )
 
 

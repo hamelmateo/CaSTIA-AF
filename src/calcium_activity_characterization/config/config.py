@@ -4,7 +4,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = True  # Enable debugging mode
+DEBUGGING = False  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
 EXISTING_CELLS = True  # Load precomputed cells from file

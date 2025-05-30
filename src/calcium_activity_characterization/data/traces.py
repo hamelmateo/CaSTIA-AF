@@ -12,11 +12,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.stats import entropy, skew
-from typing import List, Dict, Optional, TYPE_CHECKING
+from typing import List, Dict, Any, Optional, TYPE_CHECKING
+
+from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.data.peaks import PeakDetector
 
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
 
+import logging
+logger = logging.getLogger(__name__)
 class Trace:
     """
     A container for calcium activity trace and analysis results.
@@ -25,38 +30,83 @@ class Trace:
     and supports peak detection, binarization, and metadata computation based on a selected version.
 
     Attributes:
-        raw (List[float]): Raw intensity trace.
-        versions (Dict[str, List[float]]): Dictionary of named preprocessed trace versions.
-        default_version (str): Key name for the version to operate on.
-        binary (List[int]): Binarized trace (0/1 based on peak regions).
-        peaks (List): List of detected peaks.
-        metadata (Dict[str, float]): Computed features from binary + peak data.
+        versions (Dict[str, List[float]]): Stores multiple processed versions of the trace.
+        default_version (str): Key to access the active trace.
+        binary (List[int]): Binarized version of the trace based on detected peaks.
+        peaks (List[Peak]): Detected peaks in the active trace.
+        metadata (Dict[str, Any]): Analysis metadata derived from the trace.
     """
 
-    def __init__(self, raw_trace: List[float] = None):
-        self.raw: List[float] = raw_trace if raw_trace is not None else []
+    def __init__(self, raw_trace: Optional[List[float]] = None) -> None:
+        """
+        Initialize a Trace object to store calcium signal versions and analysis results.
+
+        Args:
+            raw_trace (Optional[List[float]]): Optional list of raw intensity values.
+        """
         self.versions: Dict[str, List[float]] = {}
-        self.default_version: str = "smoothed"  # default key to operate on
+        if raw_trace is not None:
+            self.versions["raw"] = raw_trace
+        
+        self.default_version: str = "raw"
         self.binary: List[int] = []
-        self.peaks: List[Peak] = []
-        self.metadata: Dict[str, float] = {}
+        self.peaks: List["Peak"] = []
+        self.metadata: Dict[str, Any] = {}
 
     @property
     def active_trace(self) -> List[float]:
         """Returns the currently selected version of the trace."""
         return self.versions.get(self.default_version, [])
-
-    def detect_peaks(self, detector) -> None:
-        """Detect peaks in the active trace using the provided detector.
-        
-        Args:
-            detector: An instance of a peak detection algorithm that implements a `run` method.
+    
+    def add_trace(self, trace: List[float], version_name: str) -> None:
         """
+        Add a new trace version to the versions dictionary.
+
+        Args:
+            trace (List[float]): The trace data to add.
+            version_name (str): The key under which to store the trace.
+        """
+        if not isinstance(trace, list):
+            raise TypeError("trace must be a list of floats.")
+        if not isinstance(version_name, str):
+            raise TypeError("version_name must be a string.")
+        self.versions[version_name] = trace
+
+    def process_trace(self, input_trace_name: str, output_trace_name: str, processing_params: dict) -> None:
+        """
+        Apply a SignalProcessor to a given trace and store the result as a new version.
+
+        Args:
+            input_trace_name (str): Name of the input trace to process.
+            output_trace_name (str): Name for the processed trace version.
+            config (dict): Configuration dictionary containing processor parameters.
+
+        Returns:
+            None
+        """
+        try:
+            if input_trace_name not in self.versions:
+                raise ValueError(f"Trace version '{input_trace_name}' not found in self.versions.")
+
+            input_trace = self.versions[input_trace_name]
+            processor = SignalProcessor(params=processing_params)
+            processed = processor.run(input_trace)
+
+            self.versions[output_trace_name] = processed
+        except Exception as e:
+            logger.error(f"Failed to process trace from '{input_trace_name}' to '{output_trace_name}': {e}")
+            raise
+
+    def detect_peaks(self, detector_params: dict) -> None:
+        """
+        Detect peaks in the active trace using the provided detector parameters.
+
+        Args:
+            detector_params (dict): Dictionary of parameters for the peak detection algorithm.
+        """
+        detector = PeakDetector(params=detector_params)
         trace = self.active_trace
-        if trace is None or len(trace) == 0:
-            self.peaks = []
-        else:
-            self.peaks = detector.run(trace)
+        self.peaks = detector.run(trace) if len(trace) > 0 else []
 
     def binarize_trace_from_peaks(self) -> None:
         """Convert detected peaks into a binary 0/1 trace and compute metadata."""
@@ -83,68 +133,57 @@ class Trace:
         in the `metadata` attribute as a dictionary.
 
         The metadata includes:
-            - fraction_active_time: Fraction of time the trace is active (binary = 1).
             - num_peaks: Total number of detected peaks.
-            - burst_frequency: Frequency of bursts (peaks) in the trace.
-            - total_active_frames: Total number of frames where the trace is active.
-            - mean_peak_duration: Mean duration of detected peaks.
             - std_peak_duration: Standard deviation of peak durations.
-            - mean_inter_peak_interval: Mean interval between consecutive peaks.
-            - std_inter_peak_interval: Standard deviation of inter-peak intervals.
-            - mean_peak_amplitude: Mean amplitude of detected peaks.
+            - std_ipi: Standard deviation of inter-peak intervals (IPIs).
             - std_peak_amplitude: Standard deviation of peak amplitudes.
-            - mean_peak_prominence: Mean prominence of detected peaks.
             - std_peak_prominence: Standard deviation of peak prominences.
+            - std_peak_symmetry_score: Standard deviation of symmetry scores (rise vs decay).
+
             - coefficient_of_variation_prominence: CV of peak prominences.
-            - mean_rise_time: Mean rise time of detected peaks.
-            - mean_decay_time: Mean decay time of detected peaks.
-            - amplitude_skewness: Skewness of peak amplitudes.
-            - duration_skewness: Skewness of peak durations.
             - coefficient_of_variation_amplitude: CV of peak amplitudes.
             - coefficient_of_variation_duration: CV of peak durations.
+
             - periodicity_score: Score indicating periodicity based on inter-peak intervals.
-            - inter_peak_interval_entropy: Entropy of inter-peak intervals.
-            - peak_time_entropy: Entropy of peak start times normalized by trace length.
+
+            - entropy_ipi: Entropy of inter-peak intervals. Measures variability in time between peaks.
+            - entropy_peak_time: Entropy of peak start times normalized by trace length. Measures how evenly peaks occur over time.
+            
+            - peak_frequency: Frequency of peaks in the trace.
+            - peak_frequency_evolution: Evolution of peak frequency over sliding windows.
+
+            Peak distributions analysis:
             - histogram_peak_amplitude: Histogram of amplitudes (bins and counts).
+            - amplitude_skewness: Skewness of peak amplitudes. Skewness quantifies the asymmetry of the distribution.
+
             - histogram_peak_duration: Histogram of durations (bins and counts).
-            - peak_symmetry_score: Mean of symmetry scores (rise vs decay).
-            - peak_density_center_of_mass: Center of mass of peak times, normalized.
-            - burst_frequency_evolution: Evolution of burst frequency over sliding windows.
-            - activity_fraction_evolution: Evolution of active fraction over sliding windows.
+            - duration_skewness: Skewness of peak durations. Skewness quantifies the asymmetry of the distribution.
+
         """
-        """Compute statistics based on the binary trace and detected peaks."""
         binary = np.array(self.binary)
         peaks = self.peaks
         self.metadata = {}
 
         # Global statistics
-        self.metadata["fraction_active_time"] = float(np.sum(binary)) / len(binary) if len(binary) > 0 else 0.0
         self.metadata["num_peaks"] = len(peaks)
-        self.metadata["burst_frequency"] = self.metadata["num_peaks"] / len(binary) if len(binary) > 0 else 0.0
-        self.metadata["total_active_frames"] = int(np.sum(binary))
+        self.metadata["peak_frequency"] = self.metadata["num_peaks"] / len(binary) if len(binary) > 0 else 0.0
 
         # Peak feature distributions
         durations = [p.duration for p in peaks]
         amplitudes = [p.height for p in peaks]
         prominences = [p.prominence for p in peaks]
-        rise_times = [p.rise_time for p in peaks]
-        decay_times = [p.decay_time for p in peaks]
         start_times = [p.start_time for p in peaks]
+        symmetry_scores = [p.symmetry_score for p in peaks]
 
         intervals = np.diff(start_times)
 
         self.metadata.update({
-            "mean_peak_duration": float(np.mean(durations)) if durations else None,
             "std_peak_duration": float(np.std(durations)) if durations else None,
-            "mean_inter_peak_interval": float(np.mean(intervals)) if len(intervals) > 0 else None,
-            "std_inter_peak_interval": float(np.std(intervals)) if len(intervals) > 0 else None,
-            "mean_peak_amplitude": float(np.mean(amplitudes)) if amplitudes else None,
+            "std_ipi": float(np.std(intervals)) if len(intervals) > 0 else None,
             "std_peak_amplitude": float(np.std(amplitudes)) if amplitudes else None,
-            "mean_peak_prominence": float(np.mean(prominences)) if prominences else None,
             "std_peak_prominence": float(np.std(prominences)) if prominences else None,
+            "std_peak_symmetry_score": float(np.std(symmetry_scores)) if symmetry_scores else None,
             "coefficient_of_variation_prominence": float(np.std(prominences) / np.mean(prominences)) if prominences and np.mean(prominences) != 0 else None,
-            "mean_rise_time": float(np.mean(rise_times)) if rise_times else None,
-            "mean_decay_time": float(np.mean(decay_times)) if decay_times else None,
             "amplitude_skewness": float(skew(amplitudes)) if len(amplitudes) > 2 else None,
             "duration_skewness": float(skew(durations)) if len(durations) > 2 else None,
             "coefficient_of_variation_amplitude": float(np.std(amplitudes) / np.mean(amplitudes)) if amplitudes and np.mean(amplitudes) != 0 else None,
@@ -163,11 +202,11 @@ class Trace:
             hist = hist[hist > 0]
             return float(entropy(hist)) if len(hist) > 1 else 0.0
 
-        self.metadata["inter_peak_interval_entropy"] = compute_entropy(intervals)
+        self.metadata["entropy_ipi"] = compute_entropy(intervals)
 
         if start_times:
             norm_times = np.array(start_times) / len(binary)
-            self.metadata["peak_time_entropy"] = compute_entropy(norm_times)
+            self.metadata["entropy_peak_time"] = compute_entropy(norm_times)
 
         # Histograms
         if amplitudes:
@@ -178,31 +217,20 @@ class Trace:
             counts, bins = np.histogram(durations, bins=10)
             self.metadata["histogram_peak_duration"] = {"bins": bins.tolist(), "counts": counts.tolist()}
 
-        # Symmetry
-        symmetry_scores = [1 - abs(p.rise_time - p.decay_time) / (p.rise_time + p.decay_time)
-                           for p in peaks if (p.rise_time + p.decay_time) > 0]
-        self.metadata["peak_symmetry_score"] = float(np.mean(symmetry_scores)) if symmetry_scores else None
-
-        # Center of mass
-        if start_times:
-            weights = np.ones(len(start_times))
-            com = float(np.average(start_times, weights=weights))
-            self.metadata["peak_density_center_of_mass"] = com / len(binary)
+        if symmetry_scores:
+            counts, bins = np.histogram(symmetry_scores, bins=10)
+            self.metadata["histogram_peak_symmetry"] = {"bins": bins.tolist(), "counts": counts.tolist()}
 
         # Sliding window dynamic features
         freq_evo = []
-        act_evo = []
         window_size = 200
         step_size = 50
         for start in range(0, len(binary) - window_size + 1, step_size):
             end = start + window_size
-            bin_window = binary[start:end]
-            freq = np.sum([(p.peak_time >= start and p.peak_time < end) for p in peaks])
+            freq = np.sum([(p.start_time >= start and p.start_time < end) for p in peaks])
             freq_evo.append(freq / window_size)
-            act_evo.append(np.sum(bin_window) / window_size)
 
-        self.metadata["burst_frequency_evolution"] = freq_evo
-        self.metadata["activity_fraction_evolution"] = act_evo
+        self.metadata["peak_frequency_evolution"] = freq_evo
 
 
     def plot_metadata(self, save_path: Optional[Path] = None) -> None:
@@ -220,11 +248,11 @@ class Trace:
 
         # Panel 1: Table of scalar metadata
         scalar_keys = [
-            "fraction_active_time", "num_peaks", "burst_frequency",
-            "mean_peak_duration", "mean_inter_peak_interval",
+            "fraction_active_time", "num_peaks", "peak_frequency",
+            "mean_peak_duration", "mean_ipi",
             "mean_peak_amplitude", "mean_peak_prominence",
-            "periodicity_score", "inter_peak_interval_entropy",
-            "peak_time_entropy", "peak_density_center_of_mass",
+            "periodicity_score", "entropy_ipi",
+            "entropy_peak_time", "peak_density_center_of_mass",
             "peak_symmetry_score"
         ]
         scalars = [(k, f"{self.metadata[k]:.3f}" if self.metadata[k] is not None else "None") for k in scalar_keys if k in self.metadata]
@@ -248,10 +276,10 @@ class Trace:
             axs[2].set_xlabel("Duration")
             axs[2].set_ylabel("Count")
 
-        # Panel 4: Burst frequency evolution
-        if "burst_frequency_evolution" in self.metadata:
-            axs[3].plot(self.metadata["burst_frequency_evolution"])
-            axs[3].set_title("Burst Frequency Evolution")
+        # Panel 4: peak frequency evolution
+        if "peak_frequency_evolution" in self.metadata:
+            axs[3].plot(self.metadata["peak_frequency_evolution"])
+            axs[3].set_title("peak Frequency Evolution")
             axs[3].set_xlabel("Window index")
             axs[3].set_ylabel("Freq / window")
 
@@ -275,25 +303,7 @@ class Trace:
             plt.show()
 
 
-    def plot_raw_trace(self, save_path: Optional[Path] = None):
-        """Plot or save the raw trace.
-        
-        Args:
-            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
-        """
-        if len(self.raw) > 0:
-            plt.figure()
-            plt.plot(self.raw)
-            plt.title("Raw Trace")
-            plt.xlabel("Time")
-            plt.ylabel("Intensity")
-            if save_path:
-                plt.savefig(save_path, dpi=300)
-                plt.close()
-            else:
-                plt.show()
-
-    def plot_version_trace(self, version: str, save_path: Optional[Path] = None):
+    def plot_trace(self, version: str, save_path: Optional[Path] = None):
         """Plot or save a specific version of the trace.
 
         Args:
@@ -364,8 +374,6 @@ class Trace:
             save_path (Optional[Path]): If provided, the full trace summary figure is saved.
         """
         num_plots = 0
-        if len(self.raw) > 0:
-            num_plots += 1
         num_plots += len(self.versions)
         if len(self.binary) > 0:
             num_plots += 1
@@ -377,11 +385,6 @@ class Trace:
         axs = np.atleast_1d(axs).flatten()
 
         idx = 0
-        if len(self.raw) > 0:
-            axs[idx].plot(self.raw)
-            axs[idx].set_title("Raw Trace")
-            axs[idx].set_ylabel("Intensity")
-            idx += 1
 
         for version_name, trace in self.versions.items():
             axs[idx].plot(trace)
