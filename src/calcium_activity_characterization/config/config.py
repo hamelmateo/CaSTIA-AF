@@ -4,7 +4,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = False  # Enable debugging mode
+DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
 EXISTING_CELLS = True  # Load precomputed cells from file
@@ -29,11 +29,11 @@ BIG_OBJECT_THRESHOLD = 10000  # Maximum pixel count for valid cell
 PADDING = 5  # Filename zero-padding digits
 
 # ==========================
-# SIGNAL PROCESSING PARAMETERS
+# INDIVIDUAL CELLS SIGNAL PROCESSING PARAMETERS
 # ==========================
 
 
-SIGNAL_PROCESSING_PARAMETERS = {
+INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
         "detrending": False,
         "smoothing": True,
@@ -44,6 +44,7 @@ SIGNAL_PROCESSING_PARAMETERS = {
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
     "sigma": 10.0,          # Global Gaussian smoothing σ
+    "cut_trace_num_points": 0,  # Number of points to keep after cutting the trace
 
     "methods": {
         "wavelet": {
@@ -83,10 +84,10 @@ SIGNAL_PROCESSING_PARAMETERS = {
 
 
 # ==========================
-# PEAK DETECTION PARAMETERS
+# INDIVIDUAL CELLS PEAK DETECTION PARAMETERS
 # ==========================
 
-PEAK_DETECTION_PARAMETERS = {
+INDIV_PEAK_DETECTION_PARAMETERS = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
@@ -104,6 +105,86 @@ PEAK_DETECTION_PARAMETERS = {
         "verbose": False  # Print grouping information
     }
 }
+
+
+# ==========================
+# GLOBAL ACTIVITY TRACE SIGNAL PROCESSING PARAMETERS
+# ==========================
+
+
+GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
+    "apply": {
+        "detrending": False,
+        "smoothing": True,
+        "normalization": False,
+        "cut_trace": True
+    },
+
+    "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
+    "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
+    "sigma": 4.0,          # Global Gaussian smoothing σ
+    "cut_trace_num_points": 50,  # Number of points to keep after cutting the trace
+
+    "methods": {
+        "wavelet": {
+            "wavelet": "db4", # Wavelet type: 'db4', 'haar', etc.
+            "level": None     # Decomposition level (None for automatic)
+        },
+
+        "fir": {
+            "cutoff": 0.001,
+            "numtaps": 201,
+            "sampling_freq": 1.0  # Sampling rate in Hz
+        },
+
+        "butterworth": {
+            "cutoff": 0.003,
+            "order": 6,
+            "mode": "ba",   # 'ba' for Butterworth, 'sos' for SOS
+            "btype": "highpass",
+            "sampling_freq": 1.0  # Sampling rate in Hz
+        },
+
+        "exponentialfit": {},
+
+        "diff": {},
+
+        "savgol": {
+            "presmoothing_sigma": 6.0,
+            "window_length": 601,
+            "polyorder": 2
+        },
+
+        "movingaverage": {
+            "window_size": 101
+        }
+    }
+}
+
+
+# ==========================
+# GLOBAL ACTIVITY TRACE PEAK DETECTION PARAMETERSych
+# ==========================
+
+GLOBAL_PEAK_DETECTION_PARAMETERS = {
+    "method": "skimage",  # only 'skimage' supported for now
+    "params": {
+        "skimage": {
+            "prominence": 10, # Minimum prominence of peaks
+            "distance": 20,  # Minimum distance between peaks
+            "height": None,
+            "threshold": None,
+            "width": None,
+            "scale_class_quantiles": [0.33, 0.66],
+            "relative_height": 0.3 # Relative height for FWHM calculation
+        }
+    },
+    "peak_grouping": {
+        "overlap_margin": 0,  # Margin for grouping overlapping peaks
+        "verbose": False  # Print grouping information
+    }
+}
+
 
 
 

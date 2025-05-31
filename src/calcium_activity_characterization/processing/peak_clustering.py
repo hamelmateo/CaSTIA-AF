@@ -45,8 +45,8 @@ class PeakClusteringEngine:
                     continue
 
                 lag_margin = int(self.fixed_window_size)
-                window_start = origin_peak.start_time - lag_margin
-                window_end = origin_peak.start_time + lag_margin
+                window_start = origin_peak.rel_start_time - lag_margin
+                window_end = origin_peak.rel_start_time + lag_margin
 
                 cluster_members = [(origin_cell, origin_peak_idx)]
 
@@ -61,7 +61,7 @@ class PeakClusteringEngine:
                     for other_idx, other_peak in enumerate(other_cell.trace.peaks):
                         if other_peak.in_cluster:
                             continue
-                        if window_start <= other_peak.start_time <= window_end:
+                        if window_start <= other_peak.rel_start_time <= window_end:
                             score = self._compute_score(origin_peak, other_peak)
                             if score > best_score:
                                 best_score = score
@@ -92,14 +92,14 @@ class PeakClusteringEngine:
                 for peak_idx, peak in enumerate(cell.trace.peaks):
                     key = (cell.label, peak.id)
 
-                    # Add to current window if start_time in window
-                    if window_start <= peak.start_time < window_end:
+                    # Add to current window if rel_start_time in window
+                    if window_start <= peak.rel_start_time < window_end:
                         cluster.add(cell, peak_idx)
                         added_any = True
-                        peak_spread_flags[key] = peak.end_time > window_end
+                        peak_spread_flags[key] = peak.rel_end_time > window_end
 
                     # Add only if flagged to spread to next window
-                    elif peak_spread_flags.get(key, False) and window_start == ((peak.start_time // self.fixed_window_size + 1) * self.fixed_window_size):
+                    elif peak_spread_flags.get(key, False) and window_start == ((peak.rel_start_time // self.fixed_window_size + 1) * self.fixed_window_size):
                         cluster.add(cell, peak_idx)
                         added_any = True
                         peak_spread_flags[key] = False
@@ -111,14 +111,14 @@ class PeakClusteringEngine:
         return self.clusters
 
     def _compute_score(self, peak1, peak2) -> float:
-        time_diff = abs(peak1.start_time - peak2.start_time)
-        duration_diff = abs(peak1.duration - peak2.duration)
+        time_diff = abs(peak1.rel_start_time - peak2.rel_start_time)
+        duration_diff = abs(peak1.rel_duration - peak2.rel_duration)
 
-        max_time_window = self.adaptive_window_factor * peak1.duration
+        max_time_window = self.adaptive_window_factor * peak1.rel_duration
         if max_time_window == 0:
             return 0.0
 
         score_time = 1 - (time_diff / max_time_window)
-        score_duration = 1 - (duration_diff / max(peak1.duration, peak2.duration, 1))
+        score_duration = 1 - (duration_diff / max(peak1.rel_duration, peak2.rel_duration, 1))
 
         return self.time_weight * score_time + self.duration_weight * score_duration

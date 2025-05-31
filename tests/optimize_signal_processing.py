@@ -1,7 +1,8 @@
-"""
-Signal Processing + Peaks + Binarized GUI
-This GUI allows users to process calcium imaging data, detect peaks, and visualize results.
-"""
+'''
+Usage example:
+    >>> python optimize_signal_processing.py
+    # GUI will prompt to load a pickle file and visualize raw/processed/bin traces
+'''
 
 import sys
 import random
@@ -14,11 +15,13 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from datetime import datetime
 from pathlib import Path
+import logging
 
 from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION_PARAMETERS
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
-from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
+
+logger = logging.getLogger(__name__)
 
 def _safe_parse(text):
     text = text.strip()
@@ -29,8 +32,14 @@ def _safe_parse(text):
     except Exception:
         return text
 
-
 class SignalProcessingBinarizedGUI(QMainWindow):
+    """
+    GUI to explore signal processing, peak detection, and trace binarization on random or selected cells.
+
+    Args:
+        cells (List[Cell]): Loaded cell objects with raw trace data.
+    """
+
     def __init__(self, cells):
         super().__init__()
         self.setWindowTitle("Signal Processing + Peaks + Binarized GUI")
@@ -131,7 +140,6 @@ class SignalProcessingBinarizedGUI(QMainWindow):
     def reset_parameter_fields(self, method: str):
         while self.dynamic_form.rowCount() > 0:
             self.dynamic_form.removeRow(0)
-
         self.dynamic_fields = {}
         defaults = SIGNAL_PROCESSING_PARAMETERS["methods"].get(method, {})
         for key, value in defaults.items():
@@ -175,7 +183,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             label_set = set(label_ids)
             self.selected_cells = [cell for cell in self.cells if cell.label in label_set]
         except Exception as e:
-            print(f"Invalid input: {e}")
+            logger.error(f"Invalid input: {e}")
             self.selected_cells = []
         self.update_plots()
 
@@ -188,13 +196,13 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         colors = plt.cm.tab10.colors
 
         for i, cell in enumerate(cells_to_plot):
-            raw = np.array(cell.trace.raw, dtype=float)
+            raw = np.array(cell.trace.versions["raw"], dtype=float)
             processor = self.get_processor()
             processed = processor.run(raw)
             cell.trace.versions["smoothed"] = processed.tolist()
+            cell.trace.default_version = "smoothed"
 
-            detector = PeakDetector(self.get_peak_params())
-            cell.trace.detect_peaks(detector)
+            cell.trace.detect_peaks(self.get_peak_params())
             cell.trace.binarize_trace_from_peaks()
 
             ax_raw, ax_proc, ax_bin = self.axs[i]
@@ -211,7 +219,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_proc.plot(processed, color='blue', label="Processed")
             for peak in cell.trace.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
-                ax_proc.axvspan(peak.start_time, peak.end_time,
+                ax_proc.axvspan(peak.rel_start_time, peak.rel_end_time,
                                 color=colors[peak.id % len(colors)], alpha=0.3)
             ax_proc.set_title("Processed + Peaks")
             ax_proc.set_xlabel("Time")
@@ -225,7 +233,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_bin.grid(True)
 
             peak_lines = [
-                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rise_time}, prom={p.prominence:.2f}, duration={p.duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
+                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rel_rise_time}, prom={p.prominence:.2f}, rel_duration={p.rel_duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
                 for p in cell.trace.peaks
             ]
             self.peak_text.append("\n".join(peak_lines) + "\n")
@@ -239,7 +247,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = output_dir / f"result_plot_{timestamp}.png"
         self.figure.savefig(str(path))
-        print(f"Saved plot to {path}")
+        logger.info(f"Saved plot to {path}")
 
 
 if __name__ == "__main__":
@@ -247,7 +255,7 @@ if __name__ == "__main__":
     file_dialog = QFileDialog()
     file_path, _ = file_dialog.getOpenFileName(None, "Select raw_active_cells.pkl", "", "Pickle Files (*.pkl)")
     if not file_path:
-        print("No file selected. Exiting.")
+        logger.warning("No file selected. Exiting.")
         sys.exit(0)
 
     cells = load_cells_from_pickle(Path(file_path), load=True)

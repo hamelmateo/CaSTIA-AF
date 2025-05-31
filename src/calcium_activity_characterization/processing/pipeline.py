@@ -19,7 +19,6 @@ from collections import Counter
 import networkx as nx
 
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.loader import (
     preprocess_images,
@@ -103,7 +102,7 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
-        self._initialize_global_trace()
+        self._initialize_activity_trace()
         self._save_population_metadata_report()
 
         
@@ -284,7 +283,7 @@ class CalciumPipeline:
 
         else:
             for cell in self.population.cells:
-                cell.trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"))
+                cell.trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"INDIV_SIGNAL_PROCESSING_PARAMETERS"))
                 cell.trace.default_version = "smoothed"
             
             save_pickle_file(self.population.cells, self.smoothed_traces_path)
@@ -337,7 +336,7 @@ class CalciumPipeline:
         
         else:
             for cell in self.population.cells:
-                cell.trace.detect_peaks(get_config_with_fallback(self.config, "PEAK_DETECTION_PARAMETERS"))
+                cell.trace.detect_peaks(get_config_with_fallback(self.config, "INDIV_PEAK_DETECTION_PARAMETERS"))
                 cell.trace.binarize_trace_from_peaks()
 
             
@@ -462,13 +461,30 @@ class CalciumPipeline:
         """
         version = "raw"
         self.population.compute_global_trace(version=version , default_version=version)
-        self.population.global_trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"SIGNAL_PROCESSING_PARAMETERS"))
+        self.population.global_trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"))
         self.population.global_trace.default_version = "smoothed"
 
-        self.population.global_trace.detect_peaks(get_config_with_fallback(self.config, "PEAK_DETECTION_PARAMETERS"))
+        self.population.global_trace.detect_peaks(get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
         
         self.population.global_trace.binarize_trace_from_peaks()
         self.population.global_trace.plot_all_traces(self.output_path / "global_trace_summary.png")
+
+
+    def _initialize_activity_trace(self):
+        """
+        Compute the global trace from active cells and process it through smoothing,
+        peak detection, binarization, and metadata extraction.
+        """
+        version = "raw"
+        self.population.compute_activity_trace(default_version=version)
+        self.population.activity_trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"))
+        self.population.activity_trace.default_version = "smoothed"
+
+        self.population.activity_trace.detect_peaks(get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
+        self.population.activity_trace.refine_all_peak_windows("smoothed")
+
+        self.population.activity_trace.binarize_trace_from_peaks()
+        self.population.activity_trace.plot_all_traces(self.output_path / "activity_trace_summary.png")
 
 
     def _save_population_metadata_report(self) -> None:

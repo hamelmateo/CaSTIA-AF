@@ -16,6 +16,8 @@ import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
+
+from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
 from scipy.stats import entropy
 
 import logging
@@ -40,6 +42,7 @@ class Population:
     def __init__(self, cells: List[Cell]) -> None:
         self.cells: List[Cell] = cells
         self.global_trace: Optional[Trace] = None
+        self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
         self.metadata: Dict[str, Any] = {}
         self.similarity_matrices: Optional[List[np.ndarray]]= None
         self.peak_clusters: Optional[List[Cluster]] = None
@@ -71,123 +74,111 @@ class Population:
         self.global_trace.default_version = default_version
 
 
-    def compute_population_metrics(self, bin_width: int = 10, synchrony_window: int = 1) -> None:
+    def compute_activity_trace(self, default_version: str = "raw") -> None:
         """
-        Compute and store population-level metadata into `self.metadata`.
+        Compute the activity trace as the sum of binary traces across all cells.
+
+        The activity trace is defined as the sum of binary traces from all cells,
+        where each binary trace indicates the presence (1) or absence (0) of activity
+        at each time point.
 
         Args:
-            bin_width (int): Width of histogram bins for duration, prominence, and timing metrics.
-            synchrony_window (int): Maximum time lag (in frames) to consider peaks as synchronous.
+            default_version (str): The version to set as default in the returned Trace.
 
-        Metrics computed:
-            - fraction_active_cells (float in [0,1]):
-                Proportion of cells with ≥1 detected peaks.
-            
-            - fraction_inactive_cells (float in [0,1]):
-                Complement of above. Useful to detect silent populations.
+        Raises:
+            ValueError: If no binary traces are found in the cells, or if the binary traces are not of uniform length.
 
-            - global_peak_duration_hist (dict: "bins", "counts"):
-                Histogram of all peak durations pooled across all cells using bin width = `bin_width`.
-
-            - global_peak_prominence_hist (dict: "bins", "counts"):
-                Histogram of peak prominences (baseline-independent feature) pooled across all cells.
-                Prominence is less biased by fluorescence baseline variability than amplitude.
-
-            - periodicity_score_distribution (List[float], range: [0, 1]):
-                One value per cell. Higher means more regular inter-peak intervals.
-                Computed as: `1 / (1 + CV(IPIs))`.
-
-            - peak_frequency_distribution (List[float], typically ∈ [0, 0.05]):
-                Frequency of peaks per cell = num_peaks / trace_length.
-
-            - num_peaks_distribution (List[int]):
-                Number of peaks detected per cell.
-
-            - peak_rate_evolution (List[int]):
-                Sum of binary traces across cells, frame-by-frame.
-                Useful to detect bursts of coordinated population activity.
-
-            - population_peak_frequency_evolution (List[float]):
-                Mean peak frequency per frame across all cells, computed in sliding windows.
-                Normalized by (number of cells x window size).
-
-            - proportion_synchronous_peaks (float in [0,1]):
-                Fraction of peaks that co-occur in multiple cells within ±synchrony_window.
-                Higher = more temporal alignment across the population.
-
-            - peak_start_time_entropy (float ≥ 0):
-                Entropy of all peak start times pooled across cells (binned).
-                Higher = more uniformly distributed peak onsets over time.
-
-            - ipi_entropy (float ≥ 0):
-                Entropy of inter-peak intervals (IPIs) pooled across all cells.
-                Higher = more heterogeneous pacing of cellular transients.
-
-            - cell_peak_count_cv (float ≥ 0):
-                Coefficient of variation of peak counts across cells.
-                Higher = more heterogeneity in cell activity level.
         """
+        binary_traces = [c.trace.binary for c in self.cells if len(c.trace.binary) > 0]
+
+        if not binary_traces:
+            raise ValueError("No binary traces found in cells.")
+
+        trace_lengths = set(len(b) for b in binary_traces)
+        if len(trace_lengths) > 1:
+            raise ValueError("Binary traces are not of uniform length.")
+
+        activity_trace = np.sum(binary_traces, axis=0)
+
+        self.activity_trace = Trace()
+        self.activity_trace.versions[default_version] = activity_trace.tolist()
+        self.activity_trace.default_version = default_version
+
+
+    def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:
+        """
+        Compute and store population-level metrics in `self.metadata`.
+
+        Args:
+            bin_width (int, optional): Bin width for histograms of durations, start times, and IPIs. Default is 10.
+            synchrony_window (int, optional): Maximum time lag (in frames) to consider peaks as synchronous. Default is 1.
+        
+        Metrics computed and stored in `self.metadata`:
+            - fraction_active_cells (float): Proportion of cells with at least one detected peak.
+            - fraction_inactive_cells (float): Proportion of cells with no detected peaks.
+
+            - global_peak_duration_hist (dict): Histogram of all peak durations pooled across cells, using `bin_width`.
+            - global_peak_prominence_hist (dict): Histogram of all peak prominences pooled across cells (20 bins).
+            - periodicity_score_hist (dict): Histogram of periodicity scores per cell (20 bins).
+            - peak_frequency_hist (dict): Histogram of per-cell peak frequencies (20 bins).
+            - num_peaks_hist (dict): Histogram of number of peaks per cell (20 bins).
+
+            - active_cells_over_time (list of int): Frame-by-frame sum of binary peak traces across all cells.
+            - population_peak_frequency_evolution (list of float): Mean peak frequency per frame across all cells, computed in sliding windows (window size 200, step size 50), normalized by (number of cells × window size).
+            - proportion_synchronous_peaks (float): Fraction of peaks that co-occur in multiple cells within ±synchrony_window.
+            - peak_start_time_entropy (float): Entropy of all peak start times pooled across cells (binned by `bin_width`).
+            - ipi_entropy (float): Entropy of inter-peak intervals (IPIs) pooled across all cells (binned by `bin_width`).
+            - cell_peak_count_cv (float): Coefficient of variation of peak counts across cells.
+        
+        Notes:
+            - All histograms are returned as dictionaries with "bins" and "counts" keys.
+            - Entropy values are computed using the probability distribution of binned values.
+            - Synchrony is defined as peaks in different cells occurring within ±synchrony_window frames.
+        """
+        # 1. Fraction of active vs inactive cells
         n_total = len(self.cells)
         n_active = sum(1 for cell in self.cells if cell.trace.peaks)
         n_inactive = n_total - n_active
         self.metadata["fraction_active_cells"] = n_active / n_total if n_total else 0
         self.metadata["fraction_inactive_cells"] = n_inactive / n_total if n_total else 0
 
-        # 2. Duration and prominence histograms
-        durations = [peak.duration for cell in self.cells for peak in cell.trace.peaks]
+        # 2. Duration, prominence, periodicity score, peak frequencies and number of peaks distributions
+        durations = [peak.rel_duration for cell in self.cells for peak in cell.trace.peaks]
+        self.metadata["global_peak_duration_hist"] = compute_histogram(durations, bin_width=bin_width)
+
         prominences = [peak.prominence for cell in self.cells for peak in cell.trace.peaks]
+        self.metadata["global_peak_prominence_hist"] = compute_histogram(prominences, bin_width=bin_width)
 
-        if durations:
-            dur_bins = np.arange(0, max(durations) + bin_width, bin_width)
-            dur_counts, _ = np.histogram(durations, bins=dur_bins)
-            self.metadata["global_peak_duration_hist"] = {
-                "bins": dur_bins.tolist(),
-                "counts": dur_counts.tolist()
-    }
+        periodicity_scores = [cell.trace.metadata.get("periodicity_score", 0) for cell in self.cells]
+        self.metadata["periodicity_score_hist"] = compute_histogram(periodicity_scores, bin_count=bin_counts)
+        
+        peak_frequencies = [cell.trace.metadata.get("peak_frequency", 0) for cell in self.cells]
+        self.metadata["peak_frequency_hist"] = compute_histogram(peak_frequencies, bin_count=bin_counts)
+        
+        num_peaks = [len(cell.trace.peaks) for cell in self.cells]
+        self.metadata["num_peaks_hist"] = compute_histogram(num_peaks, bin_width=bin_width)
 
-        if prominences:
-            prom_bins = np.arange(0, max(prominences) + bin_width, bin_width)
-            prom_counts, _ = np.histogram(prominences, bins=prom_bins)
-            self.metadata["global_peak_prominence_hist"] = {
-                "bins": prom_bins.tolist(),
-                "counts": prom_counts.tolist()
-            }
-
-        # 3. Periodicity & peak frequency distributions
-        self.metadata["periodicity_score_distribution"] = [
-            cell.trace.metadata.get("periodicity_score")
-            for cell in self.cells if "periodicity_score" in cell.trace.metadata
-        ]
-        self.metadata["peak_frequency_distribution"] = [
-            cell.trace.metadata.get("peak_frequency")
-            for cell in self.cells if "peak_frequency" in cell.trace.metadata
-        ]
-        self.metadata["num_peaks_distribution"] = [len(cell.trace.peaks) for cell in self.cells]
-
-        # 4. Raster-like peak count per frame
+        # 3. Number of active cells over time
         max_len = max((len(cell.trace.binary) for cell in self.cells if cell.trace.binary), default=0)
-        peak_rate_evolution = np.zeros(max_len, dtype=int)
+        active_cells_over_time = np.zeros(max_len, dtype=int)
         for cell in self.cells:
             if cell.trace.binary:
-                peak_rate_evolution[:len(cell.trace.binary)] += np.array(cell.trace.binary)
-        self.metadata["peak_rate_evolution"] = peak_rate_evolution.tolist()
+                active_cells_over_time[:len(cell.trace.binary)] += np.array(cell.trace.binary)
+        self.metadata["active_cells_over_time"] = active_cells_over_time.tolist()
 
-        # 5. Peak frequency evolution over time (normalized)
+        # 5. Peak frequency evolution over time
         window_size = 200
         step_size = 50
-        freq_evo = []
-        for start in range(0, max_len - window_size + 1, step_size):
-            end = start + window_size
-            peak_count = sum(
-                sum(start <= p.start_time < end for p in cell.trace.peaks)
-                for cell in self.cells
-            )
-            norm_freq = peak_count / (window_size * n_total) if n_total > 0 else 0
-            freq_evo.append(norm_freq)
-        self.metadata["population_peak_frequency_evolution"] = freq_evo
+        peaks_per_cell_concatenated = [cell.trace.peaks for cell in self.cells]
+        self.metadata["population_peak_frequency_evolution"] = compute_peak_frequency_over_time(
+            [[peak.rel_start_time for peak in peaks] for peaks in peaks_per_cell_concatenated],
+            max_len,
+            window_size=window_size,
+            step_size=step_size
+        )
 
         # 6. Synchrony between peaks
-        peak_times = [(cell_idx, p.start_time) for cell_idx, cell in enumerate(self.cells) for p in cell.trace.peaks]
+        peak_times = [(cell_idx, p.rel_start_time) for cell_idx, cell in enumerate(self.cells) for p in cell.trace.peaks]
         peak_times.sort(key=lambda x: x[1])
         total_peaks = len(peak_times)
         count_synch = 0
@@ -201,7 +192,7 @@ class Population:
         self.metadata["proportion_synchronous_peaks"] = count_synch / total_peaks if total_peaks else 0
 
         # 7. Peak start time entropy
-        start_times = [p.start_time for cell in self.cells for p in cell.trace.peaks]
+        start_times = [p.rel_start_time for cell in self.cells for p in cell.trace.peaks]
         if start_times:
             hist, _ = np.histogram(start_times, bins=np.arange(0, max(start_times) + bin_width, bin_width))
             probs = hist / np.sum(hist)
@@ -210,7 +201,7 @@ class Population:
         # 8. Inter-peak interval (IPI) entropy
         ipis = []
         for cell in self.cells:
-            times = sorted(p.start_time for p in cell.trace.peaks)
+            times = sorted(p.rel_start_time for p in cell.trace.peaks)
             ipis.extend(j - i for i, j in zip(times[:-1], times[1:]) if j > i)
         if ipis:
             hist, _ = np.histogram(ipis, bins=np.arange(0, max(ipis) + bin_width, bin_width))
@@ -291,9 +282,9 @@ class Population:
         _handle(fig)
 
         # 2. Peak Rate Evolution
-        if "peak_rate_evolution" in self.metadata:
+        if "active_cells_over_time" in self.metadata:
             fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(self.metadata["peak_rate_evolution"], color='blue')
+            ax.plot(self.metadata["active_cells_over_time"], color='blue')
             ax.set_title("Peak Rate Evolution Over Time")
             ax.set_xlabel("Time Frame")
             ax.set_ylabel("Number of Active Cells")
@@ -332,30 +323,27 @@ class Population:
             ax.grid(True)
             _handle(fig)
 
-        # 6. Periodicity Score Distribution
-        if "periodicity_score_distribution" in self.metadata:
-            values = [v for v in self.metadata["periodicity_score_distribution"] if isinstance(v, (int, float))]
-            if values:
-                fig, ax = plt.subplots(figsize=(6, 4))
-                ax.hist(values, bins=20, color='slateblue')
-                ax.set_title("Periodicity Score Distribution")
-                ax.set_xlabel("Score (0–1)")
-                ax.set_ylabel("Cell Count")
-                ax.grid(True)
-                _handle(fig)
+        # 6. Periodicity Score Histogram
+        if "periodicity_score_hist" in self.metadata:
+            data = self.metadata["periodicity_score_hist"]
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(data["bins"][:-1], data["counts"], width=np.diff(data["bins"]), align="edge", color='slateblue')
+            ax.set_title("Periodicity Score Histogram")
+            ax.set_xlabel("Score (0–1)")
+            ax.set_ylabel("Cell Count")
+            ax.grid(True)
+            _handle(fig)
 
-
-        # 7. Peak Frequency Distribution
-        if "peak_frequency_distribution" in self.metadata:
-            values = [v for v in self.metadata["peak_frequency_distribution"] if isinstance(v, (int, float))]
-            if values:
-                fig, ax = plt.subplots(figsize=(6, 4))
-                ax.hist(values, bins=20, color='seagreen')
-                ax.set_title("Peak Frequency per Cell")
-                ax.set_xlabel("Peaks / Frame")
-                ax.set_ylabel("Cell Count")
-                ax.grid(True)
-                _handle(fig)
+        # 7. Peak Frequency Histogram
+        if "peak_frequency_hist" in self.metadata:
+            data = self.metadata["peak_frequency_hist"]
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(data["bins"][:-1], data["counts"], width=np.diff(data["bins"]), align="edge", color='seagreen')
+            ax.set_title("Peak Frequency Histogram")
+            ax.set_xlabel("Peaks / Frame")
+            ax.set_ylabel("Cell Count")
+            ax.grid(True)
+            _handle(fig)
 
         # 8. Synchrony, Entropy, and CV as text
         synchrony = self.metadata.get("proportion_synchronous_peaks", None)
@@ -377,17 +365,16 @@ class Population:
         ax.set_title("Synchrony, Entropy, and Variability Summary", fontsize=12)
         _handle(fig)
 
-        # 9. Number of Peaks per Cell
-        if "num_peaks_distribution" in self.metadata:
-            values = [v for v in self.metadata["num_peaks_distribution"] if isinstance(v, (int, float))]
-            if values:
-                fig, ax = plt.subplots(figsize=(6, 4))
-                ax.hist(values, bins=20, color='gray')
-                ax.set_title("Number of Peaks per Cell")
-                ax.set_xlabel("Num Peaks")
-                ax.set_ylabel("Cell Count")
-                ax.grid(True)
-                _handle(fig)
+        # 8. Number of Peaks per Cell Histogram
+        if "num_peaks_hist" in self.metadata:
+            data = self.metadata["num_peaks_hist"]
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(data["bins"][:-1], data["counts"], width=np.diff(data["bins"]), align="edge", color='darkred')
+            ax.set_title("Number of Peaks per Cell")
+            ax.set_xlabel("Peak Count")
+            ax.set_ylabel("Cell Count")
+            ax.grid(True)
+            _handle(fig)
 
         if pdf:
             pdf.close()

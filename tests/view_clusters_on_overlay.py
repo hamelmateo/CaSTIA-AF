@@ -125,7 +125,7 @@ class ClusterOverlayViewer(QMainWindow):
 
         self.overlay = tifffile.imread(str(folder / "overlay.tif"))
 
-        self.max_frame = max(p.end_time for c in self.cells for p in c.peaks)
+        self.max_frame = max(p.rel_end_time for c in self.cells for p in c.peaks)
         self.slider.setMaximum(self.max_frame)
         self.build_frame_maps()
         self.update_frame()
@@ -146,7 +146,7 @@ class ClusterOverlayViewer(QMainWindow):
 
             for cell, peak_idx in cluster.members:
                 peak = cell.peaks[peak_idx]
-                for t in range(peak.start_time, peak.end_time + 1):
+                for t in range(peak.rel_start_time, peak.rel_end_time + 1):
                     self.frame_peak_map.setdefault(t, []).append((cell, color, cluster, peak))
 
     def update_hover_label(self, event):

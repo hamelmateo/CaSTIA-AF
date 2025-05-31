@@ -43,6 +43,7 @@ class SignalProcessor:
         self.normalize_method = params.get("normalizing_method", "deltaf")
 
         self.sigma = params.get("sigma", 1.0)
+        self.length = params.get("cut_trace_num_points", 0)
 
 
     def run(self, raw_trace: list[float]) -> np.ndarray:
@@ -61,7 +62,7 @@ class SignalProcessor:
             trace = self._detrend(trace)
 
         if self.use_cut_trace:    
-            trace = self._cut_trace_start(trace, 125)
+            trace = self._cut_trace_start(trace, num_points=self.length)
 
         if self.use_smoothing:
             trace = gaussian_filter1d(trace, sigma=self.sigma)

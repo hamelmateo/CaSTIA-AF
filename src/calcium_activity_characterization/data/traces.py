@@ -17,6 +17,8 @@ from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
 from calcium_activity_characterization.data.peaks import PeakDetector
 
+from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
+
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
 
@@ -107,6 +109,7 @@ class Trace:
         detector = PeakDetector(params=detector_params)
         trace = self.active_trace
         self.peaks = detector.run(trace) if len(trace) > 0 else []
+        self._refine_peaks_duration(self.default_version)
 
     def binarize_trace_from_peaks(self) -> None:
         """Convert detected peaks into a binary 0/1 trace and compute metadata."""
@@ -118,8 +121,8 @@ class Trace:
         trace_length = len(trace)
         binary = np.zeros(trace_length, dtype=int)
         for peak in self.peaks:
-            start = max(0, peak.start_time)
-            end = min(trace_length, peak.end_time + 1)
+            start = max(0, peak.rel_start_time)
+            end = min(trace_length, peak.rel_end_time + 1)
             binary[start:end] = 1
 
         self.binary = binary.tolist()
@@ -150,7 +153,7 @@ class Trace:
             - entropy_peak_time: Entropy of peak start times normalized by trace length. Measures how evenly peaks occur over time.
             
             - peak_frequency: Frequency of peaks in the trace.
-            - peak_frequency_evolution: Evolution of peak frequency over sliding windows.
+            - peak_frequency_over_time: Evolution of peak frequency over sliding windows.
 
             Peak distributions analysis:
             - histogram_peak_amplitude: Histogram of amplitudes (bins and counts).
@@ -169,19 +172,24 @@ class Trace:
         self.metadata["peak_frequency"] = self.metadata["num_peaks"] / len(binary) if len(binary) > 0 else 0.0
 
         # Peak feature distributions
-        durations = [p.duration for p in peaks]
+        durations = [p.rel_duration for p in peaks]
         amplitudes = [p.height for p in peaks]
         prominences = [p.prominence for p in peaks]
-        start_times = [p.start_time for p in peaks]
-        symmetry_scores = [p.symmetry_score for p in peaks]
+        start_times = [p.rel_start_time for p in peaks]
+        symmetry_scores = [p.rel_symmetry_score for p in peaks]
 
         intervals = np.diff(start_times)
 
         self.metadata.update({
+            "mean_peak_duration": float(np.mean(durations)) if durations else None,
             "std_peak_duration": float(np.std(durations)) if durations else None,
+            "mean_ipi": float(np.mean(intervals)) if len(intervals) > 0 else None,
             "std_ipi": float(np.std(intervals)) if len(intervals) > 0 else None,
+            "mean_peak_amplitude": float(np.mean(amplitudes)) if amplitudes else None,
             "std_peak_amplitude": float(np.std(amplitudes)) if amplitudes else None,
+            "mean_peak_prominence": float(np.mean(prominences)) if prominences else None,
             "std_peak_prominence": float(np.std(prominences)) if prominences else None,
+            "mean_peak_symmetry_score": float(np.mean(symmetry_scores)) if symmetry_scores else None,
             "std_peak_symmetry_score": float(np.std(symmetry_scores)) if symmetry_scores else None,
             "coefficient_of_variation_prominence": float(np.std(prominences) / np.mean(prominences)) if prominences and np.mean(prominences) != 0 else None,
             "amplitude_skewness": float(skew(amplitudes)) if len(amplitudes) > 2 else None,
@@ -210,27 +218,23 @@ class Trace:
 
         # Histograms
         if amplitudes:
-            counts, bins = np.histogram(amplitudes, bins=10)
-            self.metadata["histogram_peak_amplitude"] = {"bins": bins.tolist(), "counts": counts.tolist()}
+            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_count=20)
 
         if durations:
-            counts, bins = np.histogram(durations, bins=10)
-            self.metadata["histogram_peak_duration"] = {"bins": bins.tolist(), "counts": counts.tolist()}
+            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_width=10)
 
         if symmetry_scores:
-            counts, bins = np.histogram(symmetry_scores, bins=10)
-            self.metadata["histogram_peak_symmetry"] = {"bins": bins.tolist(), "counts": counts.tolist()}
+            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_count=20)
 
-        # Sliding window dynamic features
-        freq_evo = []
+        # Peak frequency over time
         window_size = 200
         step_size = 50
-        for start in range(0, len(binary) - window_size + 1, step_size):
-            end = start + window_size
-            freq = np.sum([(p.start_time >= start and p.start_time < end) for p in peaks])
-            freq_evo.append(freq / window_size)
-
-        self.metadata["peak_frequency_evolution"] = freq_evo
+        self.metadata["peak_frequency_over_time"] = compute_peak_frequency_over_time(
+            start_times_per_cell=[start_times],
+            trace_length=len(binary),
+            window_size=window_size,
+            step_size=step_size
+        )
 
 
     def plot_metadata(self, save_path: Optional[Path] = None) -> None:
@@ -268,7 +272,7 @@ class Trace:
             axs[1].set_xlabel("Amplitude")
             axs[1].set_ylabel("Count")
 
-        # Panel 3: Histogram duration
+        # Panel 3: Histogram rel_duration
         if "histogram_peak_duration" in self.metadata:
             data = self.metadata["histogram_peak_duration"]
             axs[2].bar(data["bins"][:-1], data["counts"], width=np.diff(data["bins"]), align="edge")
@@ -277,8 +281,8 @@ class Trace:
             axs[2].set_ylabel("Count")
 
         # Panel 4: peak frequency evolution
-        if "peak_frequency_evolution" in self.metadata:
-            axs[3].plot(self.metadata["peak_frequency_evolution"])
+        if "peak_frequency_over_time" in self.metadata:
+            axs[3].plot(self.metadata["peak_frequency_over_time"])
             axs[3].set_title("peak Frequency Evolution")
             axs[3].set_xlabel("Window index")
             axs[3].set_ylabel("Freq / window")
@@ -354,7 +358,7 @@ class Trace:
         plt.figure()
         plt.plot(trace, label=f"Trace: {self.default_version}")
         for peak in self.peaks:
-            plt.axvspan(peak.start_time, peak.end_time, color='red', alpha=0.3)
+            plt.axvspan(peak.rel_start_time, peak.rel_end_time, color='red', alpha=0.3)
         plt.title("Peaks Over Trace")
         plt.xlabel("Time")
         plt.ylabel("Intensity")
@@ -378,7 +382,7 @@ class Trace:
         if len(self.binary) > 0:
             num_plots += 1
         if len(self.peaks) > 0:
-            num_plots += 1
+            num_plots += 2
 
         fig, axs = plt.subplots(num_plots, 1, figsize=(10, 3 * num_plots))
 
@@ -396,6 +400,16 @@ class Trace:
             axs[idx].step(range(len(self.binary)), self.binary, where='post')
             axs[idx].set_title("Binary Trace")
             axs[idx].set_ylabel("0/1")
+            idx += 1
+
+        if len(self.peaks) > 0:
+            active_trace = self.active_trace
+            axs[idx].plot(active_trace, label="Active Trace")
+            for peak in self.peaks:
+                axs[idx].axvspan(peak.rel_start_time, peak.rel_end_time, color='red', alpha=0.3)
+            axs[idx].set_title("Rel Peaks Overlay")
+            axs[idx].legend()
+            axs[idx].set_ylabel("Intensity")
             idx += 1
 
         if len(self.peaks) > 0:
@@ -423,3 +437,56 @@ class Trace:
 
     def __repr__(self) -> str:
         return f"<Trace default='{self.default_version}', peaks={len(self.peaks)}, active={self.metadata.get('fraction_active_time', 0):.2f}>"
+
+
+    def _refine_peaks_duration(self, version: str = "raw") -> None:
+        """
+        Refine the start and end times of all detected peaks if there is a local minima closest to peak time.    
+
+        Args:
+            version (str): The version of the trace to use for
+        """
+        for peak in self.peaks:
+            left, right = find_valley_bounds(self.versions[version], peak.rel_start_time, peak.rel_end_time)
+            peak.start_time = max(left, peak.start_time)
+            peak.end_time = min(right, peak.end_time)
+            peak.duration = peak.end_time - peak.start_time
+
+
+def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 100, window: int = 5) -> tuple[int, int]:
+    """
+    Refine peak boundaries based on valley detection using windowed minima and derivative sign changes.
+
+    Args:
+        trace (np.ndarray): Smoothed 1D signal.
+        peak_time (int): Index of the peak center.
+        max_search (int): Max points to search on each side.
+        window (int): Half-window size to validate local minima.
+
+    Returns:
+        (start_index, end_index): Refined left/right bounds of the peak.
+    """
+    trace = np.asarray(trace, dtype=float)
+
+    n = len(trace)
+    left_bound = rel_start_time
+    right_bound = rel_end_time
+
+    # --- Left side ---
+    for i in range(rel_start_time - 1, max(rel_start_time - max_search - 1, 0), -1):
+        # Local minimum in window
+        window_vals = trace[max(i - window,0): min(i + window + 1,n-1)]
+        center_val = trace[i]
+        if np.all(center_val <= window_vals):
+            left_bound = i
+            break
+
+    # --- Right side ---
+    for i in range(rel_end_time + 1, min(rel_end_time + max_search + 1,n-1), 1):
+        window_vals = trace[max(i - window,0): min(i + window + 1,n-1)]
+        center_val = trace[i]
+        if np.all(center_val <= window_vals):
+            right_bound = i
+            break
+
+    return left_bound, right_bound

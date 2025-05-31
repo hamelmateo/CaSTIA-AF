@@ -3,7 +3,7 @@ Peak class update to include symmetry score at the individual level.
 
 Example:
     >>> peak = Peak(...)
-    >>> print(peak.symmetry_score)  # Already computed during creation
+    >>> print(peak.rel_symmetry_score)  # Already computed during creation
 """
 
 from typing import Optional, Literal, List
@@ -21,45 +21,60 @@ class Peak:
 
     Attributes:
         id (int): Unique peak identifier.
-        start_time (int): Start frame of the peak.
-        peak_time (int): Frame of the peak maximum.
-        end_time (int): End frame of the peak.
-        duration (int): Duration of the peak.
-        height (float): Peak intensity.
-        prominence (float): Peak prominence.
-        rise_time (int): Time from start to peak.
-        decay_time (int): Time from peak to end.
-        symmetry_score (float): Symmetry of the peak shape based on rise vs decay.
+        peak_time (int): Frame index of the peak maximum.
+        start_time (int): Absolute start frame of the peak in the full trace.
+        end_time (int): Absolute end frame of the peak in the full trace.
+        duration (int): Absolute duration of the peak (end_time - start_time).
+        rel_start_time (int): Relative start frame of the peak within the processing window.
+        rel_end_time (int): Relative end frame of the peak within the processing window.
+        rel_duration (int): Duration of the peak in the relative frame (rel_end_time - rel_start_time).
+        height (float): Intensity at the peak maximum.
+        prominence (float): Peak prominence from baseline.
+        rel_height (Optional[float]): Peak height relative to the baseline in the window.
+        rise_time (int): Time from absolute start to peak.
+        decay_time (int): Time from peak to absolute end.
+        rel_rise_time (int): Time from relative start to peak.
+        rel_decay_time (int): Time from peak to relative end.
+        rel_symmetry_score (float): Symmetry of the peak shape based on relative rise vs decay.
         group_id (Optional[int]): Overlapping group ID (if any).
-        parent_peak_id (Optional[int]): Parent peak ID in overlapping group.
-        role (Literal): Role in group ('individual', 'member', 'parent').
-        scale_class (Optional[str]): Prominence class ('minor', 'major', 'super').
-        in_cluster (bool): Whether the peak is clustered.
-        cluster_id (Optional[int]): Cluster assignment ID
+        parent_peak_id (Optional[int]): ID of the parent peak if this is part of an overlapping group.
+        role (Literal): Role in overlapping group ('individual', 'child', or 'parent').
+        scale_class (Optional[str]): Prominence scale class ('minor', 'major', 'super').
+        in_cluster (bool): Whether the peak has been assigned to a cluster.
+        cluster_id (Optional[int]): ID of the assigned cluster, if any.
     """
     def __init__(
         self,
         id: int,
-        start_time: int,
+        rel_start_time: int,
         peak_time: int,
+        start_time: int,
         end_time: int,
+        rel_end_time: int,
         height: float,
         prominence: float,
         group_id: Optional[int] = None,
         parent_peak_id: Optional[int] = None,
-        role: Literal["individual", "child", "parent"] = "individual"
+        role: Literal["individual", "child", "parent"] = "individual",
+        rel_height: Optional[float] = None
     ):
         self.id = id
-        self.start_time = start_time
         self.peak_time = peak_time
+        self.start_time = start_time
         self.end_time = end_time
         self.duration = end_time - start_time
+        self.rel_height = rel_height
+        self.rel_start_time = rel_start_time
+        self.rel_end_time = rel_end_time
+        self.rel_duration = rel_end_time - rel_start_time
         self.height = height
         self.prominence = prominence
 
         self.rise_time = peak_time - start_time
         self.decay_time = end_time - peak_time
-        self.symmetry_score: float = self._compute_symmetry_score()
+        self.rel_rise_time = peak_time - rel_start_time
+        self.rel_decay_time = rel_end_time - peak_time
+        self.rel_symmetry_score: float = self._compute_symmetry_score()
 
         self.group_id = group_id
         self.parent_peak_id = parent_peak_id
@@ -77,15 +92,15 @@ class Peak:
         Returns:
             Optional[float]: Symmetry score (1 = perfect symmetry), or None if invalid.
         """
-        total_time = self.rise_time + self.decay_time
+        total_time = self.rel_rise_time + self.rel_decay_time
         if total_time > 0:
-            return 1 - abs(self.rise_time - self.decay_time) / total_time
+            return 1 - abs(self.rel_rise_time - self.rel_decay_time) / total_time
         return None
 
     def __repr__(self):
         return (
             f"Peak(id={self.id}, time={self.peak_time}, height={self.height:.2f}, "
-            f"prominence={self.prominence:.2f}, role={self.role}, scale={self.scale_class}, symmetry={self.symmetry_score:.2f})"
+            f"prominence={self.prominence:.2f}, role={self.role}, scale={self.scale_class}, symmetry={self.rel_symmetry_score:.2f})"
         )
 
 
@@ -147,8 +162,13 @@ class PeakDetector:
 
             prominences = properties["prominences"]
 
-            # Compute fwhm
-            peak_metadata = peak_widths(trace, peaks, rel_height=self.method_params.get("relative_height", 0.6))
+            # Compute relative heights parameters
+            rel_peak_metadata = peak_widths(trace, peaks, rel_height=self.method_params.get("relative_height", 0.6))
+            rel_left_ips = rel_peak_metadata[2]
+            rel_right_ips = rel_peak_metadata[3]
+
+            # Compute whole widths
+            peak_metadata = peak_widths(trace, peaks, rel_height=0.9)
             left_ips = peak_metadata[2]
             right_ips = peak_metadata[3]
 
@@ -160,6 +180,8 @@ class PeakDetector:
 
             peak_list = []
             for i, peak_time in enumerate(peaks):
+                rel_start_time = int(np.floor(rel_left_ips[i]))
+                rel_end_time = int(np.ceil(rel_right_ips[i]))
                 start_time = int(np.floor(left_ips[i]))
                 end_time = int(np.ceil(right_ips[i]))
                 prominence = float(prominences[i])
@@ -176,10 +198,13 @@ class PeakDetector:
                 peak = Peak(
                     id=i,
                     start_time=start_time,
-                    peak_time=peak_time,
                     end_time=end_time,
+                    rel_start_time=rel_start_time,
+                    peak_time=peak_time,
+                    rel_end_time=rel_end_time,
                     height=height,
-                    prominence=prominence
+                    prominence=prominence,
+                    rel_height=self.method_params.get("relative_height")
                 )
                 peak.scale_class = scale_class
                 peak_list.append(peak)
@@ -211,7 +236,7 @@ class PeakDetector:
             for j, p2 in enumerate(peaks):
                 if i >= j:
                     continue
-                if p1.start_time <= p2.end_time + overlap_margin and p2.start_time <= p1.end_time + overlap_margin:
+                if p1.rel_start_time <= p2.rel_end_time + overlap_margin and p2.rel_start_time <= p1.rel_end_time + overlap_margin:
                     graph[i].add(j)
                     graph[j].add(i)
 
