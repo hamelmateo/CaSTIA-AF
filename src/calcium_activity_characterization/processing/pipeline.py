@@ -81,6 +81,7 @@ class CalciumPipeline:
         self.peak_clusters_path: Path = None
         self.umap_file_path: Path = None
         self.population_level_metrics_path: Path = None
+        self.spatial_neighbor_graph_path: Path = None
         self.gc_graph: Path = None
 
     def run(self, data_path: Path, output_path: Path) -> None:
@@ -104,7 +105,6 @@ class CalciumPipeline:
         
         self._initialize_activity_trace()
         self._save_population_metadata_report()
-
         
         #self._run_peak_clustering()
         #self._causality_analysis()
@@ -144,14 +144,15 @@ class CalciumPipeline:
         self.umap_file_path = output_path / "umap.npy"
         self.gc_graph = self.output_path / "gc_graphs"
         self.population_level_metrics_path = output_path / "population_metrics.pdf"
+        self.spatial_neighbor_graph_path = output_path / "spatial_neighbor_graph.png"
 
     def _segment_cells(self):
         """
         Perform segmentation on DAPI images if needed and convert the mask to Cell objects.
         Reloads from file if available and permitted.
         """
-        if not get_config_with_fallback(self.config,"EXISTING_CELLS") or not self.cells_file_path.exists():
-            if not get_config_with_fallback(self.config,"EXISTING_MASK") or not self.nuclei_mask_path.exists():
+        if not self.cells_file_path.exists():
+            if not self.nuclei_mask_path.exists():
                 nuclei_mask = segmented(
                     preprocess_images(
                         self.hoechst_img_path,
@@ -174,7 +175,7 @@ class CalciumPipeline:
         else:
             cells = load_cells_from_pickle(self.cells_file_path, True)
 
-        self.population = Population(cells=cells)
+        self.population = Population(cells=cells, mask=nuclei_mask, output_path=self.output_path)
 
     def _convert_mask_to_cells(self, nuclei_mask: np.ndarray) -> List[Cell]:
         """
@@ -208,7 +209,7 @@ class CalciumPipeline:
         Compute raw intensity traces for all cells, either serially or in parallel.
         Reloads from pickle if permitted.
         """
-        if not get_config_with_fallback(self.config,"EXISTING_RAW_INTENSITY") or not self.raw_traces_path.exists():
+        if not self.raw_traces_path.exists():
             if get_config_with_fallback(self.config,"PARALLELELIZE"):
                 self._get_intensity_parallel()
             else:
@@ -277,7 +278,7 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if get_config_with_fallback(self.config,"EXISTING_PROCESSED_INTENSITY") and self.smoothed_traces_path.exists():
+        if self.smoothed_traces_path.exists():
             self.population.cells = load_cells_from_pickle(self.smoothed_traces_path, True)
             return
 
@@ -330,7 +331,7 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        if get_config_with_fallback(self.config,"EXISTING_BINARIZED_INTENSITY") and self.binary_traces_path.exists():
+        if self.binary_traces_path.exists():
             self.population.cells = load_cells_from_pickle(self.binary_traces_path, True)
             return
         
@@ -355,7 +356,7 @@ class CalciumPipeline:
         Returns:
             List[np.ndarray]: List of correlation matrices, one per window.
         """
-        if get_config_with_fallback(self.config,"EXISTING_SIMILARITY_MATRICES") and self.similarity_matrices_path.exists():
+        if self.similarity_matrices_path.exists():
             self.population.similarity_matrices = load_pickle_file(self.similarity_matrices_path)
         
         else:
@@ -395,7 +396,7 @@ class CalciumPipeline:
         """
         Run custom peak-based clustering algorithm and store clusters.
         """
-        if get_config_with_fallback(self.config,"EXISTING_PEAK_CLUSTERS") and self.peak_clusters_path.exists():
+        if self.peak_clusters_path.exists():
             self.population.peak_clusters = load_pickle_file(self.peak_clusters_path)
 
         else:
@@ -481,7 +482,6 @@ class CalciumPipeline:
         self.population.activity_trace.default_version = "smoothed"
 
         self.population.activity_trace.detect_peaks(get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
-        self.population.activity_trace.refine_all_peak_windows("smoothed")
 
         self.population.activity_trace.binarize_trace_from_peaks()
         self.population.activity_trace.plot_all_traces(self.output_path / "activity_trace_summary.png")

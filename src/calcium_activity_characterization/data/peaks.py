@@ -85,6 +85,8 @@ class Peak:
         self.in_cluster: bool = False  # Set True once this peak is added to a cluster
         self.cluster_id: Optional[int] = None  # ID of the assigned cluster
 
+        self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
+
     def _compute_symmetry_score(self) -> Optional[float]:
         """
         Compute a symmetry score for the peak shape.

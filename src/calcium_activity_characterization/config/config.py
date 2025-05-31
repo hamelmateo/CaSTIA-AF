@@ -7,16 +7,9 @@
 DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
-EXISTING_CELLS = True  # Load precomputed cells from file
-EXISTING_MASK = True  # Load precomputed mask from file
-EXISTING_RAW_INTENSITY = True  # Load raw intensity traces if available
-EXISTING_PROCESSED_INTENSITY = True  # Load processed intensity traces if available
-EXISTING_BINARIZED_INTENSITY = True  # Load binarized traces if available
-EXISTING_SIMILARITY_MATRICES = False  # Load precomputed similarity matrices if available
-EXISTING_PEAK_CLUSTERS = True  # Load precomputed peak clusters if available
 ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
-PARALLELELIZE = True  # Use parallel processing for intensity extraction
+PARALLELELIZE = True  # Use parallel processing for raw trace computing
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
 
 

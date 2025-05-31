@@ -18,6 +18,9 @@ from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
+from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
+
+import networkx as nx
 from scipy.stats import entropy
 
 import logging
@@ -39,13 +42,20 @@ class Population:
         embedding (Any): UMAP or PCA embedding of cells.
     """
 
-    def __init__(self, cells: List[Cell]) -> None:
+    def __init__(self, cells: List[Cell], mask: Optional[np.ndarray], output_path: Optional[Path]) -> None:
         self.cells: List[Cell] = cells
-        self.global_trace: Optional[Trace] = None
+        self.neighbor_graph: nx.Graph = None
+        self.global_trace: Optional[Trace] = None   # Mean trace across all cells
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
         self.metadata: Dict[str, Any] = {}
         self.similarity_matrices: Optional[List[np.ndarray]]= None
         self.peak_clusters: Optional[List[Cluster]] = None
+
+        self.neighbor_graph = build_spatial_neighbor_graph(cells)
+        plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_raw.png")
+        self.neighbor_graph = filter_graph_by_edge_length_mad(self.neighbor_graph, scale=2.0)
+        plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_filtered.png")
+
 
     def compute_global_trace(self, version: str = "raw", default_version: str = "raw") -> None:
         """
