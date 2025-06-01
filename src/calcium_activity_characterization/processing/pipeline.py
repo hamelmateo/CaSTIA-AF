@@ -27,7 +27,6 @@ from calcium_activity_characterization.utilities.loader import (
     load_images,
     crop_image,
     save_pickle_file,
-    load_cells_from_pickle,
     load_pickle_file,
     save_clusters_on_overlay,
     plot_similarity_matrices,
@@ -41,6 +40,7 @@ from calcium_activity_characterization.processing.correlation import Correlation
 from calcium_activity_characterization.processing.clustering import ClusteringEngine
 from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
 from calcium_activity_characterization.processing.causality import GCAnalyzer
+from calcium_activity_characterization.processing.spatial_event_clustering import SpatialEventClusteringEngine
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,7 @@ class CalciumPipeline:
         self._binarization_pipeline()
         
         self._initialize_activity_trace()
+        self._run_spatial_event_clustering()
         self._save_population_metadata_report()
         
         #self._run_peak_clustering()
@@ -170,12 +171,13 @@ class CalciumPipeline:
             unfiltered_cells = self._convert_mask_to_cells(nuclei_mask)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
-            save_pickle_file(cells, self.cells_file_path)
+
+            self.population = Population(cells=cells, mask=nuclei_mask, output_path=self.output_path)
+            save_pickle_file(self.population, self.cells_file_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
-            cells = load_cells_from_pickle(self.cells_file_path, True)
+            self.population = load_pickle_file(self.cells_file_path)
 
-        self.population = Population(cells=cells, mask=nuclei_mask, output_path=self.output_path)
 
     def _convert_mask_to_cells(self, nuclei_mask: np.ndarray) -> List[Cell]:
         """
@@ -214,9 +216,9 @@ class CalciumPipeline:
                 self._get_intensity_parallel()
             else:
                 self._get_intensity_serial()
-            save_pickle_file(self.population.cells, self.raw_traces_path)
+            save_pickle_file(self.population, self.raw_traces_path)
         else:
-            self.population.cells = load_cells_from_pickle(self.raw_traces_path, True)
+            self.population = load_pickle_file(self.raw_traces_path)
 
     def _get_intensity_serial(self):
         """
@@ -279,7 +281,7 @@ class CalciumPipeline:
         Reloads from file if permitted.
         """
         if self.smoothed_traces_path.exists():
-            self.population.cells = load_cells_from_pickle(self.smoothed_traces_path, True)
+            self.population = load_pickle_file(self.smoothed_traces_path)
             return
 
         else:
@@ -287,7 +289,7 @@ class CalciumPipeline:
                 cell.trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"INDIV_SIGNAL_PROCESSING_PARAMETERS"))
                 cell.trace.default_version = "smoothed"
             
-            save_pickle_file(self.population.cells, self.smoothed_traces_path)
+            save_pickle_file(self.population, self.smoothed_traces_path)
 
 
     def _run_umap(self):
@@ -332,7 +334,7 @@ class CalciumPipeline:
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
         if self.binary_traces_path.exists():
-            self.population.cells = load_cells_from_pickle(self.binary_traces_path, True)
+            self.population = load_pickle_file(self.binary_traces_path)
             return
         
         else:
@@ -342,7 +344,7 @@ class CalciumPipeline:
 
             
             logger.info(f"Peaks detected for {len(self.population.cells)} active cells.")
-            save_pickle_file(self.population.cells, self.binary_traces_path)
+            save_pickle_file(self.population, self.binary_traces_path)
 
         # Plot the binarized traces
         plot_raster(self.output_path, self.population.cells)
@@ -497,3 +499,15 @@ class CalciumPipeline:
             logger.info(f"✅ Population metadata summary saved to {self.population_level_metrics_path}")
         except Exception as e:
             logger.error(f"Failed to compute or save population metadata: {e}")
+
+
+
+    def _run_spatial_event_clustering(self):
+        engine = SpatialEventClusteringEngine()
+        self.population.event_clusters = engine.run(self.population)
+        engine.plot_clusters_with_graph(
+            population=self.population,
+            overlay_path=self.overlay_path,
+            output_dir=self.output_path / "event_cluster_overlays",
+            global_peaks=self.population.activity_trace.peaks
+        )

@@ -19,7 +19,7 @@ import logging
 
 from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION_PARAMETERS
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
-from calcium_activity_characterization.utilities.loader import load_cells_from_pickle
+from calcium_activity_characterization.utilities.loader import load_pickle_file
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         logger.warning("No file selected. Exiting.")
         sys.exit(0)
 
-    cells = load_cells_from_pickle(Path(file_path), load=True)
+    cells = load_pickle_file(Path(file_path), load=True)
     window = SignalProcessingBinarizedGUI(cells)
     window.show()
     sys.exit(app.exec_())

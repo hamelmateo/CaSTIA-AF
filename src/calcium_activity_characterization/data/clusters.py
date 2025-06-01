@@ -36,14 +36,14 @@ class Cluster:
             cell (Cell): The originating cell.
             peak_index (int): Index of the peak in cell.peaks.
         """
-        peak = cell.peaks[peak_index]
+        peak = cell.trace.peaks[peak_index]
 
         self.members.append((cell, peak_index))
 
         peak.in_cluster = True
         peak.cluster_id = self.id
 
-        self.center_time = sum(cell.peaks[i].peak_time for cell, i in self.members) / len(self.members)
+        self.center_time = sum(cell.trace.peaks[i].peak_time for cell, i in self.members) / len(self.members)
 
     def __len__(self):
         return len(self.members)

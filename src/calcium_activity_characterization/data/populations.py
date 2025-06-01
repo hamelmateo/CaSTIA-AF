@@ -50,11 +50,16 @@ class Population:
         self.metadata: Dict[str, Any] = {}
         self.similarity_matrices: Optional[List[np.ndarray]]= None
         self.peak_clusters: Optional[List[Cluster]] = None
+        self.event_clusters: Optional[List[List[Cluster]]] = None
 
-        self.neighbor_graph = build_spatial_neighbor_graph(cells)
-        plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_raw.png")
-        self.neighbor_graph = filter_graph_by_edge_length_mad(self.neighbor_graph, scale=2.0)
-        plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_filtered.png")
+        try:
+            self.neighbor_graph = build_spatial_neighbor_graph(cells)
+            self.neighbor_graph = filter_graph_by_edge_length_mad(self.neighbor_graph, scale=2.0)
+            plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_filtered.png")
+        
+        except ValueError as e:
+            logger.warning(f"Failed to build spatial neighbor graph: {e}")
+            self.neighbor_graph = None
 
 
     def compute_global_trace(self, version: str = "raw", default_version: str = "raw") -> None:

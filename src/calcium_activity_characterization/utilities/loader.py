@@ -163,27 +163,6 @@ def load_images(dir: Path = None) -> List[np.ndarray]:
     return loaded_images
 
 
-def load_cells_from_pickle(file_path: Path, load: bool = False) -> List[Cell]:
-    """
-    Load a pickle file.
-
-    Args:
-        file_path (Path): Path to the pickle file.
-        load (bool): Whether to actually load the file (useful for toggling).
-
-    Returns:
-        List[Cell]: List of Cell objects.
-    """
-    if load and file_path.exists():
-        with open(file_path, "rb") as f:
-            cells = pickle.load(f)
-        logger.info(f"Loaded {len(cells)} cells from {file_path}")
-        return cells
-    else:
-        logger.warning(f"File {file_path} not loaded (missing or load=False). Returning empty list.")
-        return []
-
-
 def load_pickle_file(file_path: Path):
     """
     Load any Python object (e.g. DataFrame, dict, list) from a pickle file.
