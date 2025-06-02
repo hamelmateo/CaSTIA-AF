@@ -90,7 +90,8 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3 # Relative height for FWHM calculation
+            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
     "peak_grouping": {
@@ -169,7 +170,8 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3 # Relative height for FWHM calculation
+            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
     "peak_grouping": {

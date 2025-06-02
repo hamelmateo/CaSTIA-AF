@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 import logging
 
-from calcium_activity_characterization.config.config import SIGNAL_PROCESSING_PARAMETERS, PEAK_DETECTION_PARAMETERS
+from calcium_activity_characterization.config.config import INDIV_SIGNAL_PROCESSING_PARAMETERS, INDIV_PEAK_DETECTION_PARAMETERS
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
 from calcium_activity_characterization.utilities.loader import load_pickle_file
 
@@ -70,7 +70,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
         control_layout.addWidget(QLabel("Detrending Method:"))
         self.detrending_combo = QComboBox()
-        self.detrending_combo.addItems(SIGNAL_PROCESSING_PARAMETERS["methods"].keys())
+        self.detrending_combo.addItems(INDIV_SIGNAL_PROCESSING_PARAMETERS["methods"].keys())
         self.detrending_combo.currentTextChanged.connect(self.reset_parameter_fields)
         control_layout.addWidget(self.detrending_combo)
 
@@ -96,7 +96,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
         self.peak_params = {}
         control_layout.addWidget(QLabel("Peak Detection Parameters:"))
-        for key, val in PEAK_DETECTION_PARAMETERS["params"]["skimage"].items():
+        for key, val in INDIV_PEAK_DETECTION_PARAMETERS["params"]["skimage"].items():
             field = QLineEdit(str(val))
             control_layout.addWidget(QLabel(key))
             control_layout.addWidget(field)
@@ -141,7 +141,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         while self.dynamic_form.rowCount() > 0:
             self.dynamic_form.removeRow(0)
         self.dynamic_fields = {}
-        defaults = SIGNAL_PROCESSING_PARAMETERS["methods"].get(method, {})
+        defaults = INDIV_SIGNAL_PROCESSING_PARAMETERS["methods"].get(method, {})
         for key, value in defaults.items():
             input_field = QLineEdit(str(value))
             self.dynamic_form.addRow(QLabel(key), input_field)
@@ -258,7 +258,7 @@ if __name__ == "__main__":
         logger.warning("No file selected. Exiting.")
         sys.exit(0)
 
-    cells = load_pickle_file(Path(file_path), load=True)
-    window = SignalProcessingBinarizedGUI(cells)
+    population = load_pickle_file(Path(file_path))
+    window = SignalProcessingBinarizedGUI(population.cells)
     window.show()
     sys.exit(app.exec_())

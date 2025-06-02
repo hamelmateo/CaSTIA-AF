@@ -27,6 +27,7 @@ class Cluster:
         self.start_time: int = start_time
         self.end_time: int = end_time
         self.center_time: Optional[float] = None
+        self.metadata: dict[str, any] = {}
 
     def add(self, cell: Cell, peak_index: int):
         """

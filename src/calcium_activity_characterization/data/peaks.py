@@ -170,7 +170,7 @@ class PeakDetector:
             rel_right_ips = rel_peak_metadata[3]
 
             # Compute whole widths
-            peak_metadata = peak_widths(trace, peaks, rel_height=0.9)
+            peak_metadata = peak_widths(trace, peaks, rel_height=self.method_params.get("full_duration_threshold", 0.95))
             left_ips = peak_metadata[2]
             right_ips = peak_metadata[3]
 

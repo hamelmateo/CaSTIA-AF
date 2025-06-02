@@ -41,6 +41,7 @@ from calcium_activity_characterization.processing.clustering import ClusteringEn
 from calcium_activity_characterization.processing.peak_clustering import PeakClusteringEngine
 from calcium_activity_characterization.processing.causality import GCAnalyzer
 from calcium_activity_characterization.processing.spatial_event_clustering import SpatialEventClusteringEngine
+from calcium_activity_characterization.analysis.wave_propagation_analysis import WavePropagationAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,7 @@ class CalciumPipeline:
         
         self._initialize_activity_trace()
         self._run_spatial_event_clustering()
+        #self._run_wave_propagation_analysis()
         self._save_population_metadata_report()
         
         #self._run_peak_clustering()
@@ -511,3 +513,25 @@ class CalciumPipeline:
             output_dir=self.output_path / "event_cluster_overlays",
             global_peaks=self.population.activity_trace.peaks
         )
+
+
+    def _run_wave_propagation_analysis(self) -> None:
+        """
+        For each spatial peak cluster, compute wave propagation direction and speed,
+        then save a trajectory plot overlaying the segmentation image.
+        """
+
+        output_dir = self.output_path / "cluster_trajectories"
+        analyzer = WavePropagationAnalyzer()
+
+        if not hasattr(self.population, "event_clusters") or not self.population.event_clusters:
+            logger.warning("No event_clusters found in population. Skipping wave propagation analysis.")
+            return
+
+        for clusters in self.population.event_clusters:
+            for cluster in clusters:
+                analyzer.analyze_cluster_propagation(cluster)
+                save_path = output_dir / f"cluster_{cluster.id:03d}_trajectory.png"
+                analyzer.plot_cluster_trajectory(cluster, self.overlay_path, save_path)
+
+        logger.info(f"✅ Wave propagation analysis completed and saved in {output_dir}")

@@ -474,7 +474,6 @@ def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int
 
     # --- Left side ---
     for i in range(rel_start_time - 1, max(rel_start_time - max_search - 1, 0), -1):
-        # Local minimum in window
         window_vals = trace[max(i - window,0): min(i + window + 1,n-1)]
         center_val = trace[i]
         if np.all(center_val <= window_vals):
