@@ -1,1 +1,15 @@
+numpy
+scipy
+pandas
+matplotlib
+networkx
+tifffile
+pywt
+scikit-learn
+hdbscan
+statsmodels
+umap-learn
+PyQt5
+tqdm
 deepcell
+arcos4py
