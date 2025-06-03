@@ -23,7 +23,7 @@ class BinarizedSignalViewer(QMainWindow):
         self.setGeometry(100, 100, 1400, 1000)
 
         self.image_shape = None
-        self.cells = []
+        self.population = []
         self.max_frame = 0
         self.timer = QTimer()
         self.timer.setInterval(20)  # 50 ms per frame
@@ -87,15 +87,15 @@ class BinarizedSignalViewer(QMainWindow):
             cells_path = folder / "binarized_active_cells.pkl"
 
             with open(cells_path, 'rb') as f:
-                self.cells = pickle.load(f)
+                self.population = pickle.load(f)
 
-            if not self.cells:
+            if not self.population.cells:
                 return
 
-            self.max_frame = len(self.cells[0].binary_trace) - 1
+            self.max_frame = len(self.population.cells[0].trace.binary) - 1
             self.slider.setMaximum(self.max_frame)
 
-            all_coords = np.vstack([cell.pixel_coords for cell in self.cells])
+            all_coords = np.vstack([cell.pixel_coords for cell in self.population.cells])
             self.image_shape = (all_coords[:, 0].max() + 1, all_coords[:, 1].max() + 1)
 
             self.update_frame()
@@ -115,7 +115,7 @@ class BinarizedSignalViewer(QMainWindow):
     def generate_mask(self, frame):
         mask = np.zeros((*self.image_shape, 3), dtype=np.uint8)
 
-        for cell in self.cells:
+        for cell in self.population.cells:
             if frame >= len(cell.trace.binary):
                 continue
             state = cell.trace.binary[frame]

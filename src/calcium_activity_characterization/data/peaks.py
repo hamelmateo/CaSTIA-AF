@@ -152,9 +152,17 @@ class PeakDetector:
 
         trace = np.array(trace, dtype=float)
 
+        start_frame = self.method_params.get("start_frame") or 0
+        end_frame = self.method_params.get("end_frame") or len(trace)
+
+        subtrace = trace[start_frame:end_frame]
+
         if self.method == "skimage":
+
+
+
             peaks, properties = find_peaks(
-                trace,
+                subtrace,
                 prominence=self.method_params.get("prominence", 0.1),
                 distance=self.method_params.get("distance", 5),
                 height=self.method_params.get("height"),
@@ -165,12 +173,12 @@ class PeakDetector:
             prominences = properties["prominences"]
 
             # Compute relative heights parameters
-            rel_peak_metadata = peak_widths(trace, peaks, rel_height=self.method_params.get("relative_height", 0.6))
+            rel_peak_metadata = peak_widths(subtrace, peaks, rel_height=self.method_params.get("relative_height", 0.6))
             rel_left_ips = rel_peak_metadata[2]
             rel_right_ips = rel_peak_metadata[3]
 
             # Compute whole widths
-            peak_metadata = peak_widths(trace, peaks, rel_height=self.method_params.get("full_duration_threshold", 0.95))
+            peak_metadata = peak_widths(subtrace, peaks, rel_height=self.method_params.get("full_duration_threshold", 0.95))
             left_ips = peak_metadata[2]
             right_ips = peak_metadata[3]
 
@@ -182,12 +190,12 @@ class PeakDetector:
 
             peak_list = []
             for i, peak_time in enumerate(peaks):
-                rel_start_time = int(np.floor(rel_left_ips[i]))
-                rel_end_time = int(np.ceil(rel_right_ips[i]))
-                start_time = int(np.floor(left_ips[i]))
-                end_time = int(np.ceil(right_ips[i]))
+                rel_start_time = int(np.floor(rel_left_ips[i])) + start_frame
+                rel_end_time = int(np.ceil(rel_right_ips[i])) + start_frame
+                start_time = int(np.floor(left_ips[i])) + start_frame
+                end_time = int(np.ceil(right_ips[i])) + start_frame
                 prominence = float(prominences[i])
-                height = float(trace[peak_time])
+                height = float(subtrace[peak_time])
 
                 # Assign scale class
                 if prominence < quantiles[0]:

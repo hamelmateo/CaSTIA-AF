@@ -97,7 +97,9 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
     "peak_grouping": {
         "overlap_margin": 0,  # Margin for grouping overlapping peaks
         "verbose": False  # Print grouping information
-    }
+    },
+    "start_frame": None,  # Starting frame for peak detection (None for no limit)
+    "end_frame": None  # Ending frame for peak detection (None for no limit)
 }
 
 
@@ -111,7 +113,7 @@ GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
         "detrending": False,
         "smoothing": True,
         "normalization": False,
-        "cut_trace": True
+        "cut_trace": False
     },
 
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
@@ -177,7 +179,9 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
     "peak_grouping": {
         "overlap_margin": 0,  # Margin for grouping overlapping peaks
         "verbose": False  # Print grouping information
-    }
+    },
+    "start_frame": 50,  # Starting frame for peak detection (None for no limit)
+    "end_frame": None  # Ending frame for peak detection (None for no limit)
 }
 
 

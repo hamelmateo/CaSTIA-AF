@@ -56,7 +56,7 @@ class SpatialEventClusteringEngine:
             active_entries: List[Tuple[Cell, int]] = []
             for cell in population.cells:
                 for i, peak in enumerate(cell.trace.peaks):
-                    if window_start <= peak.start_time < window_end and not peak.in_cluster:
+                    if window_start <= peak.rel_start_time < window_end and not peak.in_cluster:
                         active_entries.append((cell, i))
 
             # Step 2: Build graph of active nodes
@@ -177,3 +177,63 @@ class SpatialEventClusteringEngine:
             fig.savefig(save_path, dpi=300)
             plt.close(fig)
             logger.info(f"Saved: {save_path}")
+
+    def plot_clustered_raster(self, population: Population, output_dir: Path) -> None:
+        """
+        Plot a full raster of all cells' binary traces per global peak,
+        grouped by clusters with a color and unclustered cells in gray.
+
+        Args:
+            population (Population): The full population.
+            output_dir (Path): Directory to save raster plots.
+        """
+        try:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            all_cells = population.cells
+            trace_length = max(len(cell.trace.binary) for cell in all_cells)
+            cell_label_to_index = {cell.label: i for i, cell in enumerate(all_cells)}
+
+            for peak_idx, clusters in enumerate(self.event_clusters):
+                clustered_labels = set()
+                cluster_to_cells = {}
+                for i, cluster in enumerate(clusters):
+                    cluster_to_cells[i] = [cell for cell, _ in cluster.members]
+                    clustered_labels.update(cell.label for cell in cluster_to_cells[i])
+
+                unclustered_cells = [cell for cell in all_cells if cell.label not in clustered_labels]
+
+                # Order rows: by cluster then unclustered
+                sorted_cells = []
+                color_list = []
+                cmap = cm.get_cmap("tab20", len(cluster_to_cells))
+                for i, cells in cluster_to_cells.items():
+                    sorted_cells.extend(cells)
+                    color_list.extend([cmap(i)] * len(cells))
+                sorted_cells.extend(unclustered_cells)
+                color_list.extend([(0.5, 0.5, 0.5, 1.0)] * len(unclustered_cells))  # gray for unclustered
+
+                # Create raster
+                n_cells = len(sorted_cells)
+                raster = np.zeros((n_cells, trace_length))
+                for i, cell in enumerate(sorted_cells):
+                    trace = cell.trace.binary
+                    raster[i, :len(trace)] = trace
+
+                fig, ax = plt.subplots(figsize=(36, 18))  # 7200x3600 pixels at 200 DPI
+                ax.imshow(raster, aspect="auto", cmap="gray_r")
+
+                for i, color in enumerate(color_list):
+                    ax.axhline(i - 0.5, color=color, linewidth=2, alpha=0.6)
+
+                ax.set_title(f"Clustered Raster Plot - Global Peak #{peak_idx}")
+                ax.set_xlabel("Frame")
+                ax.set_ylabel("Cells (grouped by cluster)")
+                fig.tight_layout()
+
+                save_path = output_dir / f"clustered_raster_peak_{peak_idx:03d}.png"
+                fig.savefig(save_path, dpi=200)
+                plt.close(fig)
+                logger.info(f"Saved clustered raster plot to: {save_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to plot clustered raster: {e}")

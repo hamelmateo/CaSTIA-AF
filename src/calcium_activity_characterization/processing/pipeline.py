@@ -507,10 +507,16 @@ class CalciumPipeline:
     def _run_spatial_event_clustering(self):
         engine = SpatialEventClusteringEngine()
         self.population.event_clusters = engine.run(self.population)
+
+        output_overlay_dir = self.output_path / "event_cluster_overlays"
+        output_raster_dir = self.output_path / "cluster_rasters"
+        
+        engine.plot_clustered_raster(self.population, output_raster_dir)
+
         engine.plot_clusters_with_graph(
             population=self.population,
             overlay_path=self.overlay_path,
-            output_dir=self.output_path / "event_cluster_overlays",
+            output_dir=output_overlay_dir,
             global_peaks=self.population.activity_trace.peaks
         )
 
