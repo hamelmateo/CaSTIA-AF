@@ -87,6 +87,9 @@ class Peak:
 
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
 
+        self.origin_label: Optional[int] = None # Label of the cell that originated this peak, if applicable
+
+
     def _compute_symmetry_score(self) -> Optional[float]:
         """
         Compute a symmetry score for the peak shape.

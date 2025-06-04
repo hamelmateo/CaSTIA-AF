@@ -10,8 +10,7 @@ import networkx as nx
 import numpy as np
 from pathlib import Path
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from matplotlib.colors import to_rgb
+from matplotlib import colors, cm
 import random
 
 from calcium_activity_characterization.data.clusters import Cluster
@@ -32,92 +31,136 @@ class SpatialEventClusteringEngine:
         event_clusters (List[List[Cluster]]): Clusters grouped by global peak index.
     """
 
-    def __init__(self):
+    def __init__(self, params: Dict = None):
+        """
+        Initialize the clustering engine.
+        
+        Args:
+            params (Dict): Optional parameters for clustering.
+        """
         self.event_clusters: List[List[Cluster]] = []
         self.cluster_id_counter: int = 0
+        self.params = params
+        self.pipeline = self.params.get("apply", {})
+
 
     def run(self, population: Population) -> List[List[Cluster]]:
         """
-        Run spatial event clustering on the given population.
+        Execute spatial clustering by combining direct/indirect neighbor and temporal constraints.
 
         Args:
-            population (Population): The cell population to analyze.
+            population (Population): The population of cells to cluster.
 
         Returns:
-            List[List[Cluster]]: Clusters for each global activity peak.
+            List[List[Cluster]]: List of clusters per global peak.
         """
-        neighbor_graph = population.neighbor_graph
+        try:
+            self.event_clusters = []
+            self.neighbor_graph = population.neighbor_graph
+            trace_type = self.params.get("trace", "activity")
+            max_comm_time = self.params.get("max_communication_time", 5)
+            indirect_hops = self.params.get("indirect_neighbors_num", 1)
 
-        for peak_idx, global_peak in enumerate(population.activity_trace.peaks):
-            window_start = global_peak.start_time
-            window_end = global_peak.end_time
+            for global_peak in getattr(population, trace_type).peaks:
+                window_start = global_peak.start_time
+                window_end = global_peak.end_time
+                active_entries = self._get_active_entries(population, window_start, window_end)
+                active_entries.sort(key=lambda x: x[0].trace.peaks[x[1]].rel_start_time)
+                clusters = self._cluster_combined(active_entries, max_comm_time, indirect_hops)
+                self.event_clusters.append(clusters)
 
-            # Step 1: Find all (cell, peak_index) where peak.start_time in window and not in another cluster
-            active_entries: List[Tuple[Cell, int]] = []
-            for cell in population.cells:
-                for i, peak in enumerate(cell.trace.peaks):
-                    if window_start <= peak.rel_start_time < window_end and not peak.in_cluster:
-                        active_entries.append((cell, i))
+            return self.event_clusters
 
-            # Step 2: Build graph of active nodes
-            label_to_entry = {cell.label: (cell, i) for cell, i in active_entries}
-            active_labels = set(label_to_entry.keys())
+        except Exception as e:
+            logger.error(f"Failed to run spatial clustering engine: {e}")
+            return []
 
-            visited = set()
-            clusters_for_peak: List[Cluster] = []
+    def _get_active_entries(self, population: Population, window_start: int, window_end: int) -> List[Tuple[Cell, int]]:
+        """
+        Extract cell/peak index pairs with peaks starting in the specified window.
 
-            for label in active_labels:
-                if label in visited:
+        Returns:
+            List[Tuple[Cell, int]]: Active peaks.
+        """
+        active_entries = []
+        for cell in population.cells:
+            for i, peak in enumerate(cell.trace.peaks):
+                if window_start <= peak.rel_start_time < window_end and not peak.in_cluster:
+                    active_entries.append((cell, i))
+        return active_entries
+
+    def _get_neighbors_within_hops(self, label: int, max_hops: int) -> set:
+        """
+        Return neighbors of a node within a specified number of hops.
+
+        Args:
+            label (int): Node label.
+            max_hops (int): Max hops to consider.
+
+        Returns:
+            set: Set of reachable node labels within hop distance.
+        """
+        visited = set()
+        queue = deque([(label, 0)])
+        while queue:
+            node, depth = queue.popleft()
+            if node in visited or depth > max_hops:
+                continue
+            visited.add(node)
+            for neighbor in self.neighbor_graph.neighbors(node):
+                queue.append((neighbor, depth + 1))
+        return visited
+
+    def _cluster_combined(self, active_entries: List[Tuple[Cell, int]], max_comm_time: int, max_hops: int) -> List[Cluster]:
+        """
+        Combine spatial (direct + optional indirect) and optional temporal constraints to form clusters.
+
+        Args:
+            active_entries (List[Tuple[Cell, int]]): Active peaks in the current window.
+            max_comm_time (int): Maximum allowed frame difference.
+            max_hops (int): Max hops to consider for indirect neighbors.
+            use_indirect (bool): Whether to include indirect neighbors.
+            use_sequential (bool): Whether to apply time constraint.
+
+        Returns:
+            List[Cluster]: Formed clusters.
+        """
+        clusters = []
+        visited = set()
+        label_to_entry = {cell.label: (cell, idx) for cell, idx in active_entries}
+
+        for cell, idx in active_entries:
+            if (cell.label, idx) in visited:
+                continue
+            peak = cell.trace.peaks[idx]
+            cluster = Cluster(self.cluster_id_counter, peak.start_time, peak.end_time)
+            cluster.add(cell, idx)
+            visited.add((cell.label, idx))
+
+            neighbors = self._get_neighbors_within_hops(cell.label, max_hops if self.pipeline.get("use_indirect_neighbors", False) else 1)
+            for other_label in neighbors:
+                if other_label == cell.label or other_label not in label_to_entry:
                     continue
-
-                # BFS with 1-hop and shared-neighbor expansion
-                cluster_labels = set()
-                queue = deque([label])
-
-                while queue:
-                    current = queue.popleft()
-                    if current in visited:
+                other_cell, other_idx = label_to_entry[other_label]
+                other_peak = other_cell.trace.peaks[other_idx]
+                if self.pipeline.get("use_sequential", False):
+                    time_diff = abs(other_peak.rel_start_time - peak.rel_start_time)
+                    if time_diff > max_comm_time:
                         continue
-                    visited.add(current)
-                    cluster_labels.add(current)
+                cluster.add(other_cell, other_idx)
+                visited.add((other_cell.label, other_idx))
 
-                    # Direct neighbors
-                    for neighbor in neighbor_graph.neighbors(current):
-                        if neighbor in active_labels and neighbor not in visited:
-                            queue.append(neighbor)
+            if len(cluster) > 1:
+                clusters.append(cluster)
+                self.cluster_id_counter += 1
 
-                    """
-                    # Shared neighbors: anyone sharing at least one direct neighbor
-                    for neighbor in neighbor_graph.nodes:
-                        if neighbor in active_labels and neighbor not in visited:
-                            shared = set(neighbor_graph.neighbors(current)) & set(neighbor_graph.neighbors(neighbor))
-                            if shared:
-                                queue.append(neighbor)
-                    """
-
-                # Build cluster if it has >= 1 cell
-                if cluster_labels:
-                    cluster = Cluster(
-                        id=self.cluster_id_counter,
-                        start_time=window_start,
-                        end_time=window_end
-                    )
-                    for label in cluster_labels:
-                        cell, idx = label_to_entry[label]
-                        cluster.add(cell, idx)
-                    clusters_for_peak.append(cluster)
-                    self.cluster_id_counter += 1
-
-            self.event_clusters.append(clusters_for_peak)
-
-        return self.event_clusters
+        return clusters
 
     def plot_clusters_with_graph(
         self,
         population: Population,
         overlay_path: Path,
-        output_dir: Path,
-        global_peaks: List[Peak]
+        output_dir: Path
     ) -> None:
         """
         Save overlay images showing clusters and their spatial graph for each global peak.
@@ -126,20 +169,19 @@ class SpatialEventClusteringEngine:
             population (Population): The population (for centroids and graph).
             overlay_path (Path): Path to grayscale overlay image.
             output_dir (Path): Directory to save colored overlays.
-            global_peaks (List[Peak]): The global peaks used to generate the event clusters.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         overlay = tifffile.imread(str(overlay_path))
         graph = population.neighbor_graph
+        global_peaks = population.impulse_trace.peaks
 
         for peak_idx, (cluster_list, global_peak) in enumerate(zip(self.event_clusters, global_peaks)):
             color_overlay = np.stack([overlay] * 3, axis=-1).astype(np.uint8)
 
             # Generate colors
-            cmap = cm.get_cmap('hsv', len(cluster_list) + 1)
             cluster_colors: Dict[int, Tuple[int, int, int]] = {
-                cluster.id: tuple((np.array(cmap(i)[:3]) * 255).astype(np.uint8))
-                for i, cluster in enumerate(cluster_list)
+                cluster.id: tuple(random.randint(50, 255) for _ in range(3))
+                for cluster in cluster_list
             }
 
             # Color cells in clusters
@@ -160,7 +202,7 @@ class SpatialEventClusteringEngine:
                 found = False
                 for cluster in cluster_list:
                     if any(cell.label == node for cell, _ in cluster.members):
-                        node_colors.append(to_rgb(np.array(cluster_colors[cluster.id]) / 255))
+                        node_colors.append(colors.to_rgb(np.array(cluster_colors[cluster.id]) / 255))
                         found = True
                         break
                 if not found:

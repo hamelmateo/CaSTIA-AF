@@ -31,6 +31,7 @@ from calcium_activity_characterization.utilities.loader import (
     save_clusters_on_overlay,
     plot_similarity_matrices,
     plot_raster,
+    plot_impulse_raster,
     get_config_with_fallback
 )
 from calcium_activity_characterization.processing.segmentation import segmented
@@ -77,6 +78,7 @@ class CalciumPipeline:
         self.raw_traces_path: Path = None
         self.smoothed_traces_path: Path = None
         self.binary_traces_path: Path = None
+        self.sequential_traces_path: Path = None
         self.similarity_matrices_path: Path = None
         self.arcos_input_df: Path = None
         self.peak_clusters_path: Path = None
@@ -104,11 +106,14 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
-        self._initialize_activity_trace()
+        self.population.assign_peak_origins()
+        save_pickle_file(self.population, self.sequential_traces_path)
+
+        self._initialize_population_traces()
         self._run_spatial_event_clustering()
-        #self._run_wave_propagation_analysis()
         self._save_population_metadata_report()
         
+        #self._run_wave_propagation_analysis()
         #self._run_peak_clustering()
         #self._causality_analysis()
         #self._run_umap()
@@ -141,6 +146,7 @@ class CalciumPipeline:
         self.raw_traces_path = output_path / "raw_active_cells.pkl"
         self.smoothed_traces_path = output_path / "smoothed_active_cells.pkl"
         self.binary_traces_path = output_path / "binarized_active_cells.pkl"
+        self.sequential_traces_path = output_path / "sequential_active_cells.pkl"
         self.similarity_matrices_path = output_path / "similarity_matrices.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.peak_clusters_path = output_path / "peak_clusters.pkl"
@@ -148,6 +154,8 @@ class CalciumPipeline:
         self.gc_graph = self.output_path / "gc_graphs"
         self.population_level_metrics_path = output_path / "population_metrics.pdf"
         self.spatial_neighbor_graph_path = output_path / "spatial_neighbor_graph.png"
+        self.event_cluster_on_overlay = self.output_path / "event_cluster_overlays"
+        self.raster_plots_clustered = self.output_path / "cluster_rasters"
 
     def _segment_cells(self):
         """
@@ -214,7 +222,7 @@ class CalciumPipeline:
         Reloads from pickle if permitted.
         """
         if not self.raw_traces_path.exists():
-            if get_config_with_fallback(self.config,"PARALLELELIZE"):
+            if get_config_with_fallback(self.config,"PARALLELIZE"):
                 self._get_intensity_parallel()
             else:
                 self._get_intensity_serial()
@@ -350,6 +358,7 @@ class CalciumPipeline:
 
         # Plot the binarized traces
         plot_raster(self.output_path, self.population.cells)
+        plot_impulse_raster(self.output_path, self.population.cells)
 
 
 
@@ -459,19 +468,29 @@ class CalciumPipeline:
             print(f"Saved GC graph for cluster {cluster.id} → {save_path}")
 
 
+    def _initialize_population_traces(self):
+        """
+        Initialize population traces by computing global, activity, and impulse traces.
+        """
+        self._initialize_global_trace()
+        self._initialize_activity_trace()
+        self._initialize_impulse_trace()
+
+        logger.info("Population traces initialized successfully.")
+
+
     def _initialize_global_trace(self):
         """
         Compute the global trace from active cells and process it through smoothing,
         peak detection, binarization, and metadata extraction.
         """
         version = "raw"
-        self.population.compute_global_trace(version=version , default_version=version)
-        self.population.global_trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"))
-        self.population.global_trace.default_version = "smoothed"
-
-        self.population.global_trace.detect_peaks(get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
+        default_version = "smoothed"
+        self.population.compute_global_trace(version=version , 
+                                             default_version=default_version, 
+                                             signal_processing_params=get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"), 
+                                             peak_detection_params=get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
         
-        self.population.global_trace.binarize_trace_from_peaks()
         self.population.global_trace.plot_all_traces(self.output_path / "global_trace_summary.png")
 
 
@@ -480,49 +499,46 @@ class CalciumPipeline:
         Compute the global trace from active cells and process it through smoothing,
         peak detection, binarization, and metadata extraction.
         """
-        version = "raw"
-        self.population.compute_activity_trace(default_version=version)
-        self.population.activity_trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"))
-        self.population.activity_trace.default_version = "smoothed"
+        default_version = "smoothed"
+        self.population.compute_activity_trace(default_version=default_version,
+                                               signal_processing_params=get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"),
+                                               peak_detection_params=get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
 
-        self.population.activity_trace.detect_peaks(get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
-
-        self.population.activity_trace.binarize_trace_from_peaks()
         self.population.activity_trace.plot_all_traces(self.output_path / "activity_trace_summary.png")
 
 
-    def _save_population_metadata_report(self) -> None:
+    def _initialize_impulse_trace(self):
         """
-        Compute and save population-level metadata as a multi-page PDF report.
+        Compute the impulse trace from active cells and process it through smoothing,
+        peak detection, binarization, and metadata extraction.
         """
-        try:
-            self.population.compute_population_metrics()
-            self.population.plot_metadata_summary(save_path=self.population_level_metrics_path)
-            logger.info(f"✅ Population metadata summary saved to {self.population_level_metrics_path}")
-        except Exception as e:
-            logger.error(f"Failed to compute or save population metadata: {e}")
+        default_version = "smoothed"
+        self.population.compute_impulse_trace(default_version=default_version,
+                                              signal_processing_params=get_config_with_fallback(self.config,"GLOBAL_SIGNAL_PROCESSING_PARAMETERS"),
+                                              peak_detection_params=get_config_with_fallback(self.config, "IMPULSE_PEAK_DETECTION_PARAMETERS"))
+
+        self.population.impulse_trace.plot_all_traces(self.output_path / "impulse_trace_summary.png")
+
+
 
 
 
     def _run_spatial_event_clustering(self):
-        engine = SpatialEventClusteringEngine()
+        engine = SpatialEventClusteringEngine(get_config_with_fallback(self.config, "SPATIAL_CLUSTERING_PARAMETERS"))
         self.population.event_clusters = engine.run(self.population)
-
-        output_overlay_dir = self.output_path / "event_cluster_overlays"
-        output_raster_dir = self.output_path / "cluster_rasters"
         
-        engine.plot_clustered_raster(self.population, output_raster_dir)
+        engine.plot_clustered_raster(self.population, self.raster_plots_clustered)
 
         engine.plot_clusters_with_graph(
             population=self.population,
             overlay_path=self.overlay_path,
-            output_dir=output_overlay_dir,
-            global_peaks=self.population.activity_trace.peaks
+            output_dir=self.event_cluster_on_overlay
         )
 
 
     def _run_wave_propagation_analysis(self) -> None:
         """
+        TODO: rework the conventions of the method and submethods.
         For each spatial peak cluster, compute wave propagation direction and speed,
         then save a trajectory plot overlaying the segmentation image.
         """
@@ -541,3 +557,16 @@ class CalciumPipeline:
                 analyzer.plot_cluster_trajectory(cluster, self.overlay_path, save_path)
 
         logger.info(f"✅ Wave propagation analysis completed and saved in {output_dir}")
+
+
+    def _save_population_metadata_report(self) -> None:
+        """
+        Compute and save population-level metadata as a multi-page PDF report.
+        """
+        try:
+            self.population.compute_population_metrics()
+            self.population.plot_metadata_summary(save_path=self.population_level_metrics_path)
+            logger.info(f"✅ Population metadata summary saved to {self.population_level_metrics_path}")
+        except Exception as e:
+            logger.error(f"Failed to compute or save population metadata: {e}")
+

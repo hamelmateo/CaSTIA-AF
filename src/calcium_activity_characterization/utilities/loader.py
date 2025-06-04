@@ -355,6 +355,44 @@ def plot_raster(
     logger.info(f"Raster plot saved to {save_path}")
 
 
+def plot_impulse_raster(save_path: Path, cells: List[Cell]) -> None:
+    """
+    Plot a raster-like image where each row is a cell, and impulses are drawn
+    as single-frame activations at rel_start_time.
+
+    Args:
+        cells (List[Cell]): List of Cell objects.
+        save_path (Path): Path to save the output image.
+    """
+    try:
+        n_cells = len(cells)
+        max_time = max((
+            max((p.rel_start_time for p in cell.trace.peaks), default=0)
+            for cell in cells
+        ), default=0) + 1
+
+        impulse_raster = np.zeros((n_cells, max_time), dtype=int)
+        for i, cell in enumerate(cells):
+            for peak in cell.trace.peaks:
+                if 0 <= peak.rel_start_time < max_time:
+                    impulse_raster[i, peak.rel_start_time] = 1
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.imshow(impulse_raster, aspect="auto", cmap="Greys", interpolation="nearest")
+        ax.set_title("Impulse Raster Plot (rel_start_time only)")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Cell Index")
+
+        plt.tight_layout()
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        save_file = save_path / "impulse_raster.png" if save_path.is_dir() else save_path
+        plt.savefig(save_file, dpi=600)
+        plt.close(fig)
+        logger.info(f"Impulse raster plot saved to {save_file}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate impulse raster plot: {e}")
+
 
 def plot_similarity_matrices(output_path: Path, similarity_matrices: list[np.ndarray]) -> None:
     """
@@ -439,3 +477,4 @@ def plot_dendrogram(output_path: Path, dendrogram_data: dict) -> None:
     plt.savefig(save_path, dpi=300)
     plt.close()
     logger.info(f"Dendrogram saved to {save_path}")
+

@@ -9,7 +9,7 @@ DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 SAVE_OVERLAY = True  # Save segmentation overlay
 ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
-PARALLELELIZE = True  # Use parallel processing for raw trace computing
+PARALLELIZE = True  # Use parallel processing for raw trace computing
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
 
 
@@ -118,7 +118,7 @@ GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
 
     "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
     "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
-    "sigma": 4.0,          # Global Gaussian smoothing σ
+    "sigma": 5.0,          # Global Gaussian smoothing σ
     "cut_trace_num_points": 50,  # Number of points to keep after cutting the trace
 
     "methods": {
@@ -159,7 +159,7 @@ GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
 
 
 # ==========================
-# GLOBAL ACTIVITY TRACE PEAK DETECTION PARAMETERSych
+# GLOBAL ACTIVITY TRACE PEAK DETECTION PARAMETERS
 # ==========================
 
 GLOBAL_PEAK_DETECTION_PARAMETERS = {
@@ -184,6 +184,48 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
     "end_frame": None  # Ending frame for peak detection (None for no limit)
 }
 
+
+
+# ==========================
+# IMPULSE TRACE PEAK DETECTION PARAMETERS
+# ==========================
+
+IMPULSE_PEAK_DETECTION_PARAMETERS = {
+    "method": "skimage",  # only 'skimage' supported for now
+    "params": {
+        "skimage": {
+            "prominence": 0.5, # Minimum prominence of peaks
+            "distance": 5,  # Minimum distance between peaks
+            "height": None,
+            "threshold": None,
+            "width": None,
+            "scale_class_quantiles": [0.33, 0.66],
+            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
+        }
+    },
+    "peak_grouping": {
+        "overlap_margin": 0,  # Margin for grouping overlapping peaks
+        "verbose": False  # Print grouping information
+    },
+    "start_frame": 50,  # Starting frame for peak detection (None for no limit)
+    "end_frame": None  # Ending frame for peak detection (None for no limit)
+}
+
+
+# ==========================
+# SPATIAL CLUSTERING PARAMETERS
+# ==========================
+
+SPATIAL_CLUSTERING_PARAMETERS = {
+    "trace": "impulse_trace",  # Name of the trace attribute to use for clustering - "impulse_trace", "activity_trace"
+    "apply": {
+        "use_indirect_neighbors": False,  # Use indirect neighbors for clustering
+        "use_sequential": True  # Use sequential clustering
+    },
+    "indirect_neighbors_num": 1,  # Consider indirect neighbors up to this number of nodes away
+    "max_communication_time": 10, # Maximum time (in frame) for communication between cells
+}
 
 
 

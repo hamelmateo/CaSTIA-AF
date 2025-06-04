@@ -99,13 +99,17 @@ class Trace:
             logger.error(f"Failed to process trace from '{input_trace_name}' to '{output_trace_name}': {e}")
             raise
 
-    def detect_peaks(self, detector_params: dict) -> None:
+    def detect_peaks(self, detector_params: dict = None) -> None:
         """
         Detect peaks in the active trace using the provided detector parameters.
 
         Args:
             detector_params (dict): Dictionary of parameters for the peak detection algorithm.
         """
+        if detector_params is None:
+            logger.error("No detector parameters provided.")
+            return
+        
         detector = PeakDetector(params=detector_params)
         trace = self.active_trace
         self.peaks = detector.run(trace) if len(trace) > 0 else []
