@@ -109,16 +109,16 @@ class SequentialSelectivityViewer(QMainWindow):
         if not self.population.cells:
             return
 
-        overlay_path = folder / "overlay.TIF"
+        overlay_path = folder / "nuclei_mask.TIF"
         if not overlay_path.exists():
-            overlay_path = folder / "overlay.tif"
+            overlay_path = folder / "nuclei_mask.tif"
         if overlay_path.exists():
             overlay = tifffile.imread(str(overlay_path))
-            self.base_rgb = np.stack([overlay] * 3, axis=-1).astype(np.uint8)
+            base = np.zeros((*overlay.shape, 3), dtype=np.uint8)
+            base[overlay>0] = [128, 128, 128]  # Gray color for overlay
+            self.base_rgb = base
         else:
-            all_coords = np.vstack([cell.pixel_coords for cell in self.population.cells])
-            shape = (all_coords[:, 0].max() + 1, all_coords[:, 1].max() + 1)
-            self.base_rgb = np.zeros((*shape, 3), dtype=np.uint8)
+            raise FileNotFoundError(f"Overlay file not found in {folder}")
 
         self.max_frame = len(self.population.cells[0].trace.binary) - 1
         self.slider.setMaximum(self.max_frame)
