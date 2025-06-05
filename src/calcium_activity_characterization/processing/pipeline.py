@@ -43,7 +43,6 @@ from calcium_activity_characterization.processing.peak_clustering import PeakClu
 from calcium_activity_characterization.processing.causality import GCAnalyzer
 from calcium_activity_characterization.processing.spatial_event_clustering import SpatialEventClusteringEngine
 from calcium_activity_characterization.analysis.wave_propagation_analysis import WavePropagationAnalyzer
-from calcium_activity_characterization.processing.peak_origin_assigner import PeakOriginAssigner
 
 logger = logging.getLogger(__name__)
 

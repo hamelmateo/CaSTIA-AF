@@ -6,14 +6,13 @@ from pathlib import Path
 import numpy as np
 import pickle
 import tifffile
-
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QGraphicsView, QGraphicsScene, QPushButton,
     QSlider, QFileDialog, QLineEdit, QCheckBox
 )
 from PyQt5.QtGui import QPixmap, QImage, QPen
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QPoint
 
 
 class SequentialSelectivityViewer(QMainWindow):
@@ -28,9 +27,18 @@ class SequentialSelectivityViewer(QMainWindow):
         self.label_map = {}
         self.arrow_intervals = []  # (start, end, origin_centroid, cause_centroid)
 
+        self.pixel_to_label = {}  # (y, x) -> label
+        self.hover_label = QLabel("Hovered Label: None")
+        self.last_hovered_label = None
+
         self.timer = QTimer()
         self.timer.setInterval(500)  # 0.5 s per frame
         self.timer.timeout.connect(self.next_frame)
+
+        self.hover_timer = QTimer()
+        self.hover_timer.setInterval(3000)  # Refresh every 3 seconds
+        self.hover_timer.timeout.connect(self.refresh_hover_display)
+        self.hover_timer.start()
 
         self.init_ui()
 
@@ -40,6 +48,8 @@ class SequentialSelectivityViewer(QMainWindow):
 
         self.scene = QGraphicsScene(self)
         self.view = QGraphicsView(self.scene, self)
+        self.view.setMouseTracking(True)
+        self.view.viewport().installEventFilter(self)
         main_layout.addWidget(self.view, 5)
 
         controls_layout = QVBoxLayout()
@@ -91,6 +101,7 @@ class SequentialSelectivityViewer(QMainWindow):
         self.show_individual.setChecked(True)
         controls_layout.addWidget(self.show_individual)
 
+        controls_layout.addWidget(self.hover_label)
         controls_layout.addStretch()
         main_layout.addLayout(controls_layout)
         self.setCentralWidget(main_widget)
@@ -115,7 +126,7 @@ class SequentialSelectivityViewer(QMainWindow):
         if overlay_path.exists():
             overlay = tifffile.imread(str(overlay_path))
             base = np.zeros((*overlay.shape, 3), dtype=np.uint8)
-            base[overlay>0] = [128, 128, 128]  # Gray color for overlay
+            base[overlay > 0] = [128, 128, 128]  # Gray color for overlay
             self.base_rgb = base
         else:
             raise FileNotFoundError(f"Overlay file not found in {folder}")
@@ -124,6 +135,11 @@ class SequentialSelectivityViewer(QMainWindow):
         self.slider.setMaximum(self.max_frame)
 
         self.label_map = {cell.label: cell for cell in self.population.cells}
+        self.pixel_to_label.clear()
+        for cell in self.population.cells:
+            for y, x in cell.pixel_coords:
+                self.pixel_to_label[(y, x)] = cell.label
+
         self.precompute_arrows()
         self.update_frame()
 
@@ -145,7 +161,7 @@ class SequentialSelectivityViewer(QMainWindow):
             except IndexError:
                 continue
             start = cause_peak.rel_start_time
-            end = origin_peak.rel_end_time
+            end = min(origin_peak.rel_end_time, cause_peak.rel_end_time)
             self.arrow_intervals.append((start, end, origin_cell.centroid, cause_cell.centroid))
 
     def update_frame(self):
@@ -185,6 +201,22 @@ class SequentialSelectivityViewer(QMainWindow):
             if start <= frame <= end:
                 self.scene.addLine(origin_cent[1], origin_cent[0], cause_cent[1], cause_cent[0], pen)
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+
+    def eventFilter(self, obj, event):
+        if obj is self.view.viewport() and event.type() == event.MouseMove:
+            pos = event.pos()
+            img_pos = self.view.mapToScene(pos).toPoint()
+            y, x = img_pos.y(), img_pos.x()
+            label = self.pixel_to_label.get((y, x))
+            self.last_hovered_label = label
+        return super().eventFilter(obj, event)
+
+    def refresh_hover_display(self):
+        label = self.last_hovered_label
+        if label is not None:
+            self.hover_label.setText(f"Hovered Label: {label}")
+        else:
+            self.hover_label.setText("Hovered Label: None")
 
     def next_frame(self):
         frame = self.slider.value()

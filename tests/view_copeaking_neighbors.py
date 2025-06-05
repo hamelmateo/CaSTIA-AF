@@ -1,30 +1,38 @@
-# view_sequential_cell_activity.py
-# Usage Example:
-# >>> Run this script to explore origin vs caused peaks with arrows between cells
+# view_copeaking_neighbors.py
+# Usage: Run this script and select a folder with 'nuclei_mask.TIF' and a population.pkl
 
 import sys
 from pathlib import Path
 import numpy as np
 import pickle
+import tifffile
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QGraphicsView, QGraphicsScene, QPushButton,
-    QSlider, QFileDialog, QLineEdit, QCheckBox
+    QSlider, QFileDialog, QLineEdit
 )
-from PyQt5.QtGui import QPixmap, QImage, QPen
+from PyQt5.QtGui import QPixmap, QImage, QPen, QColor
 from PyQt5.QtCore import Qt, QTimer
+import random
 
-class SequentialSignalViewer(QMainWindow):
+
+class CoPeakingNeighborViewer(QMainWindow):
+    """
+    GUI to visualize co-peaking spatial neighbor groups over time.
+    Co-peaking groups are shown in different colors per frame.
+    """
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Sequential Peak Viewer")
+        self.setWindowTitle("Co-Peaking Neighbors Viewer")
         self.setGeometry(100, 100, 1400, 1000)
 
-        self.population = []
+        self.population = None
+        self.base_rgb = None
         self.max_frame = 0
-        self.image_shape = None
+        self.label_map = {}
+
         self.timer = QTimer()
-        self.timer.setInterval(20)
+        self.timer.setInterval(500)
         self.timer.timeout.connect(self.next_frame)
 
         self.init_ui()
@@ -74,83 +82,65 @@ class SequentialSignalViewer(QMainWindow):
         self.load_btn.clicked.connect(self.load_folder)
         controls_layout.addWidget(self.load_btn)
 
-        self.show_origin = QCheckBox("Show Origin")
-        self.show_origin.setChecked(True)
-        controls_layout.addWidget(self.show_origin)
-
-        self.show_caused = QCheckBox("Show Caused")
-        self.show_caused.setChecked(True)
-        controls_layout.addWidget(self.show_caused)
-
-        self.show_individual = QCheckBox("Show Individual")
-        self.show_individual.setChecked(True)
-        controls_layout.addWidget(self.show_individual)
-
         controls_layout.addStretch()
         main_layout.addLayout(controls_layout)
         self.setCentralWidget(main_widget)
 
     def load_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
-        if folder:
-            with open(Path(folder) / "sequential_active_cells.pkl", 'rb') as f:
-                self.population = pickle.load(f)
+        if not folder:
+            return
+        folder = Path(folder)
 
-            if not self.population.cells:
-                return
+        pkl_path = folder / "sequential_active_cells.pkl"
+        if not pkl_path.exists():
+            return
+        with open(pkl_path, 'rb') as f:
+            self.population = pickle.load(f)
 
-            self.max_frame = len(self.population.cells[0].trace.binary) - 1
-            self.slider.setMaximum(self.max_frame)
+        overlay_path = folder / "nuclei_mask.TIF"
+        if not overlay_path.exists():
+            overlay_path = folder / "nuclei_mask.tif"
+        if not overlay_path.exists():
+            return
 
-            all_coords = np.vstack([cell.pixel_coords for cell in self.population.cells])
-            self.image_shape = (all_coords[:, 0].max() + 1, all_coords[:, 1].max() + 1)
-            self.update_frame()
+        overlay = tifffile.imread(str(overlay_path))
+        base = np.zeros((*overlay.shape, 3), dtype=np.uint8)
+        base[overlay > 0] = [128, 128, 128]
+        self.base_rgb = base
+
+        self.max_frame = len(self.population.cells[0].trace.binary) - 1
+        self.slider.setMaximum(self.max_frame)
+
+        self.label_map = {cell.label: cell for cell in self.population.cells}
+
+        self.update_frame()
 
     def update_frame(self):
+        if self.population is None:
+            return
+
         frame = self.slider.value()
         self.frame_label.setText(f"Frame: {frame}")
-        mask, arrows = self.generate_mask(frame)
+        mask = self.base_rgb.copy()
+
+        frame_groups = [grp for grp in getattr(self.population, 'copeaking_neighbors', []) if grp.frame == frame]
+        for group in frame_groups:
+            color = self.random_color()
+            for label in group.get_labels():
+                cell = self.label_map.get(label)
+                if cell:
+                    for y, x in cell.pixel_coords:
+                        mask[y, x] = color
 
         qimg = QImage(mask.data, mask.shape[1], mask.shape[0], QImage.Format_RGB888)
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
-
-        pen = QPen(Qt.red, 2)
-        for origin, target in arrows:
-            self.scene.addLine(origin[1], origin[0], target[1], target[0], pen)
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
-    def generate_mask(self, frame):
-        mask = np.zeros((*self.image_shape, 3), dtype=np.uint8)
-        arrows = []
-        label_map = {cell.label: cell for cell in self.population.cells}
-
-        for cell in self.population.cells:
-            if frame >= len(cell.trace.binary):
-                continue
-
-            is_active = cell.trace.binary[frame] == 1
-            color = [128, 128, 128]  # Default: gray for inactive
-
-            if is_active:
-                peak = next((p for p in cell.trace.peaks if p.rel_start_time <= frame <= p.rel_end_time), None)
-                if peak:
-                    if peak.cause_type == "origin" and self.show_origin.isChecked():
-                        color = [0, 255, 0]
-                    elif peak.cause_type == "caused" and self.show_caused.isChecked():
-                        color = [255, 165, 0]
-                        origin = label_map.get(peak.origin_label)
-                        if origin:
-                            arrows.append((origin.centroid, cell.centroid))
-                    elif peak.cause_type == "individual" and self.show_individual.isChecked():
-                        color = [0, 128, 255]
-                    else:
-                        color = [0, 0, 0]  # Hidden
-
-            for y, x in cell.pixel_coords:
-                mask[y, x] = color
-
-        return mask, arrows
+    def random_color(self):
+        r, g, b = random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)
+        return [r, g, b]
 
     def next_frame(self):
         frame = self.slider.value()
@@ -177,8 +167,9 @@ class SequentialSignalViewer(QMainWindow):
     def stop_animation(self):
         self.timer.stop()
 
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    viewer = SequentialSignalViewer()
+    viewer = CoPeakingNeighborViewer()
     viewer.show()
     sys.exit(app.exec_())
