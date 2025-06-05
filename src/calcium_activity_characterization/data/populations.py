@@ -16,11 +16,15 @@ import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication
+from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
+from calcium_activity_characterization.data.cell_to_cell_communication import generate_cell_to_cell_communications
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
 
 from calcium_activity_characterization.utilities.loader import get_config_with_fallback
+
 
 import networkx as nx
 from scipy.stats import entropy
@@ -48,6 +52,8 @@ class Population:
     def __init__(self, cells: List[Cell], mask: Optional[np.ndarray], output_path: Optional[Path]) -> None:
         self.cells: List[Cell] = cells
         self.neighbor_graph: nx.Graph = None
+        self.copeaking_neighbors: List[CoPeakingNeighbors] = None
+        self.cell_to_cell_communication: List[CellToCellCommunication] = None
         self.global_trace: Optional[Trace] = None   # Mean trace across all cells
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
         self.impulse_trace: Optional[Trace] = None  # Trace of summed rel_start_time impulses
@@ -66,183 +72,6 @@ class Population:
             self.neighbor_graph = None
 
 
-
-    def assign_peak_origins(self, max_time_gap: int = 5) -> None:
-        """
-        Assign origin labels to all peaks using neighbor propagation logic.
-        Handles co-peaking cells and standard isolated peaks.
-
-        Args:
-            max_time_gap (int): Max time allowed between origin and caused peak.
-        """
-        label_to_cell = {cell.label: cell for cell in self.cells}
-        assigned = set()
-        graph = self.neighbor_graph
-        
-        # Step 1: Identify co-peaking subgraphs by time
-        copeaking_groups_by_time = self.get_copeaking_neighbors()
-
-        # Step 2: For each timepoint, resolve co-peaking groups
-        for t, components in copeaking_groups_by_time.items():
-            for component in components:
-                group = [(label_to_cell[l], next(p for p in label_to_cell[l].trace.peaks if p.rel_start_time == t)) for l in component]
-                
-                # Step 1: External candidates
-                candidates = []
-                for cell, peak in group:
-                    if (cell.label, peak.rel_start_time) in assigned:
-                        continue
-                    peak.origin_label = cell.label
-                    for neighbor in graph.neighbors(cell.label):
-                        if neighbor in component:
-                            continue
-                        neighbor_cell = label_to_cell[neighbor]
-                        for other_peak in neighbor_cell.trace.peaks:
-                            if 0 < (peak.rel_start_time - other_peak.rel_start_time) <= max_time_gap:
-                                spatial_dist = np.linalg.norm(cell.centroid - neighbor_cell.centroid)
-                                candidates.append((peak.rel_start_time - other_peak.rel_start_time, spatial_dist, neighbor))
-
-                if candidates:
-                    candidates.sort()
-                    origin = candidates[0][2]
-                else:
-                    # Step 2: No external origin → find earliest in group
-                    group.sort(key=lambda x: (x[1].start_time, x[0].label))
-                    origin = group[0][0].label
-
-                # Step 3: Propagate origin through group
-                queue = deque([origin])
-                visited = set(queue)
-                origin_map = {origin: None}
-
-                while queue:
-                    current = queue.popleft()
-                    for neighbor in graph.neighbors(current):
-                        if neighbor in component and neighbor not in visited:
-                            origin_map[neighbor] = current
-                            visited.add(neighbor)
-                            queue.append(neighbor)
-
-                for cell, peak in group:
-                    if origin_map.get(cell.label) is None:
-                        peak.origin_label = cell.label
-                    else:
-                        peak.origin_label = origin_map.get(cell.label, cell.label)
-                    assigned.add((cell.label, peak.rel_start_time))
-        
-        # Handle remaining peaks not in any group
-        for cell in self.cells: 
-            for peak in cell.trace.peaks:
-                if (cell.label, peak.rel_start_time) in assigned:
-                    continue
-                peak.origin_label = cell.label
-                t0 = peak.rel_start_time
-                candidates = []
-
-                for neighbor in graph.neighbors(cell.label):
-                    neighbor_cell = label_to_cell[neighbor]
-                    for other_peak in neighbor_cell.trace.peaks:
-                        t1 = other_peak.rel_start_time
-                        if 0 < (t0 - t1) <= max_time_gap:
-                            spatial_dist = np.linalg.norm(cell.centroid - neighbor_cell.centroid)
-                            candidates.append((t0 - t1, spatial_dist, neighbor))
-
-                if candidates:
-                    candidates.sort(key=lambda x: (x[0], x[1]))  # most recent, then closest
-                    peak.origin_label = candidates[0][2]
-
-        self.print_peak_origins()
-
-
-    def print_peak_origins(self) -> None:
-        """
-        Print for each peak its cell, start time, and assigned origin peak.
-        Also report how many are root peaks vs caused peaks.
-        """
-        label_to_cell = {cell.label: cell for cell in self.cells}
-
-        root_count = 0
-        caused_count = 0
-
-        for cell in self.cells:
-            for peak in cell.trace.peaks:
-                origin_label = peak.origin_label
-                origin_time = None
-
-                if origin_label in label_to_cell:
-                    origin_cell = label_to_cell[origin_label]
-                    for other_peak in origin_cell.trace.peaks:
-                        if other_peak.rel_start_time <= peak.rel_start_time <= other_peak.rel_end_time:
-                            origin_time = other_peak.rel_start_time
-                            break
-
-                if origin_label == cell.label:
-                    root_count += 1
-                else:
-                    caused_count += 1
-
-                print(f"Cell {cell.label} @ t={peak.rel_start_time} ← Origin: Cell {origin_label} @ t={origin_time}")
-
-        print(f"\n✅ Root peaks (self-origin): {root_count}")
-        print(f"✅ Caused peaks (by other cells): {caused_count}")
-
-
-    def get_copeaking_neighbors(self) -> Dict[int, List[set[int]]]:
-        """
-        For each rel_start_time, return sets of co-peaking neighbor cell labels.
-
-        Returns:
-            Dict[int, List[Set[int]]]: Map from rel_start_time to list of connected cell label sets.
-        """
-        from collections import defaultdict
-        import networkx as nx
-
-        time_to_labels = defaultdict(list)
-        for cell in self.cells:
-            for peak in cell.trace.peaks:
-                time_to_labels[peak.rel_start_time].append(cell.label)
-
-        result = {}
-        for t, labels in time_to_labels.items():
-            subgraph = self.neighbor_graph.subgraph(labels)
-            components = [set(comp) for comp in nx.connected_components(subgraph)]
-            # Filter out singletons
-            result[t] = [comp for comp in components if len(comp) > 1]
-
-        return result
-
-
-
-    def resolve_simultaneous_peaks(self) -> None:
-        """
-        After initial origin assignment, merge simultaneous peaks from connected cells
-        into shared clusters by selecting a canonical root.
-        """
-        from collections import defaultdict
-
-        label_to_cell = {cell.label: cell for cell in self.cells}
-        time_to_cells = defaultdict(list)
-
-        # Index all peaks by rel_start_time
-        for cell in self.cells:
-            for peak in cell.trace.peaks:
-                time_to_cells[peak.rel_start_time].append((cell.label, peak))
-
-        for t, entries in time_to_cells.items():
-            # build connected subgraphs of co-peaking neighbors
-            labels = [label for label, _ in entries]
-            subgraph = self.neighbor_graph.subgraph(labels)
-
-            for component in nx.connected_components(subgraph):
-                if len(component) > 1:
-                    root_label = min(component)  # or other criteria
-                    for label in component:
-                        peak = next(p for l, p in entries if l == label)
-                        peak.origin_label = root_label
-
-
-
-    
     def _create_trace_object(self, trace: np.ndarray, default_version: str, signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> Trace:
         """
         Internal helper to create a Trace object from a raw array.
@@ -374,6 +203,28 @@ class Population:
             peak_detection_params=peak_detection_params
         )
 
+    def generate_cell_to_cell_communications(
+        self,
+        max_time_gap: int = 10
+    ) -> None:
+        """
+        Create co-peaking neighbor groups, cell-to-cell communication links and classifies all peaks.
+
+        Args:
+            max_time_gap (int): Max temporal gap to allow causal linking.
+        """
+
+        self.copeaking_neighbors = generate_copeaking_groups(
+            cells=self.cells,
+            neighbor_graph=self.neighbor_graph
+        )
+
+        self.cell_to_cell_communications = generate_cell_to_cell_communications(
+            self.cells,
+            neighbor_graph=self.neighbor_graph,
+            copeaking_groups=self.copeaking_neighbors,
+            max_time_gap=max_time_gap
+        )
 
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:

@@ -87,7 +87,9 @@ class Peak:
 
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
 
-        self.origin_label: Optional[int] = None # Label of the cell that originated this peak, if applicable
+        self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
+        self.origin_label: Optional[int] = None # Label of the origin peak if this is a caused peak
+
 
 
     def _compute_symmetry_score(self) -> Optional[float]:

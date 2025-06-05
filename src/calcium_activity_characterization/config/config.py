@@ -227,7 +227,7 @@ SPATIAL_CLUSTERING_PARAMETERS = {
     "max_communication_time": 10, # Maximum time (in frame) for communication between cells
 }
 
-
+MAX_COMMUNICATION_TIME = 10  # Maximum time (in frames) for communication between cells
 
 # ==========================
 # PEAK CLUSTERING PARAMETERS

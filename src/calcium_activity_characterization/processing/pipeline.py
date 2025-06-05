@@ -43,6 +43,7 @@ from calcium_activity_characterization.processing.peak_clustering import PeakClu
 from calcium_activity_characterization.processing.causality import GCAnalyzer
 from calcium_activity_characterization.processing.spatial_event_clustering import SpatialEventClusteringEngine
 from calcium_activity_characterization.analysis.wave_propagation_analysis import WavePropagationAnalyzer
+from calcium_activity_characterization.processing.peak_origin_assigner import PeakOriginAssigner
 
 logger = logging.getLogger(__name__)
 
@@ -106,8 +107,7 @@ class CalciumPipeline:
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
-        self.population.assign_peak_origins()
-        save_pickle_file(self.population, self.sequential_traces_path)
+        self._assign_peak_origins()
 
         self._initialize_population_traces()
         self._run_spatial_event_clustering()
@@ -468,6 +468,15 @@ class CalciumPipeline:
             print(f"Saved GC graph for cluster {cluster.id} → {save_path}")
 
 
+    def _assign_peak_origins(self) -> None:
+        """
+        Assign the origin of each peak in the population based on the cell-to-cell communication model.
+        """
+
+        self.population.generate_cell_to_cell_communications(get_config_with_fallback(self.config, "MAX_COMMUNICATION_TIME"))
+        save_pickle_file(self.population, self.sequential_traces_path)
+
+
     def _initialize_population_traces(self):
         """
         Initialize population traces by computing global, activity, and impulse traces.
@@ -518,8 +527,6 @@ class CalciumPipeline:
                                               peak_detection_params=get_config_with_fallback(self.config, "IMPULSE_PEAK_DETECTION_PARAMETERS"))
 
         self.population.impulse_trace.plot_all_traces(self.output_path / "impulse_trace_summary.png")
-
-
 
 
 

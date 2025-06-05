@@ -9,10 +9,10 @@ import pickle
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QGraphicsView, QGraphicsScene, QPushButton,
-    QSlider, QFileDialog, QLineEdit
+    QSlider, QFileDialog, QLineEdit, QCheckBox
 )
-from PyQt5.QtGui import QPixmap, QImage, QPen, QColor, QPolygonF
-from PyQt5.QtCore import Qt, QTimer, QPointF
+from PyQt5.QtGui import QPixmap, QImage, QPen
+from PyQt5.QtCore import Qt, QTimer
 
 class SequentialSignalViewer(QMainWindow):
     def __init__(self):
@@ -74,6 +74,18 @@ class SequentialSignalViewer(QMainWindow):
         self.load_btn.clicked.connect(self.load_folder)
         controls_layout.addWidget(self.load_btn)
 
+        self.show_origin = QCheckBox("Show Origin")
+        self.show_origin.setChecked(True)
+        controls_layout.addWidget(self.show_origin)
+
+        self.show_caused = QCheckBox("Show Caused")
+        self.show_caused.setChecked(True)
+        controls_layout.addWidget(self.show_caused)
+
+        self.show_individual = QCheckBox("Show Individual")
+        self.show_individual.setChecked(True)
+        controls_layout.addWidget(self.show_individual)
+
         controls_layout.addStretch()
         main_layout.addLayout(controls_layout)
         self.setCentralWidget(main_widget)
@@ -123,13 +135,17 @@ class SequentialSignalViewer(QMainWindow):
             if is_active:
                 peak = next((p for p in cell.trace.peaks if p.rel_start_time <= frame <= p.rel_end_time), None)
                 if peak:
-                    if peak.origin_label == cell.label:
-                        color = [0, 255, 0]  # Root
-                    else:
-                        color = [255, 165, 0]  # Dependent
+                    if peak.cause_type == "origin" and self.show_origin.isChecked():
+                        color = [0, 255, 0]
+                    elif peak.cause_type == "caused" and self.show_caused.isChecked():
+                        color = [255, 165, 0]
                         origin = label_map.get(peak.origin_label)
                         if origin:
                             arrows.append((origin.centroid, cell.centroid))
+                    elif peak.cause_type == "individual" and self.show_individual.isChecked():
+                        color = [0, 128, 255]
+                    else:
+                        color = [0, 0, 0]  # Hidden
 
             for y, x in cell.pixel_coords:
                 mask[y, x] = color
