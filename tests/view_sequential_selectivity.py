@@ -1,5 +1,7 @@
 # view_sequential_selectivity.py
-# Usage: Run this script and select an output folder containing overlay.TIF and sequential_active_cells.pkl
+# Usage: Run this script and select an output folder containing nuclei-mask.tiff
+# and sequential_active_cells.pkl. The nuclei mask will be used as a gray
+# background.
 
 import sys
 from pathlib import Path
@@ -109,16 +111,23 @@ class SequentialSelectivityViewer(QMainWindow):
         if not self.population.cells:
             return
 
-        overlay_path = folder / "overlay.TIF"
-        if not overlay_path.exists():
-            overlay_path = folder / "overlay.tif"
-        if overlay_path.exists():
-            overlay = tifffile.imread(str(overlay_path))
-            self.base_rgb = np.stack([overlay] * 3, axis=-1).astype(np.uint8)
+        mask_path = folder / "nuclei-mask.tiff"
+        if mask_path.exists():
+            mask = tifffile.imread(str(mask_path))
+            base = np.zeros((*mask.shape, 3), dtype=np.uint8)
+            base[mask > 0] = [128, 128, 128]
+            self.base_rgb = base
         else:
-            all_coords = np.vstack([cell.pixel_coords for cell in self.population.cells])
-            shape = (all_coords[:, 0].max() + 1, all_coords[:, 1].max() + 1)
-            self.base_rgb = np.zeros((*shape, 3), dtype=np.uint8)
+            overlay_path = folder / "overlay.TIF"
+            if not overlay_path.exists():
+                overlay_path = folder / "overlay.tif"
+            if overlay_path.exists():
+                overlay = tifffile.imread(str(overlay_path))
+                self.base_rgb = np.stack([overlay] * 3, axis=-1).astype(np.uint8)
+            else:
+                all_coords = np.vstack([cell.pixel_coords for cell in self.population.cells])
+                shape = (all_coords[:, 0].max() + 1, all_coords[:, 1].max() + 1)
+                self.base_rgb = np.zeros((*shape, 3), dtype=np.uint8)
 
         self.max_frame = len(self.population.cells[0].trace.binary) - 1
         self.slider.setMaximum(self.max_frame)
