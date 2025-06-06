@@ -117,8 +117,6 @@ def _resolve_copeaking_group(
         for target_label, target_idx in group.members:
             if target_label in neighbor_graph[origin_label]:
                 cause_time = label_to_cell[target_label].trace.peaks[target_idx].rel_start_time
-                if origin_label == 582:
-                    logger.warning(f"External origin found in group {group.labels} with label {origin_label} at time {origin_time}")
                 communications.append(CellToCellCommunication(
                     origin=(origin_label, origin_idx),
                     cause=(target_label, target_idx),
@@ -217,8 +215,6 @@ def _resolve_individual_peaks(
 
             if best_candidate:
                 origin_label, origin_idx, origin_time = best_candidate
-                if origin_label == 582:
-                    logger.warning(f"External origin found for individual peak in cell {cell.label} at time {peak.rel_start_time}")
                 comm = CellToCellCommunication(
                     origin=(origin_label, origin_idx),
                     cause=(cell.label, i),

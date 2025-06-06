@@ -16,9 +16,9 @@ import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
-from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication
+from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
-from calcium_activity_characterization.data.cell_to_cell_communication import generate_cell_to_cell_communications
+from calcium_activity_characterization.data.events import Event
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
@@ -54,6 +54,7 @@ class Population:
         self.neighbor_graph: nx.Graph = None
         self.copeaking_neighbors: List[CoPeakingNeighbors] = None
         self.cell_to_cell_communication: List[CellToCellCommunication] = None
+        self.events: List[Event] = None
         self.global_trace: Optional[Trace] = None   # Mean trace across all cells
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
         self.impulse_trace: Optional[Trace] = None  # Trace of summed rel_start_time impulses
@@ -224,6 +225,21 @@ class Population:
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
             max_time_gap=max_time_gap
+        )
+
+
+    def generate_events(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Generate events from cell-to-cell communications.
+
+        Args:
+            config (Optional[Dict[str, Any]]): Configuration dictionary with parameters for event generation.
+            If not provided, uses default parameters from the configuration file.
+        """
+        self.events = Event.from_communications(
+            self.cell_to_cell_communications,
+            self.cells,
+            config=config
         )
 
 

@@ -79,6 +79,7 @@ class CalciumPipeline:
         self.smoothed_traces_path: Path = None
         self.binary_traces_path: Path = None
         self.sequential_traces_path: Path = None
+        self.events_path: Path = None
         self.similarity_matrices_path: Path = None
         self.arcos_input_df: Path = None
         self.peak_clusters_path: Path = None
@@ -107,11 +108,12 @@ class CalciumPipeline:
         self._binarization_pipeline()
         
         self._assign_peak_origins()
+        self._extract_events()
 
         self._initialize_population_traces()
-        self._run_spatial_event_clustering()
         self._save_population_metadata_report()
         
+        #self._run_spatial_event_clustering()
         #self._run_wave_propagation_analysis()
         #self._run_peak_clustering()
         #self._causality_analysis()
@@ -146,6 +148,7 @@ class CalciumPipeline:
         self.smoothed_traces_path = output_path / "smoothed_active_cells.pkl"
         self.binary_traces_path = output_path / "binarized_active_cells.pkl"
         self.sequential_traces_path = output_path / "sequential_active_cells.pkl"
+        self.events_path = output_path / "population_events.pkl"
         self.similarity_matrices_path = output_path / "similarity_matrices.pkl"
         self.arcos_input_df = output_path / "arcos_input_df.pkl"
         self.peak_clusters_path = output_path / "peak_clusters.pkl"
@@ -474,6 +477,15 @@ class CalciumPipeline:
 
         self.population.generate_cell_to_cell_communications(get_config_with_fallback(self.config, "MAX_COMMUNICATION_TIME"))
         save_pickle_file(self.population, self.sequential_traces_path)
+
+
+    def _extract_events(self) -> None:
+        """
+        Extract events from the population traces and save them.
+        This method is a placeholder for future event extraction logic.
+        """
+        self.population.generate_events(config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
+        save_pickle_file(self.population, self.events_path)
 
 
     def _initialize_population_traces(self):

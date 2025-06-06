@@ -229,6 +229,27 @@ SPATIAL_CLUSTERING_PARAMETERS = {
 
 MAX_COMMUNICATION_TIME = 10  # Maximum time (in frames) for communication between cells
 
+
+
+# ==========================
+# EVENTS DETECTION PARAMETERS
+# ==========================
+
+EVENT_EXTRACTION_PARAMETERS = {
+    "min_cell_count": 2,  # Minimum number of unique cells required to form an event
+
+    "shape_classification": {
+        "pca_ratio_threshold_radial": 1.5,         # Below this = radial
+        "pca_ratio_threshold_longitudinal": 3.0    # Above this = longitudinal
+    },
+
+    "convex_hull": {
+        "min_points": 3,       # Minimum number of points to compute convex hull
+        "min_duration": 1      # Minimum time difference to compute propagation speed
+    }
+}
+
+
 # ==========================
 # PEAK CLUSTERING PARAMETERS
 # ==========================
