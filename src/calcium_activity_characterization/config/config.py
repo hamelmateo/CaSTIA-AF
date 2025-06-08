@@ -99,7 +99,8 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
         "verbose": False  # Print grouping information
     },
     "start_frame": None,  # Starting frame for peak detection (None for no limit)
-    "end_frame": None  # Ending frame for peak detection (None for no limit)
+    "end_frame": None,  # Ending frame for peak detection (None for no limit)
+    "filter_overlapping_peaks": True  # Filter overlapping peaks based on prominence
 }
 
 
@@ -181,7 +182,8 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
         "verbose": False  # Print grouping information
     },
     "start_frame": 50,  # Starting frame for peak detection (None for no limit)
-    "end_frame": None  # Ending frame for peak detection (None for no limit)
+    "end_frame": None,  # Ending frame for peak detection (None for no limit)
+    "filter_overlapping_peaks": False  # Filter overlapping peaks based on prominence
 }
 
 
@@ -209,7 +211,8 @@ IMPULSE_PEAK_DETECTION_PARAMETERS = {
         "verbose": False  # Print grouping information
     },
     "start_frame": 50,  # Starting frame for peak detection (None for no limit)
-    "end_frame": None  # Ending frame for peak detection (None for no limit)
+    "end_frame": None,  # Ending frame for peak detection (None for no limit)
+    "filter_overlapping_peaks": False  # Filter overlapping peaks based on prominence
 }
 
 

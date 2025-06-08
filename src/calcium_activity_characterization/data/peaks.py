@@ -141,6 +141,9 @@ class PeakDetector:
         peaks = self._detect(trace)
         peaks = self._group_overlapping_peaks(peaks)
 
+        if self.params.get("filter_overlapping_peaks", False):
+            peaks = self._filter_non_parent_peaks(peaks)
+
         return peaks
 
 
@@ -310,3 +313,20 @@ class PeakDetector:
             logger.info(f"[PeakDetector] Found {num_individuals} individual (non-overlapping) peaks.")
 
         return grouped_peaks
+    
+
+    def _filter_non_parent_peaks(self, peaks: List[Peak]) -> List[Peak]:
+        """
+        Eliminate overlapping peaks, retaining only those with role='parent'.
+
+        Args:
+            peaks (List[Peak]): List of grouped peaks.
+
+        Returns:
+            List[Peak]: Filtered peaks.
+        """
+        filtered = [p for p in peaks if p.role == "individual" or p.role == "parent"]
+        n_removed = len(peaks) - len(filtered)
+        if n_removed > 0:
+            logger.info(f"[PeakDetector] Eliminated {n_removed} overlapping peaks (non-parents).")
+        return filtered

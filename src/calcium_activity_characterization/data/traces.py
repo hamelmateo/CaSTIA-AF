@@ -17,7 +17,7 @@ from typing import List, Dict, Any, Optional, TYPE_CHECKING
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
 from calcium_activity_characterization.data.peaks import PeakDetector
 
-from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
+from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
 
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
@@ -222,13 +222,13 @@ class Trace:
 
         # Histograms
         if amplitudes:
-            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_count=20)
+            self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_count=20)
 
         if durations:
-            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_width=10)
+            self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_width=10)
 
         if symmetry_scores:
-            self.metadata["histogram_peak_amplitude"] = compute_histogram(amplitudes, bin_count=20)
+            self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_count=20)
 
         # Peak frequency over time
         window_size = 200

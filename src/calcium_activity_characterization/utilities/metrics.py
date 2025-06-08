@@ -4,7 +4,118 @@ from typing import List, Optional, Dict
 
 logger = logging.getLogger(__name__)
 
-def compute_histogram(data: List[float], bin_width: Optional[float] = None, bin_count: Optional[int] = 10) -> Dict[str, List[float]]:
+
+
+class Distribution:
+    """
+    Represents basic statistical properties of a numerical distribution.
+
+    Attributes:
+        values (List[float]): Original distribution values.
+        mean (float): Mean of the values.
+        std (float): Standard deviation of the values.
+        min (float): Minimum value.
+        max (float): Maximum value.
+        count (int): Number of elements.
+    """
+
+    def __init__(self, values: List[float]) -> None:
+        """
+        Initialize with a list of numerical values.
+
+        Args:
+            values (List[float]): Numerical values to analyze.
+        """
+        self.values: List[float] = values
+        self.mean: float = float(np.mean(values)) if values else 0.0
+        self.std: float = float(np.std(values)) if values else 0.0
+        self.min: float = float(np.min(values)) if values else 0.0
+        self.max: float = float(np.max(values)) if values else 0.0
+        self.count: int = len(values)
+
+    def __repr__(self) -> str:
+        return f"<DistributionStats mean={self.mean:.2f}, std={self.std:.2f}, n={self.count}>"
+
+    def as_dict(self) -> dict:
+        """
+        Export statistics as a dictionary.
+
+        Returns:
+            dict: Dictionary with keys: mean, std, min, max, count.
+        """
+        return {
+            "mean": self.mean,
+            "std": self.std,
+            "min": self.min,
+            "max": self.max,
+            "count": self.count
+        }
+
+    
+    def compute_histogram(self, bin_width: Optional[float] = None, bin_count: Optional[int] = None) -> Dict[str, List[float]]:
+        """
+        Compute a histogram from a list of values, with either fixed bin width or bin count.
+
+        Args:
+            bin_width (Optional[float]): Fixed width for bins. Overrides bin_count if provided.
+            bin_count (Optional[int]): Number of bins to use (ignored if bin_width is provided).
+
+        Returns:
+            Dict[str, List[float]]: A dictionary with "bins" and "counts" keys.
+                                    "bins" contains bin edges, "counts" the frequency in each bin.
+
+        Raises:
+            ValueError: If input data is empty or invalid.
+        """
+        n_total = len(self.values)
+        clean_data = [x for x in self.values if x is not None and not np.isnan(x)]
+        n_valid = len(clean_data)
+        n_filtered = n_total - n_valid
+
+        if n_valid == 0:
+            logger.warning(f"Filtered data is empty or non-finite in compute_histogram_func. Filtered out {n_filtered} / {n_total} entries.")
+            return {"bins": [], "counts": []}
+
+        if n_filtered > 0:
+            logger.warning(f"Filtered out {n_filtered} non-finite values in compute_histogram_func (kept {n_valid} / {n_total}).")
+
+        data_array = np.asarray(clean_data, dtype=float)
+
+        try:
+            if bin_width is not None:
+                min_val = np.min(data_array)
+                max_val = np.max(data_array)
+                bins = np.arange(min_val, max_val + bin_width, bin_width)
+            else:
+                bins = bin_count  # Will be interpreted by np.histogram
+
+            counts, edges = np.histogram(data_array, bins=bins)
+
+            return {
+                "bins": edges.tolist(),
+                "counts": counts.tolist()
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to compute histogram: {e}")
+            raise
+
+
+    @classmethod
+    def from_values(cls, values: List[float]) -> "Distribution":
+        """
+        Construct a DistributionStats instance from values.
+
+        Args:
+            values (List[float]): List of numerical values.
+
+        Returns:
+            DistributionStats: Computed statistics.
+        """
+        return cls(values)
+
+
+def compute_histogram_func(data: List[float], bin_width: Optional[float] = None, bin_count: Optional[int] = 10) -> Dict[str, List[float]]:
     """
     Compute a histogram from a list of values, with either fixed bin width or bin count.
 
@@ -26,11 +137,11 @@ def compute_histogram(data: List[float], bin_width: Optional[float] = None, bin_
     n_filtered = n_total - n_valid
 
     if n_valid == 0:
-        logger.warning(f"Filtered data is empty or non-finite in compute_histogram. Filtered out {n_filtered} / {n_total} entries.")
+        logger.warning(f"Filtered data is empty or non-finite in compute_histogram_func. Filtered out {n_filtered} / {n_total} entries.")
         return {"bins": [], "counts": []}
 
     if n_filtered > 0:
-        logger.warning(f"Filtered out {n_filtered} non-finite values in compute_histogram (kept {n_valid} / {n_total}).")
+        logger.warning(f"Filtered out {n_filtered} non-finite values in compute_histogram_func (kept {n_valid} / {n_total}).")
 
     data_array = np.asarray(clean_data, dtype=float)
 

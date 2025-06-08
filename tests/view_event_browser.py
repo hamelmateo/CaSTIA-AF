@@ -198,7 +198,7 @@ class EventViewer(QMainWindow):
 
                         if origin_peak and origin_peak.rel_start_time <= frame <= origin_peak.rel_end_time:
                             tail = np.array(origin_cell.centroid)
-                            head = tail + np.array(event.dominant_direction)
+                            head = tail + np.array(event.dominant_direction_vector) * 50  # Scale the direction vector
                             self.scene.addLine(tail[1], tail[0], head[1], head[0], pen_arrow)
                             # Compute angle of direction
                             angle = atan2(head[0] - tail[0], head[1] - tail[1])
@@ -285,11 +285,18 @@ class EventViewer(QMainWindow):
         if active_event:
             info = (f"Hovered Label: {label}\n"
                     f"Event ID: {active_event.id}\n"
-                    f"Cells: {active_event.n_cells}\n"
-                    f"Duration: {active_event.duration}\n"
-                    f"Speed: {active_event.propagation_speed:.2f}\n"
-                    f"Shape: {active_event.shape_type}\n"
-                    f"DAG: {active_event.dag_type}")
+                    f"Cells: {active_event.n_cells_involved}\n"
+                    f"Duration: {active_event.event_duration} frames\n"
+                    f"Elongation: {active_event.elongation_score:.2f}\n"
+                    f"Radiality: {active_event.radiality_score:.2f}\n"
+                    f"Compactness: {active_event.compactness_score:.2f}\n"
+                    f"Comm Time: {active_event.communication_time_distribution.mean:.2f} ± {active_event.communication_time_distribution.std:.2f}\n"
+                    f"Comm Speed: {active_event.communication_speed_distribution.mean:.2f} ± {active_event.communication_speed_distribution.std:.2f}\n"
+                    f"Directional Speed: {active_event.directional_propagation_speed:.2f}\n"
+                    f"Global Propagation Speed: {active_event.global_propagation_speed:.2f}\n"
+                    f"DAG Depth: {active_event.dag_metrics['depth']} | Width: {active_event.dag_metrics['width']}\n"
+                    f"DAG Avg Out-Degree: {active_event.dag_metrics['avg_out_degree']:.2f}\n"
+                    f"DAG Avg Path Length: {active_event.dag_metrics['avg_path_length']:.2f}")
         else:
             info = f"Hovered Label: {label}\nNo event info"
 

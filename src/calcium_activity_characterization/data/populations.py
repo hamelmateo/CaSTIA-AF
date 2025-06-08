@@ -20,7 +20,7 @@ from calcium_activity_characterization.data.cell_to_cell_communication import Ce
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
 from calcium_activity_characterization.data.events import Event
 
-from calcium_activity_characterization.utilities.metrics import compute_histogram, compute_peak_frequency_over_time
+from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
 
 from calcium_activity_characterization.utilities.loader import get_config_with_fallback
@@ -236,10 +236,13 @@ class Population:
             config (Optional[Dict[str, Any]]): Configuration dictionary with parameters for event generation.
             If not provided, uses default parameters from the configuration file.
         """
+        population_centroids = [np.array(cell.centroid) for cell in self.cells]
+
         self.events = Event.from_communications(
             self.cell_to_cell_communications,
             self.cells,
-            config=config
+            config=config,
+            population_centroids=population_centroids
         )
 
 
@@ -282,19 +285,19 @@ class Population:
 
         # 2. Duration, prominence, periodicity score, peak frequencies and number of peaks distributions
         durations = [peak.rel_duration for cell in self.cells for peak in cell.trace.peaks]
-        self.metadata["global_peak_duration_hist"] = compute_histogram(durations, bin_width=bin_width)
+        self.metadata["global_peak_duration_hist"] = compute_histogram_func(durations, bin_width=bin_width)
 
         prominences = [peak.prominence for cell in self.cells for peak in cell.trace.peaks]
-        self.metadata["global_peak_prominence_hist"] = compute_histogram(prominences, bin_width=bin_width)
+        self.metadata["global_peak_prominence_hist"] = compute_histogram_func(prominences, bin_width=bin_width)
 
         periodicity_scores = [cell.trace.metadata.get("periodicity_score", 0) for cell in self.cells]
-        self.metadata["periodicity_score_hist"] = compute_histogram(periodicity_scores, bin_count=bin_counts)
+        self.metadata["periodicity_score_hist"] = compute_histogram_func(periodicity_scores, bin_count=bin_counts)
         
         peak_frequencies = [cell.trace.metadata.get("peak_frequency", 0) for cell in self.cells]
-        self.metadata["peak_frequency_hist"] = compute_histogram(peak_frequencies, bin_count=bin_counts)
+        self.metadata["peak_frequency_hist"] = compute_histogram_func(peak_frequencies, bin_count=bin_counts)
         
         num_peaks = [len(cell.trace.peaks) for cell in self.cells]
-        self.metadata["num_peaks_hist"] = compute_histogram(num_peaks, bin_width=bin_width)
+        self.metadata["num_peaks_hist"] = compute_histogram_func(num_peaks, bin_width=bin_width)
 
         # 3. Number of active cells over time
         max_len = max((len(cell.trace.binary) for cell in self.cells if cell.trace.binary), default=0)
