@@ -141,31 +141,108 @@ class EventViewer(QMainWindow):
         self.frame_label.setText(f"Frame: {frame}")
         mask = self.base_rgb.copy()
 
-        # First, show non-cluster peaks (light gray for example)
-        highlight_color = (200, 200, 200)
-        for cell in self.population.cells:
-            for peak in cell.trace.peaks:
-                if peak.rel_start_time <= frame <= peak.rel_end_time:
-                    for y, x in cell.pixel_coords:
-                        mask[y, x] = highlight_color
-
-        # Then overwrite with colored peaks from events
         for event in self.events:
+            # display cells for full peak duration (origin and cause)
             color = self.event_colors[event.id]
-            start = event.event_start_time
-            end = event.event_end_time
-            for label in event.cell_labels:
-                cell = self.label_map.get(label)
-                if cell:
-                    for peak in cell.trace.peaks:
-                        if start <= peak.rel_start_time <= end:
-                            if peak.rel_start_time <= frame <= peak.rel_end_time:
-                                for y, x in cell.pixel_coords:
-                                    mask[y, x] = color
+            for comm in event.communications:
+                # show cause cell
+                cause_cell = self.label_map.get(comm.cause[0])
+                if cause_cell:
+                    peak = cause_cell.trace.peaks[comm.cause[1]]
+                    if peak.rel_start_time <= frame <= peak.rel_end_time:
+                        for y, x in cause_cell.pixel_coords:
+                            mask[y, x] = color
+
+                # show origin cell
+                origin_cell = self.label_map.get(comm.origin[0])
+                if origin_cell:
+                    peak = origin_cell.trace.peaks[comm.origin[1]]
+                    if peak.rel_start_time <= frame <= peak.rel_end_time:
+                        for y, x in origin_cell.pixel_coords:
+                            mask[y, x] = color
 
         qimg = QImage(mask.data, mask.shape[1], mask.shape[0], QImage.Format_RGB888)
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
+
+        # draw direction arrows or hull
+        pen_arrow = QPen(Qt.red, 2)
+        pen_hull = QPen(Qt.green, 2)
+
+        for event in self.events:
+            active = any(
+                self.label_map.get(comm.cause[0]).trace.peaks[comm.cause[1]].rel_start_time <= frame <= self.label_map.get(comm.cause[0]).trace.peaks[comm.cause[1]].rel_end_time
+                for comm in event.communications
+                if self.label_map.get(comm.cause[0])
+            )
+
+            if not active:
+                continue
+
+            if self.show_direction.isChecked():
+                # Determine the origin cell: a cell that appears as origin but never as cause
+                origin_ids = {comm.origin[0] for comm in event.communications}
+                cause_ids = {comm.cause[0] for comm in event.communications}
+                true_origins = list(origin_ids - cause_ids)
+
+                if true_origins:
+                    origin_label = true_origins[0]
+                    origin_cell = self.label_map.get(origin_label)
+                    if origin_cell:
+                        # Assume the first matching peak is the relevant one
+                        origin_peak = None
+                        for comm in event.communications:
+                            if comm.origin[0] == origin_label:
+                                origin_peak = origin_cell.trace.peaks[comm.origin[1]]
+                                break
+
+                        if origin_peak and origin_peak.rel_start_time <= frame <= origin_peak.rel_end_time:
+                            tail = np.array(origin_cell.centroid)
+                            head = tail + np.array(event.dominant_direction_vector) * 50  # Scale the direction vector
+                            self.scene.addLine(tail[1], tail[0], head[1], head[0], pen_arrow)
+                            # Compute angle of direction
+                            angle = atan2(head[0] - tail[0], head[1] - tail[1])
+
+                            # Arrowhead size and angle offset
+                            arrow_size = 10
+                            angle1 = angle + radians(150)
+                            angle2 = angle - radians(150)
+
+                            # Compute arrowhead endpoints
+                            arrow_p1 = QPointF(
+                                head[1] + arrow_size * cos(angle1),
+                                head[0] + arrow_size * sin(angle1)
+                            )
+                            arrow_p2 = QPointF(
+                                head[1] + arrow_size * cos(angle2),
+                                head[0] + arrow_size * sin(angle2)
+                            )
+
+                            # Draw arrowhead lines
+                            self.scene.addLine(head[1], head[0], arrow_p1.x(), arrow_p1.y(), pen_arrow)
+                            self.scene.addLine(head[1], head[0], arrow_p2.x(), arrow_p2.y(), pen_arrow)
+        
+            if self.show_wavefront.isChecked():
+                # Show hull if any part of the event is still ongoing
+                active = any(
+                    self.label_map.get(comm.cause[0]).trace.peaks[comm.cause[1]].rel_start_time <= frame <= self.label_map.get(comm.cause[0]).trace.peaks[comm.cause[1]].rel_end_time
+                    for comm in event.communications
+                    if self.label_map.get(comm.cause[0])
+                )
+
+                if active:
+                    # Find the closest earlier frame for which wavefront exists
+                    available_frames = [f for f in event.wavefront if f <= frame]
+                    if available_frames:
+                        latest = max(available_frames)
+                        points = event.wavefront[latest]
+                        if len(points) >= 3:
+                            try:
+                                hull = ConvexHull(points)
+                                polygon = QPolygonF([QPointF(points[i][1], points[i][0]) for i in hull.vertices])
+                                self.scene.addPolygon(polygon, pen_hull)
+                            except Exception:
+                                continue
 
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
@@ -186,14 +263,22 @@ class EventViewer(QMainWindow):
         cell = self.label_map.get(label)
         frame = self.slider.value()
 
+        # Check if the cell is active in any event at this frame
         active_event = None
         for event in self.events:
-            if label in event.cell_labels:
-                for peak in cell.trace.peaks:
-                    if event.event_start_time <= peak.rel_start_time <= event.event_end_time:
-                        if peak.rel_start_time <= frame <= peak.rel_end_time:
-                            active_event = event
-                            break
+            for comm in event.communications:
+                # Check cause
+                if comm.cause[0] == label:
+                    peak = self.label_map[label].trace.peaks[comm.cause[1]]
+                    if peak.rel_start_time <= frame <= peak.rel_end_time:
+                        active_event = event
+                        break
+                # Check origin
+                if comm.origin[0] == label:
+                    peak = self.label_map[label].trace.peaks[comm.origin[1]]
+                    if peak.rel_start_time <= frame <= peak.rel_end_time:
+                        active_event = event
+                        break
             if active_event:
                 break
 
@@ -202,12 +287,20 @@ class EventViewer(QMainWindow):
                     f"Event ID: {active_event.id}\n"
                     f"Cells: {active_event.n_cells_involved}\n"
                     f"Duration: {active_event.event_duration} frames\n"
-                    f"Directional Speed: {active_event.directional_propagation_speed:.2f}\n")
+                    f"Elongation: {active_event.elongation_score:.2f}\n"
+                    f"Radiality: {active_event.radiality_score:.2f}\n"
+                    f"Compactness: {active_event.compactness_score:.2f}\n"
+                    f"Comm Time: {active_event.communication_time_distribution.mean:.2f} ± {active_event.communication_time_distribution.std:.2f}\n"
+                    f"Comm Speed: {active_event.communication_speed_distribution.mean:.2f} ± {active_event.communication_speed_distribution.std:.2f}\n"
+                    f"Directional Speed: {active_event.directional_propagation_speed:.2f}\n"
+                    f"Global Propagation Speed: {active_event.global_propagation_speed:.2f}\n"
+                    f"DAG Depth: {active_event.dag_metrics['depth']} | Width: {active_event.dag_metrics['width']}\n"
+                    f"DAG Avg Out-Degree: {active_event.dag_metrics['avg_out_degree']:.2f}\n"
+                    f"DAG Avg Path Length: {active_event.dag_metrics['avg_path_length']:.2f}")
         else:
             info = f"Hovered Label: {label}\nNo event info"
 
         self.hover_label.setText(info)
-
     def next_frame(self):
         frame = self.slider.value()
         if frame < self.max_frame:

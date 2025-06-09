@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 import logging
 import pandas as pd
 
-from typing import TYPE_CHECKING
-
 from calcium_activity_characterization.data.traces import Trace
 
 
@@ -117,3 +115,4 @@ class Cell:
         }
 
         return pd.DataFrame(data)
+

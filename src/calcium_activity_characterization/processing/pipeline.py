@@ -101,18 +101,20 @@ class CalciumPipeline:
         self._segment_cells()
         self._compute_intensity()
 
-        if get_config_with_fallback(self.config,"ARCOS_TRACKING"):
-            self._arcos_event_pipeline()
+
 
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
-        self._assign_peak_origins()
-        self._extract_events()
-
         self._initialize_population_traces()
+        self._detect_global_events()
+        #self._assign_peak_origins()
+        #self._extract_events()
+
         self._save_population_metadata_report()
-        
+
+        #if get_config_with_fallback(self.config,"ARCOS_TRACKING"):
+        #    self._arcos_event_pipeline()
         #self._run_spatial_event_clustering()
         #self._run_wave_propagation_analysis()
         #self._run_peak_clustering()
@@ -469,6 +471,15 @@ class CalciumPipeline:
             save_pickle_file(G, save_path)
             print(f"Saved GC graph for cluster {cluster.id} → {save_path}")
 
+    def _detect_global_events(self) -> None:
+        """
+        Detect global events from the population traces and save them.
+        """
+        self.population.generate_global_events(
+            config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"),
+        )
+        save_pickle_file(self.population, self.events_path)
+        logger.info(f"Global events detected and saved to {self.events_path}")
 
     def _assign_peak_origins(self) -> None:
         """
@@ -484,7 +495,7 @@ class CalciumPipeline:
         Extract events from the population traces and save them.
         This method is a placeholder for future event extraction logic.
         """
-        self.population.generate_events(config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
+        self.population.generate_sequential_events(config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
         save_pickle_file(self.population, self.events_path)
 
 

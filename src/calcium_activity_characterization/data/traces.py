@@ -457,6 +457,22 @@ class Trace:
             peak.duration = peak.end_time - peak.start_time
 
 
+    def get_peak_starting_at(self, frame: int) -> Optional["Peak"]:
+        """
+        Return the first peak whose rel_start_time matches the given frame.
+
+        Args:
+            frame (int): Frame index to match.
+
+        Returns:
+            Optional[Peak]: The matching Peak object, or None if not found.
+        """
+        for peak in self.peaks:
+            if peak.rel_start_time == frame:
+                return peak
+        return None
+
+
 def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 100, window: int = 5) -> tuple[int, int]:
     """
     Refine peak boundaries based on valley detection using windowed minima and derivative sign changes.

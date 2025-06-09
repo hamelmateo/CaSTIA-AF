@@ -240,16 +240,17 @@ MAX_COMMUNICATION_TIME = 10  # Maximum time (in frames) for communication betwee
 
 EVENT_EXTRACTION_PARAMETERS = {
     "min_cell_count": 2,  # Minimum number of unique cells required to form an event
-
     "shape_classification": {
         "pca_ratio_threshold_radial": 1.5,         # Below this = radial
         "pca_ratio_threshold_longitudinal": 3.0    # Above this = longitudinal
     },
-
     "convex_hull": {
         "min_points": 3,       # Minimum number of points to compute convex hull
         "min_duration": 1      # Minimum time difference to compute propagation speed
-    }
+    },
+    "threshold_ratio": 0.4,  # Minimum ratio of active cells at peak to trigger global event detection
+    "radius": 300.0,  # Radius for spatial clustering of events
+    "max_frame_gap": 10,  # Maximum gap in frames to consider cells as part of the same event
 }
 
 

@@ -18,7 +18,12 @@ from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
-from calcium_activity_characterization.data.events import Event
+from calcium_activity_characterization.data.events import Event, GlobalEvent, SequentialEvent
+from calcium_activity_characterization.processing.global_event_detection import (
+    find_significant_activity_peaks,
+    extract_global_event_blocks,
+    classify_peaks_in_global_event
+)
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
@@ -54,7 +59,7 @@ class Population:
         self.neighbor_graph: nx.Graph = None
         self.copeaking_neighbors: List[CoPeakingNeighbors] = None
         self.cell_to_cell_communication: List[CellToCellCommunication] = None
-        self.events: List[Event] = None
+        self.events: List[Event] = []
         self.global_trace: Optional[Trace] = None   # Mean trace across all cells
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
         self.impulse_trace: Optional[Trace] = None  # Trace of summed rel_start_time impulses
@@ -204,6 +209,47 @@ class Population:
             peak_detection_params=peak_detection_params
         )
 
+
+    def generate_global_events(self, config) -> List[GlobalEvent]:
+        """
+        Generate global events from the activity trace by detecting significant activity peaks.
+
+        Args:
+            config (Dict[str, Any]): Configuration dictionary with parameters for global event detection.
+                Expected keys:
+                    - "threshold_ratio": Ratio of active cells at peak to trigger detection.
+                    - "radius": Radius for peak classification.
+                    - "max_frame_gap": Maximum allowed gap between frames in a global event.
+                    - "min_cell_count": Minimum number of cells required to consider a peak significant.
+
+        Returns:
+            List[GlobalEvent]: Finalized GlobalEvent instances.
+        """
+        windows = find_significant_activity_peaks(trace=self.activity_trace,total_cells=len(self.cells),
+                                                  threshold_ratio=config.get("threshold_ratio", 0.4))
+
+        print("✅ Significant activity windows (start_frame, end_frame):")
+        for i, (start, end) in enumerate(windows):
+            print(f"  {i:02d}: [{start}, {end}]")
+
+        blocks = extract_global_event_blocks(
+            cells=self.cells,
+            peak_windows=windows,
+            radius=config.get("radius"),
+            max_frame_gap=config.get("max_frame_gap"),
+            min_cell_count=config.get("min_cell_count", 3)
+        )
+
+        for block in blocks:
+            classify_peaks_in_global_event(block, self.cells, config.get("radius"), config.get("max_frame_gap"))
+
+        self.events.extend(GlobalEvent.from_framewise_active_labels(
+            framewise_label_blocks=blocks,
+            cells=self.cells,
+            config=config
+        ))
+
+
     def generate_cell_to_cell_communications(
         self,
         max_time_gap: int = 10
@@ -228,7 +274,7 @@ class Population:
         )
 
 
-    def generate_events(self, config: Optional[Dict[str, Any]] = None) -> None:
+    def generate_sequential_events(self, config: Optional[Dict[str, Any]] = None) -> None:
         """
         Generate events from cell-to-cell communications.
 
@@ -238,12 +284,12 @@ class Population:
         """
         population_centroids = [np.array(cell.centroid) for cell in self.cells]
 
-        self.events = Event.from_communications(
+        self.events.append(SequentialEvent.from_communications(
             self.cell_to_cell_communications,
             self.cells,
             config=config,
             population_centroids=population_centroids
-        )
+        ))
 
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:
