@@ -97,8 +97,7 @@ def _cluster_event_from_origin(
     active_cells: Dict[int, Cell],
     cell_activation_time: Dict[int, int],
     radius: float,
-    max_frame_gap: int,
-    assigned: Set[int]
+    max_frame_gap: int
 ) -> Set[int]:
     """
     Cluster cells based on spatial proximity and temporal activation from an origin cell.
@@ -114,22 +113,43 @@ def _cluster_event_from_origin(
     Returns:
         Set[int]: Set of labels in the cluster.
     """
+    origin_peak = active_cells[label].trace.get_peak_starting_at(origin_time)
+    if origin_peak.is_analyzed:
+        return set()
+    
+    # Only proceed if this origin causes any other peak
+    has_valid_neighbor = any(
+        0 < (cell_activation_time[other] - origin_time) <= max_frame_gap and
+        np.linalg.norm(np.array(active_cells[label].centroid) - np.array(active_cells[other].centroid)) <= radius
+        for other in active_cells
+        if other != label
+    )
+
+    if not has_valid_neighbor:
+        return set()
+
     cluster = {label}
     queue = [(label, origin_time)]
+    origin_peak.is_analyzed = True
+    origin_peak.origin_type = "origin"
 
     while queue:
         current_label, current_time = queue.pop()
         current_cell = active_cells[current_label]
 
         for other_label, other_cell in active_cells.items():
-            if other_label in cluster or other_label in assigned:
+            other_time = cell_activation_time[other_label]
+            other_peak = other_cell.trace.get_peak_starting_at(other_time)
+
+            if other_label in cluster or other_peak.is_analyzed:
                 continue
 
-            other_time = cell_activation_time[other_label]
             if 0 < other_time - current_time <= max_frame_gap:
                 dist = np.linalg.norm(np.array(current_cell.centroid) - np.array(other_cell.centroid))
                 if dist <= radius:
                     cluster.add(other_label)
+                    other_peak.is_analyzed = True
+                    other_peak.origin_type = "caused"
                     queue.append((other_label, other_time))
 
     return cluster
@@ -161,20 +181,16 @@ def extract_global_event_blocks(
             framewise_active = _get_framewise_active_labels(cells, start, end)
             active_cells, activation_times = _get_activated_cells(framewise_active, cells)
 
-            # Inside the window loop
-            clustered_labels = set()
             event_cluster = set()
 
             for label, cell in active_cells.items():
-                if label in clustered_labels:
+                if cell.trace.get_peak_starting_at(activation_times[label]).is_analyzed:
                     continue
 
                 origin_time = activation_times[label]
                 cluster = _cluster_event_from_origin(
-                    label, origin_time, active_cells, activation_times, radius, max_frame_gap, clustered_labels
-                )
+                    label, origin_time, active_cells, activation_times, radius, max_frame_gap)
 
-                clustered_labels.update(cluster)
                 event_cluster.update(cluster)
 
             if len(event_cluster) >= min_cell_count:
@@ -189,66 +205,3 @@ def extract_global_event_blocks(
     except Exception as e:
         logger.error(f"Error extracting global event blocks: {e}")
         return []
-
-
-def classify_peaks_in_global_event(
-    framewise_labels: Dict[int, List[int]],
-    cells: List[Cell],
-    radius: float,
-    max_frame_gap: int
-) -> None:
-    """
-    Classify each peak in a global event as origin, caused, or individual.
-
-    Args:
-        framewise_labels (Dict[int, List[int]]): Active labels per frame for this event.
-        cells (List[Cell]): All available cells.
-        radius (float): Spatial distance threshold.
-        max_frame_gap (int): Temporal propagation window (frames).
-
-    Side Effects:
-        Sets `peak.origin_type` on each involved peak within Cell objects.
-    """
-    try:
-        label_to_cell = {cell.label: cell for cell in cells}
-        label_to_time = {
-            label: t
-            for t, labels in framewise_labels.items()
-            for label in labels
-        }
-        active_labels = set(label_to_time.keys())
-
-        for label in active_labels:
-            t_label = label_to_time[label]
-            cell = label_to_cell[label]
-            peak = cell.trace.get_peak_starting_at(t_label)
-            if peak is None:
-                continue
-
-            pos_label = np.array(cell.centroid)
-            is_caused = False
-            causes_other = False
-
-            for other_label in active_labels:
-                if other_label == label:
-                    continue
-                t_other = label_to_time[other_label]
-                other_cell = label_to_cell[other_label]
-                pos_other = np.array(other_cell.centroid)
-                dist = np.linalg.norm(pos_other - pos_label)
-                dt = t_other - t_label
-
-                if 0 < dt <= max_frame_gap and dist <= radius:
-                    causes_other = True
-                elif 0 < (t_label - t_other) <= max_frame_gap and dist <= radius:
-                    is_caused = True
-
-            if not is_caused and causes_other:
-                peak.origin_type = "origin"
-            elif is_caused:
-                peak.origin_type = "caused"
-            else:
-                peak.origin_type = "individual"
-
-    except Exception as e:
-        logger.error(f"Error classifying peaks in global event: {e}")

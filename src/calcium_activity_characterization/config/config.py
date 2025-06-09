@@ -230,16 +230,13 @@ SPATIAL_CLUSTERING_PARAMETERS = {
     "max_communication_time": 10, # Maximum time (in frame) for communication between cells
 }
 
-MAX_COMMUNICATION_TIME = 10  # Maximum time (in frames) for communication between cells
-
-
 
 # ==========================
 # EVENTS DETECTION PARAMETERS
 # ==========================
 
 EVENT_EXTRACTION_PARAMETERS = {
-    "min_cell_count": 2,  # Minimum number of unique cells required to form an event
+    "min_cell_count": 3,  # Minimum number of unique cells required to form an event
     "shape_classification": {
         "pca_ratio_threshold_radial": 1.5,         # Below this = radial
         "pca_ratio_threshold_longitudinal": 3.0    # Above this = longitudinal
@@ -250,7 +247,8 @@ EVENT_EXTRACTION_PARAMETERS = {
     },
     "threshold_ratio": 0.4,  # Minimum ratio of active cells at peak to trigger global event detection
     "radius": 300.0,  # Radius for spatial clustering of events
-    "max_frame_gap": 10,  # Maximum gap in frames to consider cells as part of the same event
+    "max_frame_gap": 10,  # Maximum gap in frames to consider cells as part of the same GLOBAL event
+    "max_communication_time": 10,  # Maximum time (in frames) for communication between cells in SEQUENTIAL events
 }
 
 

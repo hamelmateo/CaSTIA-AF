@@ -141,20 +141,12 @@ class EventViewer(QMainWindow):
         self.frame_label.setText(f"Frame: {frame}")
         mask = self.base_rgb.copy()
 
-        # First, show non-cluster peaks (light gray for example)
-        highlight_color = (200, 200, 200)
-        for cell in self.population.cells:
-            for peak in cell.trace.peaks:
-                if peak.rel_start_time <= frame <= peak.rel_end_time:
-                    for y, x in cell.pixel_coords:
-                        mask[y, x] = highlight_color
-
         # Then overwrite with colored peaks from events
         for event in self.events:
             color = self.event_colors[event.id]
             start = event.event_start_time
             end = event.event_end_time
-            for label in event.cell_labels:
+            for label in list({label for label, _ in event.peaks_involved}):
                 cell = self.label_map.get(label)
                 if cell:
                     for peak in cell.trace.peaks:
@@ -188,7 +180,7 @@ class EventViewer(QMainWindow):
 
         active_event = None
         for event in self.events:
-            if label in event.cell_labels:
+            if label in list({label for label, _ in event.peaks_involved}):
                 for peak in cell.trace.peaks:
                     if event.event_start_time <= peak.rel_start_time <= event.event_end_time:
                         if peak.rel_start_time <= frame <= peak.rel_end_time:

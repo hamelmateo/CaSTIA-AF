@@ -24,6 +24,7 @@ class Event(ABC):
 
     Attributes:
         id (int): Unique identifier.
+        peaks_involved (Tuple[int, int]): Indices of the earliest and latest peaks involved in the event.
         label_to_centroid (Dict[int, np.ndarray]): Map of cell labels to centroids.
         n_cells_involved (int): Number of cells in the event.
         event_start_time (int): Earliest peak start time.
@@ -32,16 +33,20 @@ class Event(ABC):
         framewise_active_labels (Dict[int, List[int]]): Active labels per frame.
         wavefront (Dict[int, List[np.ndarray]]): Centroids of active cells per frame.
         config (Dict): Detection parameters used.
+        dominant_direction_vector (Tuple[float, float]): Direction of propagation as a unit vector.
+        directional_propagation_speed (float): Speed of propagation in the dominant direction.
     """
 
     def __init__(
         self,
         id: int,
+        peaks_involved: List[Tuple[int, int]],
         label_to_centroid: Dict[int, np.ndarray],
         framewise_active_labels: Dict[int, List[int]] = None
     ) -> None:
         self.id = id
-        self.cell_labels = list(label_to_centroid.keys())
+
+        self.peaks_involved = peaks_involved
         self.label_to_centroid = label_to_centroid
 
         self.n_cells_involved = len(label_to_centroid)
@@ -108,17 +113,19 @@ class SequentialEvent(Event):
     def __init__(
         self,
         id: int,
-        label_to_centroid: Dict[int, np.ndarray],
         communications: List[CellToCellCommunication],
+        label_to_centroid: Dict[int, np.ndarray],
         config_hull: Dict,
         population_centroid: List[np.ndarray]
     ) -> None:
-        super().__init__(id, label_to_centroid, self._compute_framewise_active_labels())
+        peak_indices = list({comm.origin for comm in communications}.union({comm.cause for comm in communications}))
         self.communications = communications
 
         self.graph = nx.DiGraph()
         self._build_graph()
         self.dag_metrics = self._compute_dag_metrics()
+
+        super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_active_labels())
 
         self.communication_time_distribution: Distribution = self._communication_time_distribution()
         self.communication_speed_distribution: Distribution = self._communication_speed_distribution()
@@ -561,10 +568,11 @@ class GlobalEvent(Event):
     def __init__(
         self,
         id: int,
+        peak_indices: Tuple[int, int],
         label_to_centroid: Dict[int, np.ndarray],
         framewise_active_labels: Dict[int, List[int]]
     ) -> None:
-        super().__init__(id, label_to_centroid, framewise_active_labels)
+        super().__init__(id, peak_indices, label_to_centroid, framewise_active_labels)
 
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
@@ -612,18 +620,28 @@ class GlobalEvent(Event):
         counter = 0
 
         for framewise_labels in framewise_label_blocks:
-            involved_labels = set()
-            for labels in framewise_labels.values():
-                involved_labels.update(labels)
-
+            involved_labels = {l for labels in framewise_labels.values() for l in labels}
             if len(involved_labels) < min_cells:
                 continue
 
-            event_label_to_cell = {
-                label: label_to_cell[label] for label in involved_labels if label in label_to_cell
+            label_to_centroid = {
+                label: label_to_cell[label].centroid
+                for label in involved_labels if label in label_to_cell
             }
-            label_to_centroid = {label: cell.centroid for label, cell in event_label_to_cell.items()}
-            event = cls(id=counter, label_to_centroid=label_to_centroid, framewise_active_labels=framewise_labels)
+
+            peak_indices = [
+                (label, peak.id)
+                for t, labels in framewise_labels.items()
+                for label in labels
+                if (peak := label_to_cell[label].trace.get_peak_starting_at(t)) is not None
+            ]
+
+            event = cls(
+                id=counter,
+                label_to_centroid=label_to_centroid,
+                framewise_active_labels=framewise_labels,
+                peak_indices=peak_indices
+            )
             events.append(event)
             counter += 1
 

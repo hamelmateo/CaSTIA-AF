@@ -21,8 +21,7 @@ from calcium_activity_characterization.data.copeaking_neighbors import CoPeaking
 from calcium_activity_characterization.data.events import Event, GlobalEvent, SequentialEvent
 from calcium_activity_characterization.processing.global_event_detection import (
     find_significant_activity_peaks,
-    extract_global_event_blocks,
-    classify_peaks_in_global_event
+    extract_global_event_blocks
 )
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
@@ -96,6 +95,7 @@ class Population:
         t.detect_peaks(peak_detection_params)
         t.binarize_trace_from_peaks()
         return t
+
 
     def compute_global_trace(self, version: str = "raw", default_version: str = "raw", signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> None:
         """
@@ -210,7 +210,7 @@ class Population:
         )
 
 
-    def generate_global_events(self, config) -> List[GlobalEvent]:
+    def detect_global_events(self, config: Dict[str, Any] = None) -> None:
         """
         Generate global events from the activity trace by detecting significant activity peaks.
 
@@ -221,27 +221,24 @@ class Population:
                     - "radius": Radius for peak classification.
                     - "max_frame_gap": Maximum allowed gap between frames in a global event.
                     - "min_cell_count": Minimum number of cells required to consider a peak significant.
-
-        Returns:
-            List[GlobalEvent]: Finalized GlobalEvent instances.
         """
-        windows = find_significant_activity_peaks(trace=self.activity_trace,total_cells=len(self.cells),
-                                                  threshold_ratio=config.get("threshold_ratio", 0.4))
+        windows = find_significant_activity_peaks(
+            trace=self.activity_trace,
+            total_cells=len(self.cells),
+            threshold_ratio=get_config_with_fallback(config,"threshold_ratio")
+            )
 
-        print("✅ Significant activity windows (start_frame, end_frame):")
+        logger.info("✅ Significant activity windows (start_frame, end_frame):")
         for i, (start, end) in enumerate(windows):
-            print(f"  {i:02d}: [{start}, {end}]")
+            logger.info(f"  {i:02d}: [{start}, {end}]")
 
         blocks = extract_global_event_blocks(
             cells=self.cells,
             peak_windows=windows,
-            radius=config.get("radius"),
-            max_frame_gap=config.get("max_frame_gap"),
-            min_cell_count=config.get("min_cell_count", 3)
+            radius=get_config_with_fallback(config,"radius"),
+            max_frame_gap=get_config_with_fallback(config,"max_frame_gap"),
+            min_cell_count=get_config_with_fallback(config,"min_cell_count")
         )
-
-        for block in blocks:
-            classify_peaks_in_global_event(block, self.cells, config.get("radius"), config.get("max_frame_gap"))
 
         self.events.extend(GlobalEvent.from_framewise_active_labels(
             framewise_label_blocks=blocks,
@@ -250,17 +247,16 @@ class Population:
         ))
 
 
-    def generate_cell_to_cell_communications(
-        self,
-        max_time_gap: int = 10
-    ) -> None:
+    def detect_sequential_events(self, config: Dict[str, Any] = None) -> None:
         """
-        Create co-peaking neighbor groups, cell-to-cell communication links and classifies all peaks.
-
+        Generate sequential events from cell-to-cell communications.
+        This method identifies groups of cells that communicate with each other
+        based on their spatial proximity and temporal activity patterns.
+        
         Args:
-            max_time_gap (int): Max temporal gap to allow causal linking.
+            config (Dict[str, Any]): Configuration dictionary with parameters for sequential event detection.
         """
-
+        
         self.copeaking_neighbors = generate_copeaking_groups(
             cells=self.cells,
             neighbor_graph=self.neighbor_graph
@@ -270,26 +266,19 @@ class Population:
             self.cells,
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
-            max_time_gap=max_time_gap
+            max_time_gap=get_config_with_fallback(config,"max_communication_time")
         )
 
-
-    def generate_sequential_events(self, config: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Generate events from cell-to-cell communications.
-
-        Args:
-            config (Optional[Dict[str, Any]]): Configuration dictionary with parameters for event generation.
-            If not provided, uses default parameters from the configuration file.
-        """
         population_centroids = [np.array(cell.centroid) for cell in self.cells]
 
-        self.events.append(SequentialEvent.from_communications(
+        self.events.extend(SequentialEvent.from_communications(
+            len(self.events),
             self.cell_to_cell_communications,
             self.cells,
             config=config,
             population_centroids=population_centroids
         ))
+
 
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:

@@ -101,15 +101,11 @@ class CalciumPipeline:
         self._segment_cells()
         self._compute_intensity()
 
-
-
         self._signal_processing_pipeline()
         self._binarization_pipeline()
         
         self._initialize_population_traces()
-        self._detect_global_events()
-        #self._assign_peak_origins()
-        #self._extract_events()
+        self._detect_events()
 
         self._save_population_metadata_report()
 
@@ -160,6 +156,7 @@ class CalciumPipeline:
         self.spatial_neighbor_graph_path = output_path / "spatial_neighbor_graph.png"
         self.event_cluster_on_overlay = self.output_path / "event_cluster_overlays"
         self.raster_plots_clustered = self.output_path / "cluster_rasters"
+
 
     def _segment_cells(self):
         """
@@ -220,6 +217,7 @@ class CalciumPipeline:
             label += 1
         return cells
 
+
     def _compute_intensity(self):
         """
         Compute raw intensity traces for all cells, either serially or in parallel.
@@ -233,6 +231,7 @@ class CalciumPipeline:
             save_pickle_file(self.population, self.raw_traces_path)
         else:
             self.population = load_pickle_file(self.raw_traces_path)
+
 
     def _get_intensity_serial(self):
         """
@@ -248,6 +247,7 @@ class CalciumPipeline:
             for img in calcium_imgs:
                 for cell in self.population.cells:
                     cell.add_mean_intensity(img)
+
 
     def _get_intensity_parallel(self):
         """
@@ -342,7 +342,6 @@ class CalciumPipeline:
         save_pickle_file(lineage_tracker, self.output_path / "lineage_tracker.pkl")
 
 
-
     def _binarization_pipeline(self): 
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
@@ -363,7 +362,6 @@ class CalciumPipeline:
         # Plot the binarized traces
         plot_raster(self.output_path, self.population.cells)
         plot_impulse_raster(self.output_path, self.population.cells)
-
 
 
     def _correlation_analysis(self):
@@ -389,7 +387,6 @@ class CalciumPipeline:
         plot_similarity_matrices(self.output_path, self.population.similarity_matrices)
 
 
-
     def _clustering_cells(self) -> None:
         """
         Cluster cells based on their similarity matrices over a specific time-window.
@@ -407,7 +404,6 @@ class CalciumPipeline:
 
         return 
     
-
 
     def _run_peak_clustering(self):
         """
@@ -429,7 +425,6 @@ class CalciumPipeline:
                 logger.info(f"🔹 {count} clusters with {size} peak(s)")
 
             save_pickle_file(self.population.peak_clusters, self.peak_clusters_path)
-
 
 
     def _causality_analysis(self):
@@ -471,31 +466,22 @@ class CalciumPipeline:
             save_pickle_file(G, save_path)
             print(f"Saved GC graph for cluster {cluster.id} → {save_path}")
 
-    def _detect_global_events(self) -> None:
-        """
-        Detect global events from the population traces and save them.
-        """
-        self.population.generate_global_events(
-            config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"),
-        )
-        save_pickle_file(self.population, self.events_path)
-        logger.info(f"Global events detected and saved to {self.events_path}")
 
-    def _assign_peak_origins(self) -> None:
+    def _detect_events(self) -> None:
         """
-        Assign the origin of each peak in the population based on the cell-to-cell communication model.
+        Detect events from the population traces and save them.
+        This method is a placeholder for future event detection logic.
         """
+        #if self.events_path.exists():
+            #self.population = load_pickle_file(self.events_path)
+            #return
 
-        self.population.generate_cell_to_cell_communications(get_config_with_fallback(self.config, "MAX_COMMUNICATION_TIME"))
-        save_pickle_file(self.population, self.sequential_traces_path)
+        # Detect global events
+        self.population.detect_global_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
 
+        # Detect sequential local events
+        self.population.detect_sequential_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
 
-    def _extract_events(self) -> None:
-        """
-        Extract events from the population traces and save them.
-        This method is a placeholder for future event extraction logic.
-        """
-        self.population.generate_sequential_events(config=get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
         save_pickle_file(self.population, self.events_path)
 
 
