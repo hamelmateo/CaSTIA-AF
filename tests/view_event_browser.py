@@ -141,7 +141,7 @@ class EventViewer(QMainWindow):
         self.frame_label.setText(f"Frame: {frame}")
         mask = self.base_rgb.copy()
 
-        # Then overwrite with colored peaks from events
+
         for event in self.events:
             color = self.event_colors[event.id]
             start = event.event_start_time

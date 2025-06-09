@@ -77,9 +77,7 @@ def generate_cell_to_cell_communications(
 
     comms = _resolve_individual_peaks(cells, neighbor_graph, label_to_cell, max_time_gap)
     communications.extend(comms)
-
-    # Assign origin_type
-    assign_peak_classifications(cells, communications)
+    
 
     logger.info(f"Generated {len(communications)} cell-to-cell communications.")
 
@@ -101,7 +99,8 @@ def _resolve_copeaking_group(
         if label in group.labels: # Skip cells already in the group
             continue
         for i, peak in enumerate(cell.trace.peaks):
-            if not peak.is_analyzed and 0 < group.frame - peak.rel_start_time <= max_time_gap:
+            #if not peak.is_analyzed and 0 < group.frame - peak.rel_start_time <= max_time_gap:
+            if 0 < group.frame - peak.rel_start_time <= max_time_gap:
                 if any(n in group.labels for n in neighbor_graph.neighbors(label)):
                     external_origins.append((label, i, peak.rel_start_time))
 
@@ -113,7 +112,7 @@ def _resolve_copeaking_group(
         # Create communications from external origin to direct neighbors copeaking cells
         direct_targets = set()
         for target_label, target_idx in group.members:
-            if target_label in neighbor_graph[origin_label] and not label_to_cell[target_label].trace.peaks[target_idx].is_analyzed:
+            if target_label in neighbor_graph[origin_label]: #and not label_to_cell[target_label].trace.peaks[target_idx].is_analyzed:
                 cause_time = label_to_cell[target_label].trace.peaks[target_idx].rel_start_time
                 communications.append(CellToCellCommunication(
                     origin=(origin_label, origin_idx),
@@ -133,10 +132,9 @@ def _resolve_copeaking_group(
         origin_label, origin_idx = sorted_members[0]
 
         origin_peak = label_to_cell[origin_label].trace.peaks[origin_idx]
-        if origin_peak.is_analyzed:
-            return []
+        #if origin_peak.is_analyzed:
+        #    return []
 
-        origin_time = origin_peak.rel_start_time
         origin_peak.is_analyzed = True
         communications.extend(
             _bfs_propagate_within_group(group, label_to_cell, {(origin_label, origin_idx)})
@@ -208,7 +206,8 @@ def _resolve_individual_peaks(
             for neighbor in neighbor_graph.neighbors(cell.label):
                 for j, neighbor_peak in enumerate(label_to_cell[neighbor].trace.peaks):
                     dt = peak.rel_start_time - neighbor_peak.rel_start_time
-                    if not neighbor_peak.is_analyzed and 0 < dt <= max_time_gap and dt < best_dt:
+                    #if not neighbor_peak.is_analyzed and 0 < dt <= max_time_gap and dt < best_dt:
+                    if 0 < dt <= max_time_gap and dt < best_dt:
                         best_candidate = (neighbor, j, neighbor_peak.rel_start_time)
                         best_dt = dt
 
@@ -251,7 +250,9 @@ def assign_peak_classifications(
 
             if peak_id in caused_set:
                 peak.origin_type = "caused"
+                peak.in_event = "sequential"
             elif peak_id in origin_set and peak_id not in caused_set:
                 peak.origin_type = "origin"
+                peak.in_event = "sequential"
             else:
                 peak.origin_type = "individual"

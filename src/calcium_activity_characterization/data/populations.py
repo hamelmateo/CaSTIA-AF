@@ -9,6 +9,7 @@ Usage example:
 """
 
 from typing import List, Dict, Optional, Any
+import copy
 from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -16,7 +17,7 @@ import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
-from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications
+from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications, assign_peak_classifications
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
 from calcium_activity_characterization.data.events import Event, GlobalEvent, SequentialEvent
 from calcium_activity_characterization.processing.global_event_detection import (
@@ -256,18 +257,21 @@ class Population:
         Args:
             config (Dict[str, Any]): Configuration dictionary with parameters for sequential event detection.
         """
-        
+        clean_cells = self._create_cells_without_global_peaks()
+
         self.copeaking_neighbors = generate_copeaking_groups(
-            cells=self.cells,
+            cells=clean_cells,
             neighbor_graph=self.neighbor_graph
         )
 
         self.cell_to_cell_communications = generate_cell_to_cell_communications(
-            self.cells,
+            clean_cells,
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
             max_time_gap=get_config_with_fallback(config,"max_communication_time")
         )
+
+        assign_peak_classifications(self.cells, self.cell_to_cell_communications)
 
         population_centroids = [np.array(cell.centroid) for cell in self.cells]
 
@@ -279,7 +283,15 @@ class Population:
             population_centroids=population_centroids
         ))
 
-
+    def _create_cells_without_global_peaks(self) -> list[Cell]:
+        """
+        Returns a deep copy of cells with peaks marked as in_global_event removed.
+        Original cells are not affected.
+        """
+        clean_cells = copy.deepcopy(self.cells)
+        for cell in clean_cells:
+            cell.trace.peaks = [p for p in cell.trace.peaks if getattr(p, 'in_event', None) != "global"]
+        return clean_cells
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:
         """

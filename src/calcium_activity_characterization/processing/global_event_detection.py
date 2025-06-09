@@ -114,7 +114,7 @@ def _cluster_event_from_origin(
         Set[int]: Set of labels in the cluster.
     """
     origin_peak = active_cells[label].trace.get_peak_starting_at(origin_time)
-    if origin_peak.is_analyzed:
+    if origin_peak.in_event:
         return set()
     
     # Only proceed if this origin causes any other peak
@@ -130,7 +130,7 @@ def _cluster_event_from_origin(
 
     cluster = {label}
     queue = [(label, origin_time)]
-    origin_peak.is_analyzed = True
+    origin_peak.in_event = "global"
     origin_peak.origin_type = "origin"
 
     while queue:
@@ -141,14 +141,14 @@ def _cluster_event_from_origin(
             other_time = cell_activation_time[other_label]
             other_peak = other_cell.trace.get_peak_starting_at(other_time)
 
-            if other_label in cluster or other_peak.is_analyzed:
+            if other_label in cluster or other_peak.in_event:
                 continue
 
             if 0 < other_time - current_time <= max_frame_gap:
                 dist = np.linalg.norm(np.array(current_cell.centroid) - np.array(other_cell.centroid))
                 if dist <= radius:
                     cluster.add(other_label)
-                    other_peak.is_analyzed = True
+                    other_peak.in_event = "global"
                     other_peak.origin_type = "caused"
                     queue.append((other_label, other_time))
 
@@ -184,7 +184,7 @@ def extract_global_event_blocks(
             event_cluster = set()
 
             for label, cell in active_cells.items():
-                if cell.trace.get_peak_starting_at(activation_times[label]).is_analyzed:
+                if cell.trace.get_peak_starting_at(activation_times[label]).in_event:
                     continue
 
                 origin_time = activation_times[label]

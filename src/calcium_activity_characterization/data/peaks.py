@@ -86,6 +86,7 @@ class Peak:
         self.cluster_id: Optional[int] = None  # ID of the assigned cluster
 
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
+        self.in_event: Literal["global", "sequential"] = None  # Type of event this peak is part of, if any
 
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
         self.origin_label: Optional[int] = None # Label of the origin peak if this is a caused peak

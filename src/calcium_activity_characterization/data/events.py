@@ -519,7 +519,6 @@ class SequentialEvent(Event):
         population_centroids: List[np.ndarray] = None
     ) -> List["SequentialEvent"]:
         """
-        TODO: modify the id counter to take global event ids into account.
         Extract events from a list of cell-to-cell communications.
 
         Args:

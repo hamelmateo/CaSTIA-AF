@@ -236,7 +236,7 @@ SPATIAL_CLUSTERING_PARAMETERS = {
 # ==========================
 
 EVENT_EXTRACTION_PARAMETERS = {
-    "min_cell_count": 3,  # Minimum number of unique cells required to form an event
+    "min_cell_count": 2,  # Minimum number of unique cells required to form an event
     "shape_classification": {
         "pca_ratio_threshold_radial": 1.5,         # Below this = radial
         "pca_ratio_threshold_longitudinal": 3.0    # Above this = longitudinal
