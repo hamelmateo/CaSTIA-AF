@@ -271,6 +271,8 @@ class Population:
             max_time_gap=get_config_with_fallback(config,"max_communication_time")
         )
 
+        del clean_cells  # Free memory
+
         assign_peak_classifications(self.cells, self.cell_to_cell_communications)
 
         population_centroids = [np.array(cell.centroid) for cell in self.cells]

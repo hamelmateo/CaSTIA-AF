@@ -93,11 +93,11 @@ class EventViewer(QMainWindow):
         controls_layout.addWidget(self.load_btn)
 
         self.show_direction = QCheckBox("Show Propagation Direction")
-        self.show_direction.setChecked(True)
+        self.show_direction.setChecked(False)
         controls_layout.addWidget(self.show_direction)
 
         self.show_wavefront = QCheckBox("Show Wavefront Hull")
-        self.show_wavefront.setChecked(False)
+        self.show_wavefront.setChecked(True)
         controls_layout.addWidget(self.show_wavefront)
 
         controls_layout.addWidget(self.hover_label)
@@ -155,9 +155,33 @@ class EventViewer(QMainWindow):
                                 for y, x in cell.pixel_coords:
                                     mask[y, x] = color
 
+
+
         qimg = QImage(mask.data, mask.shape[1], mask.shape[0], QImage.Format_RGB888)
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
+
+        for event in self.events:
+                pen = QPen(Qt.yellow)
+                # If event is ongoing at current frame
+                if event.event_start_time <= frame <= event.event_end_time:
+                    # Find the last available wavefront at or before this frame
+                    valid_frames = [f for f in event.wavefront if f <= frame]
+                    if not valid_frames:
+                        continue
+
+                    last_frame = max(valid_frames)
+                    points = event.wavefront[last_frame]
+                    if len(points) >= 3:
+                        try:
+                            hull = ConvexHull(points)
+                            polygon = QPolygonF([
+                                QPointF(points[v][1], points[v][0])  # x=col, y=row
+                                for v in hull.vertices
+                            ])
+                            self.scene.addPolygon(polygon, pen)
+                        except Exception as e:
+                            print(f"[Hull Drawing] Failed for event {event.id} at frame {frame}: {e}")
 
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
