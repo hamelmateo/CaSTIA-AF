@@ -361,7 +361,7 @@ class CalciumPipeline:
 
         # Plot the binarized traces
         plot_raster(self.output_path, self.population.cells)
-        plot_impulse_raster(self.output_path, self.population.cells)
+        #plot_impulse_raster(self.output_path, self.population.cells)
 
 
     def _correlation_analysis(self):
@@ -489,9 +489,9 @@ class CalciumPipeline:
         """
         Initialize population traces by computing global, activity, and impulse traces.
         """
-        self._initialize_global_trace()
+        #self._initialize_global_trace()
         self._initialize_activity_trace()
-        self._initialize_impulse_trace()
+        #self._initialize_impulse_trace()
 
         logger.info("Population traces initialized successfully.")
 
