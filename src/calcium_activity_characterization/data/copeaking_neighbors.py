@@ -54,11 +54,10 @@ def generate_copeaking_groups(cells: List[Cell], neighbor_graph: nx.Graph) -> Li
     """
     # Map frame -> list of (label, peak_index)
     frame_to_peaks: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
-    label_to_cell: Dict[int, Cell] = {cell.label: cell for cell in cells}
 
     for cell in cells:
-        for i, peak in enumerate(cell.trace.peaks):
-            frame_to_peaks[peak.rel_start_time].append((cell.label, i))
+        for _, peak in enumerate(cell.trace.peaks):
+            frame_to_peaks[peak.rel_start_time].append((cell.label, peak.id))
 
     groups: List[CoPeakingNeighbors] = []
 

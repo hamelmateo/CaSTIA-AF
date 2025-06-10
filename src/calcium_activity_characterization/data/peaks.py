@@ -144,6 +144,7 @@ class PeakDetector:
 
         if self.params.get("filter_overlapping_peaks", False):
             peaks = self._filter_non_parent_peaks(peaks)
+            peaks = reassign_peak_ids(peaks)
 
         return peaks
 
@@ -215,7 +216,7 @@ class PeakDetector:
                     scale_class = "super"
 
                 peak = Peak(
-                    id=i-1,
+                    id=i,
                     start_time=start_time,
                     end_time=end_time,
                     rel_start_time=rel_start_time,
@@ -331,3 +332,25 @@ class PeakDetector:
         if n_removed > 0:
             logger.info(f"[PeakDetector] Eliminated {n_removed} overlapping peaks (non-parents).")
         return filtered
+
+
+def reassign_peak_ids(peaks: List[Peak]) -> List[Peak]:
+        """
+        Reassign sequential IDs to all peaks across all cells after overlap removal.
+        IDs will start at 0 and increment globally.
+
+        Args:
+            peaks (List[Peak]): List of Peak objects to reassign IDs.
+
+        Returns:
+            List[Peak]: Peaks with reassigned IDs.
+        """
+        try:
+            new_id = 0
+            for peak in peaks:
+                peak.id = new_id
+                new_id += 1
+            return peaks
+        except Exception as e:
+            logger.error(f"Failed to reassign peak IDs: {e}")
+            raise

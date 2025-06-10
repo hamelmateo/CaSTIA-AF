@@ -98,10 +98,10 @@ def _resolve_copeaking_group(
     for label, cell in label_to_cell.items():
         if label in group.labels: # Skip cells already in the group
             continue
-        for i, peak in enumerate(cell.trace.peaks):
+        for _, peak in enumerate(cell.trace.peaks):
             if 0 < group.frame - peak.rel_start_time <= max_time_gap:
                 if any(n in group.labels for n in neighbor_graph.neighbors(label)):
-                    external_origins.append((label, i, peak.rel_start_time))
+                    external_origins.append((label, peak.id, peak.rel_start_time))
 
     # Sort external origins by time (decreasing) and label
     if external_origins:
@@ -169,7 +169,7 @@ def _bfs_propagate_within_group(
                 if cand_label == neighbor and not label_to_cell[cand_label].trace.peaks[cand_idx].is_analyzed:
                     current_peak_index = next(i for l, i in start_labels if l == current) # Get the index of the peak in the current cell
                     comm = CellToCellCommunication(
-                        origin=(current, current_peak_index ),  
+                        origin=(current, current_peak_index),  
                         cause=(cand_label, cand_idx),
                         origin_start_time=label_to_cell[current].trace.peaks[current_peak_index].rel_start_time,
                         cause_start_time=label_to_cell[cand_label].trace.peaks[cand_idx].rel_start_time
@@ -201,10 +201,10 @@ def _resolve_individual_peaks(
             best_candidate = None
             best_dt = float("inf")
             for neighbor in neighbor_graph.neighbors(cell.label):
-                for j, neighbor_peak in enumerate(label_to_cell[neighbor].trace.peaks):
+                for _, neighbor_peak in enumerate(label_to_cell[neighbor].trace.peaks):
                     dt = peak.rel_start_time - neighbor_peak.rel_start_time
                     if 0 < dt <= max_time_gap and dt < best_dt:
-                        best_candidate = (neighbor, j, neighbor_peak.rel_start_time)
+                        best_candidate = (neighbor, neighbor_peak.id, neighbor_peak.rel_start_time)
                         best_dt = dt
 
             if best_candidate:
@@ -241,7 +241,7 @@ def assign_peak_classifications(
     origin_set = {comm.origin for comm in communications}
 
     for cell in cells:
-        for i, peak in enumerate(cell.trace.peaks):
+        for _, peak in enumerate(cell.trace.peaks):
             if peak.in_event != "global":
                 peak_id = (cell.label, peak.id)
 

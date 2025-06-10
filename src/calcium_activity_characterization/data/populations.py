@@ -17,6 +17,7 @@ import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.data.peaks import reassign_peak_ids
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications, assign_peak_classifications
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
 from calcium_activity_characterization.data.events import Event, GlobalEvent, SequentialEvent
@@ -271,24 +272,6 @@ class Population:
             max_time_gap=get_config_with_fallback(config,"max_communication_time")
         )
 
-        # Print all communications related to cell 168
-        cell_id = 168
-        related_communications = [
-            comm for comm in self.cell_to_cell_communications
-            if comm.origin[0] == cell_id or comm.cause[0] == cell_id
-        ]
-        for comm in related_communications:
-            print(comm)
-
-        # Print all peaks of cell 168
-        cell_168 = next((cell for cell in self.cells if getattr(cell, "label", None) == 168), None)
-        if cell_168 is not None:
-            print(f"Peaks for cell 168:")
-            for peak in cell_168.trace.peaks:
-                print(peak)
-        else:
-            print("Cell 168 not found.")
-
         del clean_cells  # Free memory
 
         assign_peak_classifications(self.cells, self.cell_to_cell_communications)
@@ -313,6 +296,8 @@ class Population:
         clean_cells = copy.deepcopy(self.cells)
         for cell in clean_cells:
             cell.trace.peaks = [p for p in cell.trace.peaks if getattr(p, 'in_event', None) != "global"]
+            reassign_peak_ids(cell.trace.peaks)
+        
         return clean_cells
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:

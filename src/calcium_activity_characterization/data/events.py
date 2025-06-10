@@ -4,7 +4,7 @@
 # >>> print(event.event_duration, event.n_cells_involved)
 # >>> global_event = GlobalEvent.from_framewise_active_labels(id=1, label_to_cell=..., framewise_active_labels=..., config={})
 
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
 import numpy as np
 from scipy.spatial.distance import euclidean, pdist
@@ -59,11 +59,6 @@ class Event(ABC):
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
 
-
-        if id == 395:
-            logger.info(f"[Event {self.id}] Created with {self.n_cells_involved} cells, "
-                        f"duration {self.event_duration} frames, "
-                        f"start time {self.event_start_time}, end time {self.event_end_time}.")
 
     def _compute_event_bounds(self) -> Tuple[int, int]:
         """
@@ -126,9 +121,6 @@ class SequentialEvent(Event):
     ) -> None:
         peak_indices = list({comm.origin for comm in communications}.union({comm.cause for comm in communications}))
         self.communications = communications
-        
-        if id == 395:
-            logger.info(f"[Event {id}] Created wit cells, ")
 
         self.graph = nx.DiGraph()
         self._build_graph()
@@ -587,12 +579,95 @@ class GlobalEvent(Event):
 
     def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
         """
-        TODO: PCA-based analysis on centroids across time.
+        Compute dominant direction vector of a global wave event.
 
         Returns:
-            Tuple[float, float]: Unit vector (dx, dy) indicating direction.
+            tuple[float, float]: Unit vector (dy, dx) or (0.0, 0.0) if isotropic.
         """
-        return (0.0, 0.0)
+        metadata = self._compute_dominant_direction_metadata()
+
+        return metadata["direction_vector"]
+
+
+    def _compute_dominant_direction_metadata(self) -> Dict[str, Any]:
+        """
+        Compute dominant direction and supporting metadata using trimmed CoM over quartiles.
+        TODO: make it configurable to change X quartiles, MAD threshold and alpha.
+
+        Returns:
+            dict: Includes:
+                - direction_vector (tuple)
+                - quartile_coms (list[np.ndarray])
+                - net_displacement (float)
+                - max_event_extent (float)
+                - is_directional (bool)
+        """
+        duration = self.event_end_time - self.event_start_time + 1
+        if duration < 4:
+            return {"direction_vector": (0.0, 0.0), "quartile_coms": []}
+
+        # Divide event into 4 quartiles
+        quartiles = [
+            (self.event_start_time + i * duration // 4, self.event_start_time + (i + 1) * duration // 4 - 1)
+            for i in range(4)
+        ]
+        quartiles[-1] = (quartiles[-1][0], self.event_end_time)  # ensure last ends exactly at end
+
+        quartile_coms = []
+        all_centroids = []
+
+        # Compute CoM for each quartile
+        for q_start, q_end in quartiles:
+            frame_labels = set()
+            for t in range(q_start, q_end + 1):
+                frame_labels.update(self.framewise_active_labels.get(t, []))
+
+            centroids = [self.label_to_centroid[l] for l in frame_labels if l in self.label_to_centroid]
+            all_centroids.extend(centroids)
+
+            if len(centroids) == 0:
+                quartile_coms.append(np.array([0.0, 0.0]))
+                continue
+
+            centroid_array = np.array(centroids)
+            med = np.median(centroid_array, axis=0)
+            dists = np.linalg.norm(centroid_array - med, axis=1)
+            mad = np.median(np.abs(dists - np.median(dists)))
+            threshold = np.median(dists) + 2.0 * mad
+            filtered = centroid_array[dists <= threshold] # Filter out outliers
+            com = np.mean(filtered, axis=0) if len(filtered) > 0 else np.mean(centroid_array, axis=0)
+            quartile_coms.append(com)
+
+        # Compute the principal component of the quartile CoMs
+        coms_array = np.array(quartile_coms)
+        centered = coms_array - coms_array.mean(axis=0)
+
+        try:
+            _, _, Vt = np.linalg.svd(centered)
+            vec = Vt[0]  # First principal component (unit vector)
+            net_disp = float(np.linalg.norm(coms_array[-1] - coms_array[0]))
+            unit_vec = tuple(vec)
+        except Exception:
+            logger.info(f"[Event {self.id}] Failed to compute SVD for direction vector.")
+            unit_vec = (0.0, 0.0)
+            net_disp = 0.0
+
+        # Compute max extent of event
+        all_centroids = np.array(all_centroids)
+        max_extent = float(np.max(pdist(all_centroids))) if len(all_centroids) >= 2 else 0.0
+
+        is_directional = net_disp >= 0.15 * max_extent if max_extent > 0 else False
+        if not is_directional:
+            unit_vec = (0.0, 0.0)
+
+        return {
+            "direction_vector": unit_vec,
+            "quartile_coms": quartile_coms,
+            "net_displacement": net_disp,
+            "max_event_extent": max_extent,
+            "is_directional": is_directional
+        }
+
 
     def _compute_directional_propagation_speed(self) -> float:
         """
