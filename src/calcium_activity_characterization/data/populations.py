@@ -271,6 +271,24 @@ class Population:
             max_time_gap=get_config_with_fallback(config,"max_communication_time")
         )
 
+        # Print all communications related to cell 168
+        cell_id = 168
+        related_communications = [
+            comm for comm in self.cell_to_cell_communications
+            if comm.origin[0] == cell_id or comm.cause[0] == cell_id
+        ]
+        for comm in related_communications:
+            print(comm)
+
+        # Print all peaks of cell 168
+        cell_168 = next((cell for cell in self.cells if getattr(cell, "label", None) == 168), None)
+        if cell_168 is not None:
+            print(f"Peaks for cell 168:")
+            for peak in cell_168.trace.peaks:
+                print(peak)
+        else:
+            print("Cell 168 not found.")
+
         del clean_cells  # Free memory
 
         assign_peak_classifications(self.cells, self.cell_to_cell_communications)
@@ -284,6 +302,8 @@ class Population:
             config=config,
             population_centroids=population_centroids
         ))
+
+
 
     def _create_cells_without_global_peaks(self) -> list[Cell]:
         """

@@ -55,9 +55,15 @@ class Event(ABC):
         self.event_start_time, self.event_end_time = self._compute_event_bounds()
         self.event_duration = self.event_end_time - self.event_start_time + 1
         self.wavefront = self._compute_incremental_wavefront()
-
+        
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
+
+
+        if id == 395:
+            logger.info(f"[Event {self.id}] Created with {self.n_cells_involved} cells, "
+                        f"duration {self.event_duration} frames, "
+                        f"start time {self.event_start_time}, end time {self.event_end_time}.")
 
     def _compute_event_bounds(self) -> Tuple[int, int]:
         """
@@ -120,6 +126,9 @@ class SequentialEvent(Event):
     ) -> None:
         peak_indices = list({comm.origin for comm in communications}.union({comm.cause for comm in communications}))
         self.communications = communications
+        
+        if id == 395:
+            logger.info(f"[Event {id}] Created wit cells, ")
 
         self.graph = nx.DiGraph()
         self._build_graph()

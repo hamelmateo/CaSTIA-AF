@@ -111,7 +111,7 @@ class SequentialSelectivityViewer(QMainWindow):
         if not folder:
             return
         folder = Path(folder)
-        pkl_path = folder / "sequential_active_cells.pkl"
+        pkl_path = folder / "population_events.pkl"
         if not pkl_path.exists():
             return
         with open(pkl_path, 'rb') as f:
@@ -196,10 +196,12 @@ class SequentialSelectivityViewer(QMainWindow):
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
 
+        """
         pen = QPen(Qt.red, 2)
         for start, end, origin_cent, cause_cent in self.arrow_intervals:
             if start <= frame <= end:
                 self.scene.addLine(origin_cent[1], origin_cent[0], cause_cent[1], cause_cent[0], pen)
+        """
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
     def eventFilter(self, obj, event):

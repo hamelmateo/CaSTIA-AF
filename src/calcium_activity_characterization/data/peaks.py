@@ -215,7 +215,7 @@ class PeakDetector:
                     scale_class = "super"
 
                 peak = Peak(
-                    id=i,
+                    id=i-1,
                     start_time=start_time,
                     end_time=end_time,
                     rel_start_time=rel_start_time,
