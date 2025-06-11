@@ -287,6 +287,20 @@ class Population:
         ))
 
 
+        target_label = 877
+
+        for event in self.events:
+            involved_labels = {label for label, _ in event.peaks_involved}
+            if target_label in involved_labels:
+                print(f"\n--- Event ID: {event.id} ---")
+                print(f"Type: {type(event).__name__}")
+                print(f"Duration: {event.event_duration} frames")
+                print(f"Start-End: {event.event_start_time}–{event.event_end_time}")
+                print(f"# Cells involved: {event.n_cells_involved}")
+                print(f"Directional vector: {getattr(event, 'dominant_direction_vector', 'N/A')}")
+                print(f"Is directional: {getattr(event, 'is_directional', 'N/A')}")
+
+
 
     def _create_cells_without_global_peaks(self) -> list[Cell]:
         """
@@ -297,7 +311,7 @@ class Population:
         for cell in clean_cells:
             cell.trace.peaks = [p for p in cell.trace.peaks if getattr(p, 'in_event', None) != "global"]
             reassign_peak_ids(cell.trace.peaks)
-        
+
         return clean_cells
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:

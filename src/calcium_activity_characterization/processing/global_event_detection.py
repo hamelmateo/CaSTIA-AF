@@ -44,7 +44,7 @@ def _get_framewise_active_labels(
     """
     Build a dict mapping frame -> list of cell labels whose peak starts at that frame.
 
-    Only includes rel_start_time, not the full duration.
+    Each cell contributes only one peak within the window: the latest one.
 
     Args:
         cells (List[Cell]): All cells to consider.
@@ -56,12 +56,12 @@ def _get_framewise_active_labels(
     """
     framewise: Dict[int, List[int]] = {}
     for cell in cells:
-        for peak in cell.trace.peaks:
-            t = peak.rel_start_time
-            if start <= t <= end:
-                framewise.setdefault(t, []).append(cell.label)
+        valid_peaks = [p for p in cell.trace.peaks if start <= p.rel_start_time <= end]
+        if not valid_peaks:
+            continue
+        best_peak = max(valid_peaks, key=lambda p: p.rel_start_time)
+        framewise.setdefault(best_peak.rel_start_time, []).append(cell.label)
     return framewise
-
 
 def _get_activated_cells(
     framewise_active: Dict[int, List[int]],

@@ -16,6 +16,7 @@ from PyQt5.QtGui import QPixmap, QImage, QPen, QPolygonF
 from PyQt5.QtCore import Qt, QTimer, QPointF
 from matplotlib import cm
 from scipy.spatial import ConvexHull
+from calcium_activity_characterization.data.events import Event, SequentialEvent, GlobalEvent
 from math import atan2, cos, sin, radians
 
 
@@ -155,33 +156,66 @@ class EventViewer(QMainWindow):
                                 for y, x in cell.pixel_coords:
                                     mask[y, x] = color
 
-
-
         qimg = QImage(mask.data, mask.shape[1], mask.shape[0], QImage.Format_RGB888)
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
 
         for event in self.events:
-                pen = QPen(Qt.yellow)
-                # If event is ongoing at current frame
-                if event.event_start_time <= frame <= event.event_end_time:
-                    # Find the last available wavefront at or before this frame
-                    valid_frames = [f for f in event.wavefront if f <= frame]
-                    if not valid_frames:
-                        continue
+            pen = QPen(Qt.yellow)
+            # If event is ongoing at current frame
+            if event.event_start_time <= frame <= event.event_end_time:
+                # Find the last available wavefront at or before this frame
+                valid_frames = [f for f in event.wavefront if f <= frame]
+                if not valid_frames:
+                    continue
 
-                    last_frame = max(valid_frames)
-                    points = event.wavefront[last_frame]
-                    if len(points) >= 3:
-                        try:
-                            hull = ConvexHull(points)
-                            polygon = QPolygonF([
-                                QPointF(points[v][1], points[v][0])  # x=col, y=row
-                                for v in hull.vertices
-                            ])
-                            self.scene.addPolygon(polygon, pen)
-                        except Exception as e:
-                            print(f"[Hull Drawing] Failed for event {event.id} at frame {frame}: {e}")
+                last_frame = max(valid_frames)
+                points = event.wavefront[last_frame]
+                if len(points) >= 3:
+                    try:
+                        hull = ConvexHull(points)
+                        polygon = QPolygonF([
+                            QPointF(points[v][1], points[v][0])  # x=col, y=row
+                            for v in hull.vertices
+                        ])
+                        self.scene.addPolygon(polygon, pen)
+                    except Exception as e:
+                        print(f"[Hull Drawing] Failed for event {event.id} at frame {frame}: {e}")
+
+            if (
+                self.show_direction.isChecked() and
+                event.event_start_time <= frame <= event.event_end_time
+            ):
+                direction = event.dominant_direction_vector
+                if direction != (0.0, 0.0):
+                    dy, dx = direction
+
+                    anchor = None
+
+                    if isinstance(event, SequentialEvent):
+                        origin_label = event._get_origin_label()
+                        if origin_label and origin_label in event.label_to_centroid:
+                            anchor = event.label_to_centroid[origin_label]
+                            scale = 50.0
+                    else:  # GlobalEvent or others
+                        involved_centroids = [
+                            event.label_to_centroid[lbl]
+                            for lbl, _ in event.peaks_involved
+                            if lbl in event.label_to_centroid
+                        ]
+                        if involved_centroids:
+                            anchor = np.mean(involved_centroids, axis=0)
+                            scale = 150.0
+
+                    if anchor is not None:
+                        tail_x, tail_y = anchor[1], anchor[0]
+                        head_x = tail_x + dx * scale
+                        head_y = tail_y + dy * scale
+
+                        arrow_pen = QPen(Qt.red, 2)
+                        self.scene.addLine(tail_x, tail_y, head_x, head_y, arrow_pen)
+                        self.scene.addEllipse(head_x - 3, head_y - 3, 6, 6, QPen(Qt.red), Qt.red)
+
 
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 

@@ -107,8 +107,7 @@ class Peak:
 
     def __repr__(self):
         return (
-            f"Peak(id={self.id}, time={self.peak_time}, height={self.height:.2f}, "
-            f"prominence={self.prominence:.2f}, role={self.role}, scale={self.scale_class}, symmetry={self.rel_symmetry_score:.2f})"
+            f"Peak(id={self.id}, time={self.rel_start_time}, height={self.height:.2f}, in_event={self.in_event})"
         )
 
 

@@ -656,7 +656,7 @@ class GlobalEvent(Event):
         all_centroids = np.array(all_centroids)
         max_extent = float(np.max(pdist(all_centroids))) if len(all_centroids) >= 2 else 0.0
 
-        is_directional = net_disp >= 0.15 * max_extent if max_extent > 0 else False
+        is_directional = net_disp >= 0.1 * max_extent if max_extent > 0 else False
         if not is_directional:
             unit_vec = (0.0, 0.0)
 
