@@ -41,6 +41,8 @@ class SignalProcessor:
         self.detrending_params = params.get("methods", {}).get(self.detrending_mode, {})
 
         self.normalize_method = params.get("normalizing_method", "deltaf")
+        self.normalize_params = params.get("normalization_parameters", {})
+
 
         self.sigma = params.get("sigma", 1.0)
         self.length = params.get("cut_trace_num_points", 0)
@@ -178,7 +180,7 @@ class SignalProcessor:
         except Exception:
             return trace, 0.0
 
-    def _normalize(self, trace: np.ndarray, min_range: float = 1e-2) -> np.ndarray:
+    def _normalize(self, trace: np.ndarray) -> np.ndarray:
         """
         Normalize a trace using the specified method.
 
@@ -190,27 +192,31 @@ class SignalProcessor:
             np.ndarray: Normalized trace.
         """
         method = self.normalize_method
+        epsilon = self.normalize_params.get("epsilon", 1e-8)
+        min_range = self.normalize_params.get("min_range", 1e-2)
 
         if method == "minmax":
             min_val, max_val = np.min(trace), np.max(trace)
             denom = max_val - min_val
-            return (trace - min_val) / (denom + 1e-8) if denom >= min_range else trace - min_val
+            return (trace - min_val) / (denom + epsilon) if denom >= min_range else trace - min_val
 
         elif method == "percentile":
-            baseline = np.percentile(trace, 10)
+            qth = self.normalize_params.get("percentile_baseline", 10)
+            baseline = np.percentile(trace, qth)
             peak = np.max(trace)
             denom = peak - baseline
-            return (trace - baseline) / (denom + 1e-8) if denom >= min_range else trace - baseline
+            return (trace - baseline) / (denom + min_range) if denom >= min_range else trace - baseline
 
         elif method == "deltaf":
-            F0 = max(np.percentile(trace, 10), min_range)
-            deltaf = (trace - F0) / (F0 + 1e-8)
+            qth = self.normalize_params.get("percentile_baseline", 10)
+            F0 = max(np.percentile(trace, qth), min_range)
+            deltaf = (trace - F0) / (F0 + epsilon)
             max_abs = np.max(np.abs(deltaf))
-            return deltaf / (max_abs + 1e-8) if max_abs >= min_range else deltaf
+            return deltaf / (max_abs + epsilon) if max_abs >= min_range else deltaf
 
         elif method == "zscore":
             mean, std = np.mean(trace), np.std(trace)
-            return (trace - mean) / (std + 1e-8) if std >= min_range else trace - mean
+            return (trace - mean) / (std + epsilon) if std >= min_range else trace - mean
 
         else:
             raise ValueError(f"Unknown normalization method: {method}")

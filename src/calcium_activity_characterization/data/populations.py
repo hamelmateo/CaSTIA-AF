@@ -16,12 +16,11 @@ from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
-from calcium_activity_characterization.data.clusters import Cluster
 from calcium_activity_characterization.data.peaks import reassign_peak_ids
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications, assign_peak_classifications
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors, generate_copeaking_groups
 from calcium_activity_characterization.data.events import Event, GlobalEvent, SequentialEvent
-from calcium_activity_characterization.processing.global_event_detection import (
+from calcium_activity_characterization.event_detection.global_event import (
     find_significant_activity_peaks,
     extract_global_event_blocks
 )
@@ -61,18 +60,13 @@ class Population:
         self.copeaking_neighbors: List[CoPeakingNeighbors] = None
         self.cell_to_cell_communication: List[CellToCellCommunication] = None
         self.events: List[Event] = []
-        self.global_trace: Optional[Trace] = None   # Mean trace across all cells
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
-        self.impulse_trace: Optional[Trace] = None  # Trace of summed rel_start_time impulses
         self.metadata: Dict[str, Any] = {}
-        self.similarity_matrices: Optional[List[np.ndarray]]= None
-        self.peak_clusters: Optional[List[Cluster]] = None
-        self.event_clusters: Optional[List[List[Cluster]]] = None
 
         try:
             self.neighbor_graph = build_spatial_neighbor_graph(cells)
             self.neighbor_graph = filter_graph_by_edge_length_mad(self.neighbor_graph, scale=2.0)
-            plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path /"neighbor_graph_filtered.png")
+            plot_spatial_neighbor_graph(self.neighbor_graph, mask, output_path)
         
         except ValueError as e:
             logger.warning(f"Failed to build spatial neighbor graph: {e}")
@@ -221,7 +215,7 @@ class Population:
                 Expected keys:
                     - "threshold_ratio": Ratio of active cells at peak to trigger detection.
                     - "radius": Radius for peak classification.
-                    - "max_frame_gap": Maximum allowed gap between frames in a global event.
+                    - "global_max_comm_time": Maximum allowed gap between frames in a global event.
                     - "min_cell_count": Minimum number of cells required to consider a peak significant.
         """
         windows = find_significant_activity_peaks(
@@ -238,7 +232,7 @@ class Population:
             cells=self.cells,
             peak_windows=windows,
             radius=get_config_with_fallback(config,"radius"),
-            max_frame_gap=get_config_with_fallback(config,"max_frame_gap"),
+            global_max_comm_time=get_config_with_fallback(config,"global_max_comm_time"),
             min_cell_count=get_config_with_fallback(config,"min_cell_count")
         )
 
@@ -269,7 +263,7 @@ class Population:
             clean_cells,
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
-            max_time_gap=get_config_with_fallback(config,"max_communication_time")
+            max_time_gap=get_config_with_fallback(config,"seq_max_comm_time")
         )
 
         del clean_cells  # Free memory
@@ -285,21 +279,6 @@ class Population:
             config=config,
             population_centroids=population_centroids
         ))
-
-
-        target_label = 877
-
-        for event in self.events:
-            involved_labels = {label for label, _ in event.peaks_involved}
-            if target_label in involved_labels:
-                print(f"\n--- Event ID: {event.id} ---")
-                print(f"Type: {type(event).__name__}")
-                print(f"Duration: {event.event_duration} frames")
-                print(f"Start-End: {event.event_start_time}–{event.event_end_time}")
-                print(f"# Cells involved: {event.n_cells_involved}")
-                print(f"Directional vector: {getattr(event, 'dominant_direction_vector', 'N/A')}")
-                print(f"Is directional: {getattr(event, 'is_directional', 'N/A')}")
-
 
 
     def _create_cells_without_global_peaks(self) -> list[Cell]:

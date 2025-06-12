@@ -14,7 +14,7 @@ from pathlib import Path
 from scipy.stats import entropy, skew
 from typing import List, Dict, Any, Optional, TYPE_CHECKING
 
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.preprocessing.signal_processing import SignalProcessor
 from calcium_activity_characterization.data.peaks import PeakDetector
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time

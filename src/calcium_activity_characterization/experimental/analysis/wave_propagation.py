@@ -7,7 +7,7 @@
 import numpy as np
 from collections import defaultdict
 from typing import Tuple, Dict, List
-from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.experimental.analysis.clusters import Cluster
 from calcium_activity_characterization.data.cells import Cell
 import logging
 from pathlib import Path

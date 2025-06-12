@@ -15,7 +15,7 @@ import pickle
 from collections import Counter
 
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.processing.clustering import ClusteringEngine
+from calcium_activity_characterization.experimental.event_detection.clustering import ClusteringEngine
 from calcium_activity_characterization.config.config import CLUSTERING_PARAMETERS
 
 class ClusteringGUI(QMainWindow):
@@ -120,7 +120,7 @@ class ClusteringGUI(QMainWindow):
         if folder:
             folder = Path(folder)
             sim_path = folder / "similarity_matrices.pkl"
-            cells_path = folder / "binarized_active_cells.pkl"
+            cells_path = folder / "03_binarized_traces.pkl"
             overlay_path = folder / "overlay.tif"
 
             try:

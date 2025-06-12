@@ -84,7 +84,7 @@ class BinarizedSignalViewer(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
         if folder:
             folder = Path(folder)
-            cells_path = folder / "binarized_active_cells.pkl"
+            cells_path = folder / "03_binarized_traces.pkl"
 
             with open(cells_path, 'rb') as f:
                 self.population = pickle.load(f)

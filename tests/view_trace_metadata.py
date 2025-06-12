@@ -60,7 +60,7 @@ class MetadataViewer(QWidget):
 
         folder = Path(folder)
         overlay_path = folder / "overlay.TIF"
-        pkl_path = folder / "binarized_active_cells.pkl"
+        pkl_path = folder / "03_binarized_traces.pkl"
 
         if not overlay_path.exists() or not pkl_path.exists():
             QMessageBox.critical(self, "Error", "Missing overlay or cell data.")

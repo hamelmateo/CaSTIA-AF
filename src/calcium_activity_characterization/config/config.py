@@ -1,30 +1,81 @@
-# TODO: Normalization parameters dictionary
-# TODO: deal with deprecated pixel values
-
 # ==========================
 # FLAGS
 # ==========================
 DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
-SAVE_OVERLAY = True  # Save segmentation overlay
-ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
-PARALLELIZE = True  # Use parallel processing for raw trace computing
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
+
+# ==========================
+# SEGMENTATION PARAMETERS
+# ==========================
+
+SEGMENTATION_PARAMETERS = {
+    "segmentation_method": "mesmer",  # Segmentation method to use - 'mesmer', 'cellpose', 'watershed'
+    
+    "mesmer_parameters": {
+        "image_mpp": 0.5,  # Microns per pixel for Mesmer segmentation
+        "postprocess_kwargs_nuclear": {
+            "maxima_threshold": 0.2,  # Threshold for maxima detection
+            "maxima_smooth": 2.5,  # Smoothing for maxima detection
+            "interior_threshold": 0.05,  # Threshold for interior detection
+            "interior_smooth": 1,  # Smoothing for interior detection
+            "small_objects_threshold": 25,  # Minimum size for small objects
+            "fill_holes_threshold": 15,  # Threshold for filling holes
+            "radius": 2  # Radius for morphological operations
+        }
+    },
+    
+    "save_overlay": True  # Save segmentation overlay
+}
 
 
 # ==========================
 # IMAGE PROCESSING PARAMETERS
 # ==========================
-ROI_SCALE = 0.75  # Scale for ROI cropping (e.g., 0.75 = 75%)
-SMALL_OBJECT_THRESHOLD = 200  # Minimum pixel count for valid cell
-BIG_OBJECT_THRESHOLD = 10000  # Maximum pixel count for valid cell
-PADDING = 5  # Filename zero-padding digits
+
+IMAGE_PROCESSING_PARAMETERS = {
+    "apply": {
+        "padding": True,
+        "cropping": True,
+        "hot_pixel_cleaning": True
+    },
+
+    "padding_digits": 5,  # e.g. t00001
+    "roi_scale": 0.75,  # 1.0 = no crop
+
+    "hot_pixel_cleaning": {
+        "method": "replace",         # "replace" or "clip"
+        "use_auto_threshold": True,
+        "percentile": 99.9,
+        "mad_scale": 20.0,
+        "static_threshold": 5000,
+        "window_size": 3
+    }
+}
+
+
+TRACE_EXTRACTION_PARAMETERS = {
+    "parallelize": True,            # Use multiprocessing to speed up trace extraction
+    "trace_version_name": "raw"     # The version key used to store in Cell.trace
+}
+
+
+# ==========================
+# CELL DETECTION PARAMETERS
+# ==========================
+
+CELL_FILTERING_PARAMETERS = {
+    "border_margin": 20,  # Margin from image border to exclude cells
+    "object_size_thresholds": {
+        "min": 200,  # Minimum size in pixels for a cell to be considered valid
+        "max": 10000  # Maximum size in pixels for a cell to be considered valid
+    }  # Size thresholds for filtering cells
+}
 
 # ==========================
 # INDIVIDUAL CELLS SIGNAL PROCESSING PARAMETERS
 # ==========================
-
 
 INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
@@ -72,7 +123,13 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
         "movingaverage": {
             "window_size": 101
         }
-    }
+    },
+
+    "normalization_parameters": {
+        "percentile_baseline": 10,   # for percentile and deltaf
+        "epsilon": 1e-8,             # for all modes to prevent divide-by-zero
+        "min_range": 1e-2            # Minimum range for normalization
+    }    
 }
 
 
@@ -108,8 +165,7 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
 # GLOBAL ACTIVITY TRACE SIGNAL PROCESSING PARAMETERS
 # ==========================
 
-
-GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
+POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
         "detrending": False,
         "smoothing": True,
@@ -160,7 +216,60 @@ GLOBAL_SIGNAL_PROCESSING_PARAMETERS = {
 
 
 # ==========================
-# GLOBAL ACTIVITY TRACE PEAK DETECTION PARAMETERS
+# ACTIVITY TRACE PEAK DETECTION PARAMETERS
+# ==========================
+
+ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS = {
+    "method": "skimage",  # only 'skimage' supported for now
+    "params": {
+        "skimage": {
+            "prominence": 10, # Minimum prominence of peaks
+            "distance": 20,  # Minimum distance between peaks
+            "height": None,
+            "threshold": None,
+            "width": None,
+            "scale_class_quantiles": [0.33, 0.66],
+            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
+        }
+    },
+    "peak_grouping": {
+        "overlap_margin": 0,  # Margin for grouping overlapping peaks
+        "verbose": False  # Print grouping information
+    },
+    "start_frame": 50,  # Starting frame for peak detection (None for no limit)
+    "end_frame": None,  # Ending frame for peak detection (None for no limit)
+    "filter_overlapping_peaks": False  # Filter overlapping peaks based on prominence
+}
+
+
+# ==========================
+# EVENTS DETECTION PARAMETERS
+# ==========================
+
+EVENT_EXTRACTION_PARAMETERS = {
+    "min_cell_count": 2,  # Minimum number of unique cells required to form an event
+    "convex_hull": {
+        "min_points": 3,       # Minimum number of points to compute convex hull
+        "min_duration": 1      # Minimum time difference to compute propagation speed
+    },
+    "threshold_ratio": 0.4,  # Minimum ratio of active cells at peak to trigger global event detection
+    "radius": 300.0,  # Radius for spatial clustering of events
+    "global_max_comm_time": 10,  # Maximum time (in frames) for communication between cells in GLOBAL events
+    "seq_max_comm_time": 10,  # Maximum time (in frames) for communication between cells in SEQUENTIAL events
+}
+
+
+
+# ==========================
+# UNUSED / DEPRECATED PARAMETERS (for reference, not currently used)
+# ==========================
+# This section is for parameters that are not currently used in the pipeline,
+# but are kept here for reference or potential future use.
+
+
+# ==========================
+# GLOBAL TRACE PEAK DETECTION PARAMETERS
 # ==========================
 
 GLOBAL_PEAK_DETECTION_PARAMETERS = {
@@ -185,7 +294,6 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
     "end_frame": None,  # Ending frame for peak detection (None for no limit)
     "filter_overlapping_peaks": False  # Filter overlapping peaks based on prominence
 }
-
 
 
 # ==========================
@@ -227,28 +335,7 @@ SPATIAL_CLUSTERING_PARAMETERS = {
         "use_sequential": True  # Use sequential clustering
     },
     "indirect_neighbors_num": 1,  # Consider indirect neighbors up to this number of nodes away
-    "max_communication_time": 10, # Maximum time (in frame) for communication between cells
-}
-
-
-# ==========================
-# EVENTS DETECTION PARAMETERS
-# ==========================
-
-EVENT_EXTRACTION_PARAMETERS = {
-    "min_cell_count": 2,  # Minimum number of unique cells required to form an event
-    "shape_classification": {
-        "pca_ratio_threshold_radial": 1.5,         # Below this = radial
-        "pca_ratio_threshold_longitudinal": 3.0    # Above this = longitudinal
-    },
-    "convex_hull": {
-        "min_points": 3,       # Minimum number of points to compute convex hull
-        "min_duration": 1      # Minimum time difference to compute propagation speed
-    },
-    "threshold_ratio": 0.4,  # Minimum ratio of active cells at peak to trigger global event detection
-    "radius": 300.0,  # Radius for spatial clustering of events
-    "max_frame_gap": 10,  # Maximum gap in frames to consider cells as part of the same GLOBAL event
-    "max_communication_time": 10,  # Maximum time (in frames) for communication between cells in SEQUENTIAL events
+    "seq_max_comm_time": 10, # Maximum time (in frame) for communication between cells
 }
 
 
@@ -270,7 +357,6 @@ PEAK_CLUSTERING_PARAMETERS = {
 # ==========================
 # MVGC PARAMETERS
 # ==========================
-
 
 GC_PREPROCESSING = {
     "apply": {
@@ -310,7 +396,6 @@ GC_PARAMETERS = {
         }
     }
 }
-
 
 
 # ==========================
@@ -375,10 +460,11 @@ CLUSTERING_PARAMETERS = {
 }
 
 
-
 # ==========================
 # CONFIGURATION ARCOS PARAMETERS
 # ==========================
+
+ARCOS_TRACKING = False  # Use ARCOS tracking for event detection
 
 BINDATA_PARAMETERS = {
     "smooth_k": 3,
@@ -389,7 +475,6 @@ BINDATA_PARAMETERS = {
     "bias_method": "runmed",  # can be 'lm', 'runmed', or 'none'
     "n_jobs": -1
 }
-
 
 TRACKING_PARAMETERS = {
     "position_columns": ["x", "y"],       # Columns indicating cell centroid

@@ -1,7 +1,7 @@
 # global_event_detection.py
 # Usage Example:
 # >>> windows = find_significant_activity_peaks(trace, len(cells), threshold_ratio=0.4)
-# >>> global_blocks = extract_global_event_blocks(cells, windows, radius=30.0, max_frame_gap=10, min_cell_count=5)
+# >>> global_blocks = extract_global_event_blocks(cells, windows, radius=30.0, global_max_comm_time=10, min_cell_count=5)
 
 from typing import List, Tuple, Dict, Set
 import logging
@@ -97,7 +97,7 @@ def _cluster_event_from_origin(
     active_cells: Dict[int, Cell],
     cell_activation_time: Dict[int, int],
     radius: float,
-    max_frame_gap: int
+    global_max_comm_time: int
 ) -> Set[int]:
     """
     Cluster cells based on spatial proximity and temporal activation from an origin cell.
@@ -108,7 +108,7 @@ def _cluster_event_from_origin(
         active_cells (Dict[int, Cell]): Mapping of active cell labels to Cell objects.
         cell_activation_time (Dict[int, int]): Mapping of cell labels to their activation times.
         radius (float): Distance threshold to consider spatial spreading.
-        max_frame_gap (int): Maximum number of frames allowed between activations to consider propagation.
+        global_max_comm_time (int): Maximum number of frames allowed between activations to consider propagation.
 
     Returns:
         Set[int]: Set of labels in the cluster.
@@ -119,7 +119,7 @@ def _cluster_event_from_origin(
     
     # Only proceed if this origin causes any other peak
     has_valid_neighbor = any(
-        0 < (cell_activation_time[other] - origin_time) <= max_frame_gap and
+        0 < (cell_activation_time[other] - origin_time) <= global_max_comm_time and
         np.linalg.norm(np.array(active_cells[label].centroid) - np.array(active_cells[other].centroid)) <= radius
         for other in active_cells
         if other != label
@@ -144,7 +144,7 @@ def _cluster_event_from_origin(
             if other_label in cluster or other_peak.in_event:
                 continue
 
-            if 0 < other_time - current_time <= max_frame_gap:
+            if 0 < other_time - current_time <= global_max_comm_time:
                 dist = np.linalg.norm(np.array(current_cell.centroid) - np.array(other_cell.centroid))
                 if dist <= radius:
                     cluster.add(other_label)
@@ -158,7 +158,7 @@ def extract_global_event_blocks(
     cells: List[Cell],
     peak_windows: List[Tuple[int, int]],
     radius: float,
-    max_frame_gap: int,
+    global_max_comm_time: int,
     min_cell_count: int = 3
 ) -> List[Dict[int, List[int]]]:
     """
@@ -168,7 +168,7 @@ def extract_global_event_blocks(
         cells (List[Cell]): List of all cells in the population.
         peak_windows (List[Tuple[int, int]]): Time windows to analyze.
         radius (float): Distance threshold to consider spatial spreading.
-        max_frame_gap (int): Maximum number of frames allowed between activations to consider propagation.
+        global_max_comm_time (int): Maximum number of frames allowed between activations to consider propagation.
         min_cell_count (int): Minimum size to keep the global event.
 
     Returns:
@@ -189,7 +189,7 @@ def extract_global_event_blocks(
 
                 origin_time = activation_times[label]
                 cluster = _cluster_event_from_origin(
-                    label, origin_time, active_cells, activation_times, radius, max_frame_gap)
+                    label, origin_time, active_cells, activation_times, radius, global_max_comm_time)
 
                 event_cluster.update(cluster)
 

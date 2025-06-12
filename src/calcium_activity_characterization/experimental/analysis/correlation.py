@@ -12,7 +12,7 @@ Example usage:
 import numpy as np
 from typing import List
 import logging
-from calcium_activity_characterization.processing.similarity_matrix import SimilarityMatrixComputer
+from calcium_activity_characterization.experimental.analysis.similarity_matrix import SimilarityMatrixComputer
 from calcium_activity_characterization.data.cells import Cell
 
 logger = logging.getLogger(__name__)

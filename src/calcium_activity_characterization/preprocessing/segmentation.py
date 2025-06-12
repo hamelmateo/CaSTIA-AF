@@ -4,12 +4,12 @@ from deepcell.utils.plot_utils import make_outline_overlay
 from pathlib import Path
 import logging
 
-from calcium_activity_characterization.utilities.loader import save_tif_image
+from calcium_activity_characterization.utilities.loader import save_tif_image, get_config_with_fallback
 
 logger = logging.getLogger(__name__)
 
 
-def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.ndarray:
+def segmented(images: np.ndarray, output_path: Path, config: dict) -> np.ndarray:
     """
     Perform nuclear segmentation on 16-bit grayscale Hoechst images using the Mesmer model.
 
@@ -37,6 +37,11 @@ def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.n
     if images.dtype != np.uint16:
         raise ValueError(f"Expected dtype=np.uint16 for 16-bit grayscale image, got {images.dtype}.")
 
+    # Retrieve configuration parameters
+    save_overlay = get_config_with_fallback(config, "save_overlay", False)
+    mesmer_params = get_config_with_fallback(config, "mesmer_parameters", {})
+    postprocess_params = get_config_with_fallback(mesmer_params, "postprocess_kwargs_nuclear", {})
+
     # Stack input as required by Mesmer (grayscale in channel 0, zeros in channel 1)
     images_hd = np.stack((images, np.zeros_like(images)), axis=-1)
     logger.debug(f"Image shape after stacking: {images_hd.shape}")
@@ -45,16 +50,16 @@ def segmented(images: np.ndarray, output_path: Path, save_overlay: bool) -> np.n
         app = Mesmer()
         nuclei_mask = app.predict(
             images_hd,
-            image_mpp=0.5,
+            image_mpp=get_config_with_fallback(mesmer_params, "image_mpp", 0.5),
             compartment='nuclear',
             postprocess_kwargs_nuclear={
-                'maxima_threshold': 0.2,
-                'maxima_smooth': 2.5,
-                'interior_threshold': 0.05,
-                'interior_smooth': 1,
-                'small_objects_threshold': 25,
-                'fill_holes_threshold': 15,
-                'radius': 2
+                'maxima_threshold': get_config_with_fallback(postprocess_params, 'maxima_threshold', 0.2),
+                'maxima_smooth': get_config_with_fallback(postprocess_params, 'maxima_smooth', 2.5),
+                'interior_threshold': get_config_with_fallback(postprocess_params, 'interior_threshold', 0.05),
+                'interior_smooth': get_config_with_fallback(postprocess_params, 'interior_smooth', 1),
+                'small_objects_threshold': get_config_with_fallback(postprocess_params, 'small_objects_threshold', 25),
+                'fill_holes_threshold': get_config_with_fallback(postprocess_params, 'fill_holes_threshold', 15),
+                'radius': get_config_with_fallback(postprocess_params, 'radius', 2),
             }
         )
         nuclei_mask = nuclei_mask[0, ..., 0]  # remove batch and channel dims

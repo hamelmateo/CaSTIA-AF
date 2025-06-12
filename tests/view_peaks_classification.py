@@ -111,7 +111,7 @@ class SequentialSelectivityViewer(QMainWindow):
         if not folder:
             return
         folder = Path(folder)
-        pkl_path = folder / "population_events.pkl"
+        pkl_path = folder / "04_population_events.pkl"
         if not pkl_path.exists():
             return
         with open(pkl_path, 'rb') as f:

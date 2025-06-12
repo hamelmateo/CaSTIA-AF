@@ -253,7 +253,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     file_dialog = QFileDialog()
-    file_path, _ = file_dialog.getOpenFileName(None, "Select raw_active_cells.pkl", "", "Pickle Files (*.pkl)")
+    file_path, _ = file_dialog.getOpenFileName(None, "Select 01_raw_traces.pkl", "", "Pickle Files (*.pkl)")
     if not file_path:
         logger.warning("No file selected. Exiting.")
         sys.exit(0)

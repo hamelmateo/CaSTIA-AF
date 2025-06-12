@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from matplotlib import colors, cm
 import random
 
-from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.experimental.analysis.clusters import Cluster
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.peaks import Peak
@@ -58,7 +58,7 @@ class SpatialEventClusteringEngine:
             self.event_clusters = []
             self.neighbor_graph = population.neighbor_graph
             trace_type = self.params.get("trace", "activity")
-            max_comm_time = self.params.get("max_communication_time", 5)
+            max_comm_time = self.params.get("seq_max_comm_time", 5)
             indirect_hops = self.params.get("indirect_neighbors_num", 1)
 
             for global_peak in getattr(population, trace_type).peaks:

@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import pickle
 
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.experimental.analysis.clusters import Cluster
 
 
 class ClusterViewer(QMainWindow):
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     file_dialog = QFileDialog()
-    cells_path, _ = file_dialog.getOpenFileName(None, "Select binarized_active_cells.pkl", "", "*.pkl")
+    cells_path, _ = file_dialog.getOpenFileName(None, "Select 03_binarized_traces.pkl", "", "*.pkl")
     if not cells_path:
         print("Cancelled.")
         sys.exit()

@@ -11,7 +11,7 @@ from PyQt5.QtGui import QPixmap, QImage, QColor, QPainter, QPen
 from PyQt5.QtCore import Qt, QTimer, QPoint
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.experimental.analysis.clusters import Cluster
 from calcium_activity_characterization.utilities.loader import generate_distinct_colors
 
 class HoverableGraphicsView(QGraphicsView):
@@ -117,7 +117,7 @@ class ClusterOverlayViewer(QMainWindow):
             return
         folder = Path(folder)
 
-        with open(folder / "binarized_active_cells.pkl", 'rb') as f:
+        with open(folder / "03_binarized_traces.pkl", 'rb') as f:
             self.cells = pickle.load(f)
 
         with open(folder / "peak_clusters.pkl", 'rb') as f:

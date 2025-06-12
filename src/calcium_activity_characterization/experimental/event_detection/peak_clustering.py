@@ -1,6 +1,6 @@
 from typing import List
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.data.clusters import Cluster
+from calcium_activity_characterization.experimental.analysis.clusters import Cluster
 
 
 class PeakClusteringEngine:

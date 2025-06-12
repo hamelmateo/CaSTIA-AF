@@ -1,3 +1,5 @@
+# TODO: Refactor this file by putting out the functions in a separate file just like for global events 
+# (potentially add config file parameters)
 # cell_to_cell_communication.py
 # Usage Example:
 # >>> comms = generate_cell_to_cell_communications(cells, graph, copeaking_groups, max_time_gap=10)

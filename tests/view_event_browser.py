@@ -1,6 +1,6 @@
 # view_sequential_selectivity.py
 # Modified to visualize calcium events (not individual peaks)
-# Usage: Run this script and select an output folder containing overlay.TIF and population_events.pkl
+# Usage: Run this script and select an output folder containing overlay.TIF and 04_population_events.pkl
 
 import sys
 from pathlib import Path
@@ -112,7 +112,7 @@ class EventViewer(QMainWindow):
             return
         folder = Path(folder)
 
-        with open(folder / "population_events.pkl", 'rb') as f:
+        with open(folder / "04_population_events.pkl", 'rb') as f:
             self.population = pickle.load(f)
             self.events = self.population.events
 

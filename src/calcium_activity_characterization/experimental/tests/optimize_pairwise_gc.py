@@ -13,7 +13,7 @@ from matplotlib.colors import LogNorm
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.processing.signal_processing import SignalProcessor
-from calcium_activity_characterization.processing.causality import GCAnalyzer
+from calcium_activity_characterization.experimental.analysis.causality import GCAnalyzer
 from calcium_activity_characterization.config.config import GC_PREPROCESSING
 
 class GCInteractiveViewer(QMainWindow):
@@ -88,7 +88,7 @@ class GCInteractiveViewer(QMainWindow):
         self.setCentralWidget(container)
 
     def load_cells(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Select cells.pkl", "", "Pickle Files (*.pkl)")
+        path, _ = QFileDialog.getOpenFileName(self, "Select raw_cells.pkl", "", "Pickle Files (*.pkl)")
         if path:
             with open(path, 'rb') as f:
                 self.cells = pickle.load(f)

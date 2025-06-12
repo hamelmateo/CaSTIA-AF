@@ -39,76 +39,6 @@ def get_config_with_fallback(config: dict, key: str, default: dict = None) -> di
     return config[key]
 
 
-
-def preprocess_images(dir: Path, roi_scale: float, pattern: str, padding: int = 5) -> np.ndarray:
-    """
-    Preprocess .tif images by renaming, loading, and cropping.
-
-    This function renames .tif images in a directory with padded numbers, 
-    loads them into memory, and crops them to a specified region of interest (ROI).
-
-    Args:
-        dir (Path): Path to the folder containing .tif images.
-        roi_scale (float): Scale factor for cropping (e.g., 0.75).
-        pattern (str): Regex pattern to match filenames for renaming.
-        padding (int): Number of digits for zero-padding in filenames.
-
-    Returns:
-        np.ndarray: Array of cropped images.
-
-    Raises:
-        FileNotFoundError: If no .tif images are found in the directory.
-        ValueError: If any image fails to load.
-    """
-    rename_files_with_padding(dir, pattern, padding)
-    
-    loaded_images = load_images(dir)
-
-    cropped_images = [crop_image(img, roi_scale) for img in loaded_images]
-    
-    return np.array(cropped_images)
-
-
-def crop_image(image: np.ndarray, scale: float) -> np.ndarray:
-    """
-    Crop the image based on the ROI scale.
-
-    Args:
-        image (np.ndarray): The input image to crop.
-        scale (float): Scale factor for cropping.
-
-    Returns:
-        np.ndarray: Cropped image.
-    """
-    height, width = image.shape[:2]
-    crop_h, crop_w = int(height * scale), int(width * scale)
-    start_h, start_w = (height - crop_h) // 2, (width - crop_w) // 2
-    return image[start_h:start_h + crop_h, start_w:start_w + crop_w]
-
-
-def rename_files_with_padding(directory: Path, pattern: str, padding: int = 5) -> None:
-    """
-    Rename files in a directory to pad numeric portions with leading zeros.
-
-    Args:
-        directory (Path): Path to files.
-        pattern (str): Regex pattern with numeric group.
-        padding (int): Digits to pad to.
-    """
-    regex = re.compile(pattern)
-    for file in directory.glob("*.TIF"):
-        match = regex.search(file.name)
-        if match:
-            number = match.group(1)
-            if len(number) >= padding:
-                continue
-            padded_number = number.zfill(padding)
-            new_name = file.name.replace(f"t{number}", f"t{padded_number}")
-            new_path = directory / new_name
-            file.rename(new_path)
-            logger.info(f"Renamed: {file.name} -> {new_name}")
-
-
 def generate_random_cell_overlay(cells: List[Cell], output_path: Path) -> None:
     """
     Generate a grayscale image with random intensities assigned per cell.
@@ -197,7 +127,6 @@ def load_existing_img(img_path: Path) -> np.ndarray:
     Returns:
         np.ndarray: Loaded image.
     """
-    logger.debug(f"Loading image from: {img_path}")
     return tifffile.imread(str(img_path))
 
 
