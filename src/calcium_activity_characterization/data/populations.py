@@ -27,7 +27,7 @@ from calcium_activity_characterization.event_detection.global_event import (
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
-
+from calcium_activity_characterization.utilities.metrics import Distribution
 from calcium_activity_characterization.utilities.loader import get_config_with_fallback
 
 
@@ -61,7 +61,11 @@ class Population:
         self.cell_to_cell_communication: List[CellToCellCommunication] = None
         self.events: List[Event] = []
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
+
         self.metadata: Dict[str, Any] = {}
+        self.cell_metrics_distributions: Dict[str, Distribution] = {}
+        self.seq_event_metrics_distributions: Dict[str, Distribution] = {}
+        self.glob_event_metrics_distributions: Dict[str, Distribution] = {}
 
         try:
             self.neighbor_graph = build_spatial_neighbor_graph(cells)
@@ -292,6 +296,79 @@ class Population:
             reassign_peak_ids(cell.trace.peaks)
 
         return clean_cells
+
+
+    def compute_population_distributions(self) -> None:
+        """
+        Compute and store Distribution objects for important cell-wise,
+        sequential-event-wise, and global-event-wise metrics.
+        """
+        # Cell-wise distributions
+        durations = []
+        prominences = []
+        periodicity_scores = []
+        num_peaks = []
+        in_event_types = []
+
+        for cell in self.cells:
+            durations.extend([p.rel_duration for p in cell.trace.peaks])
+            prominences.extend([p.prominence for p in cell.trace.peaks])
+            if "periodicity_score" in cell.trace.metadata:
+                periodicity_scores.append(cell.trace.metadata["periodicity_score"])
+            num_peaks.append(len(cell.trace.peaks))
+        in_event_types = [
+        str(p.in_event).lower()  # handles "global", "sequential", "none", etc.
+        for cell in self.cells
+        for p in cell.trace.peaks]
+
+        self.cell_metrics_distributions["peak_duration"] = Distribution.from_values(durations, binning_mode="width", bin_param=1)
+        self.cell_metrics_distributions["peak_prominence"] = Distribution.from_values(prominences, binning_mode="width", bin_param=1)
+        self.cell_metrics_distributions["periodicity_score"] = Distribution.from_values(periodicity_scores, binning_mode="count", bin_param=50)
+        self.cell_metrics_distributions["num_peaks"] = Distribution.from_values(num_peaks, binning_mode="width", bin_param=1)
+        label_map = {"global": 1, "sequential": 2, "none": 3}
+        encoded = [label_map.get(t, 0) for t in in_event_types]
+        self.cell_metrics_distributions["peak_in_event"] = Distribution.from_values(encoded, binning_mode="count", bin_param=3)
+        self.cell_metrics_distributions["active_vs_inactive"] = Distribution.from_values([
+            1 if len(cell.trace.peaks) > 0 else 0 for cell in self.cells
+        ], binning_mode="count", bin_param=2)
+
+        # Sequential event-wise distributions
+        comm_times = []
+        comm_speeds = []
+        avg_comm_times = []
+        avg_comm_speeds = []
+        elong_scores = []
+        radial_scores = []
+        dag_depths = []
+        n_cells_seq = []
+        n_cells_glob = []
+
+        for event in self.events:
+            if isinstance(event, SequentialEvent):
+
+                comm_times.extend(event.communication_time_distribution.values)
+                comm_speeds.extend(event.communication_speed_distribution.values)
+                avg_comm_times.append(event.communication_time_distribution.mean)
+                avg_comm_speeds.append(event.communication_speed_distribution.mean)
+                elong_scores.append(event.elongation_score)
+                radial_scores.append(event.radiality_score)
+                dag_depths.append(event.dag_metrics["depth"])
+                n_cells_seq.append(event.n_cells_involved)
+
+                self.seq_event_metrics_distributions["communication_time"] = Distribution.from_values(comm_times, binning_mode="count", bin_param=10)
+                self.seq_event_metrics_distributions["communication_speed"] = Distribution.from_values(comm_speeds, binning_mode="count", bin_param=50)
+                self.seq_event_metrics_distributions["avg_comm_time_per_event"] = Distribution.from_values(avg_comm_times, binning_mode="count", bin_param=10)
+                self.seq_event_metrics_distributions["avg_comm_speed_per_event"] = Distribution.from_values(avg_comm_speeds, binning_mode="count", bin_param=50)
+                self.seq_event_metrics_distributions["elongation_score"] = Distribution.from_values(elong_scores, binning_mode="count", bin_param=50)
+                self.seq_event_metrics_distributions["radiality_score"] = Distribution.from_values(radial_scores, binning_mode="count", bin_param=50)
+                self.seq_event_metrics_distributions["dag_max_depth"] = Distribution.from_values(dag_depths, binning_mode="width", bin_param=1)
+                self.seq_event_metrics_distributions["n_cells"] = Distribution.from_values(n_cells_seq, binning_mode="width", bin_param=1)
+
+            if isinstance(event, GlobalEvent):
+                # Global event-wise distributions
+                n_cells_glob.append(event.n_cells_involved)
+                self.glob_event_metrics_distributions["n_cells"] = Distribution.from_values(n_cells_glob, binning_mode="width", bin_param=1)
+
 
     def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, synchrony_window: int = 1) -> None:
         """

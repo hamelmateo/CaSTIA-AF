@@ -42,6 +42,10 @@ class Peak:
         scale_class (Optional[str]): Prominence scale class ('minor', 'major', 'super').
         in_cluster (bool): Whether the peak has been assigned to a cluster.
         cluster_id (Optional[int]): ID of the assigned cluster, if any.
+        is_analyzed (bool): Whether the peak has been analyzed.
+        in_event (Literal): Type of event this peak is part of ('global' or 'sequential').
+        origin_type (Literal): Type of cause for this peak ('origin', 'caused', or 'individual').
+        origin_label (Optional[int]): Label of the origin peak if this is a caused peak.
     """
     def __init__(
         self,
@@ -86,7 +90,7 @@ class Peak:
         self.cluster_id: Optional[int] = None  # ID of the assigned cluster
 
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
-        self.in_event: Literal["global", "sequential"] = None  # Type of event this peak is part of, if any
+        self.in_event: Literal["global", "sequential", "none"] = "none"  # Type of event this peak is part of, if any
 
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
         self.origin_label: Optional[int] = None # Label of the origin peak if this is a caused peak

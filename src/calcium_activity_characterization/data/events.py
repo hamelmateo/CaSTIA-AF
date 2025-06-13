@@ -424,7 +424,8 @@ class SequentialEvent(Event):
             X = np.vstack(centroids).astype(float)
             X -= np.mean(X, axis=0)
             _, S, _ = np.linalg.svd(X)
-            return S[0] / S[1] if len(S) >= 2 and S[1] > 0 else 1.0
+            score = S[0] / S[1] if len(S) >= 2 and S[1] > 0 else 1.0
+            return min(score,100.0)  # Cap the score to avoid extreme values
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute elongation score: {e}")
             return 1.0

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
+from calcium_activity_characterization.utilities.export import MetricExporter
 from calcium_activity_characterization.utilities.loader import (
     save_tif_image,
     load_images,
@@ -41,6 +42,7 @@ class CalciumPipeline:
     Attributes:
         config (dict): Configuration dictionary containing parameters for processing.
         population (Population): The population of cells processed in the pipeline.
+        nuclei_mask (np.ndarray): Mask of the nuclei used for segmentation.
         data_path (Path): Path to the input data directory containing ISX folders.
         output_path (Path): Path to the output directory where results will be saved.
         directory_name (Path): Name of the parent directory containing the ISX folder.
@@ -70,6 +72,7 @@ class CalciumPipeline:
         
         # data
         self.population: Population = None
+        self.nuclei_mask: np.ndarray = None
 
         # folder paths
         self.data_path: Path = None
@@ -110,7 +113,8 @@ class CalciumPipeline:
         self._initialize_activity_trace()
         self._detect_events()
 
-        self._save_population_metadata_report()
+        self._export_population_metrics()
+        #self._save_population_metadata_report()
 
 
     def _init_paths(self, data_path: Path, output_path: Path) -> None:
@@ -152,10 +156,11 @@ class CalciumPipeline:
         Perform segmentation on DAPI images if needed and convert the mask to Cell objects.
         Reloads from file if available and permitted.
         """
+        logger.info(f"Trying segmentation with parameters: {get_config_with_fallback(self.config, 'SEGMENTATION_PARAMETERS')}")
         if not self.raw_cells_path.exists():
             if not self.nuclei_mask_path.exists():
                 processor = ImageProcessor(get_config_with_fallback(self.config, "IMAGE_PROCESSING_PARAMETERS"))
-                nuclei_mask = segmented(
+                self.nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
@@ -163,15 +168,15 @@ class CalciumPipeline:
                     self.overlay_path,
                     get_config_with_fallback(self.config, "SEGMENTATION_PARAMETERS")
                 )
-                save_tif_image(nuclei_mask, self.nuclei_mask_path)
+                save_tif_image(self.nuclei_mask, self.nuclei_mask_path)
             else:
-                nuclei_mask = load_images(self.nuclei_mask_path)
+                self.nuclei_mask = load_images(self.nuclei_mask_path)
 
-            unfiltered_cells = Cell.from_segmentation_mask(nuclei_mask, get_config_with_fallback(self.config,"CELL_FILTERING_PARAMETERS"))
+            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, get_config_with_fallback(self.config,"CELL_FILTERING_PARAMETERS"))
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
-            self.population = Population(cells=cells, mask=nuclei_mask, output_path=self.spatial_neighbor_graph_path)
+            self.population = Population(cells=cells, mask=self.nuclei_mask, output_path=self.spatial_neighbor_graph_path)
             save_pickle_file(self.population, self.raw_cells_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
@@ -191,6 +196,7 @@ class CalciumPipeline:
                 processor=ImageProcessor(get_config_with_fallback(self.config, "IMAGE_PROCESSING_PARAMETERS"))
             )
             extractor.compute(self.fitc_file_pattern)
+            save_pickle_file(self.population, self.raw_traces_path)
         else:
             self.population = load_pickle_file(self.raw_traces_path)
 
@@ -250,9 +256,9 @@ class CalciumPipeline:
         Detect events from the population traces and save them.
         This method is a placeholder for future event detection logic.
         """
-        #if self.events_path.exists():
-        #    self.population = load_pickle_file(self.events_path)
-        #    return
+        if self.events_path.exists():
+            self.population = load_pickle_file(self.events_path)
+            return
 
         self.population.detect_global_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
 
@@ -272,3 +278,22 @@ class CalciumPipeline:
         except Exception as e:
             logger.error(f"Failed to compute or save population metadata: {e}")
 
+
+    def _export_population_metrics(self) -> None:
+        """
+        Compute and export metric distributions for a given population.
+
+        Args:
+            population (Population): The population object to analyze.
+            output_dir (Path): Directory to save the outputs.
+        """
+        try:
+            logger.info("Computing population-level metric distributions...")
+            self.population.compute_population_distributions()
+
+            exporter = MetricExporter(self.population, self.output_path)
+            exporter.export_all()
+
+            logger.info("✅ Metric distributions exported successfully.")
+        except Exception as e:
+            logger.error(f"Failed to compute/export population metrics: {e}")

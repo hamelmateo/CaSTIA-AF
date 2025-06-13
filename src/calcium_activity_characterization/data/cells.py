@@ -47,7 +47,7 @@ class Cell:
         try:
             intensities = [image[y, x] for y, x in self.pixel_coords]
             mean_intensity = np.mean(intensities)
-            self.trace.raw.append(mean_intensity)
+            self.trace.versions["raw"].append(mean_intensity)
         except Exception as e:
             logger.error(f"Failed to compute mean intensity for cell {self.label}: {e}")
 
@@ -55,12 +55,12 @@ class Cell:
         """
         Plot the mean intensity profile of the cell over time.
         """
-        if len(self.trace.raw) == 0:
+        if len(self.trace.versions["raw"]) == 0:
             logger.info(f"Cell {self.label} has no intensity data to plot.")
             return
 
         plt.figure(figsize=(10, 6))
-        plt.plot(self.trace.raw, label=f"Cell {self.label}")
+        plt.plot(self.trace.versions["raw"], label=f"Cell {self.label}")
         plt.title(f"Raw Intensity Profile for Cell {self.label}")
         plt.xlabel("Timepoint")
         plt.ylabel("Mean Intensity")
@@ -109,7 +109,7 @@ class Cell:
             'trackID': [self.label] * len(self.trace.binary),
             'x': [self.centroid[1]] * len(self.trace.binary),
             'y': [self.centroid[0]] * len(self.trace.binary),
-            'intensity': self.trace.raw,
+            'intensity': self.trace.versions["raw"],
             'intensity.bin': self.trace.binary
         }
 
