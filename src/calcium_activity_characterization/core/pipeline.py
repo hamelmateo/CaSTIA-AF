@@ -3,7 +3,7 @@
 Example:
     >>> from src.core.pipeline import CalciumPipeline
     >>> pipeline = CalciumPipeline(config)
-    >>> pipeline.run(data_path, output_path)
+    >>> pipeline.run(data_dir, output_dir)
 """
 
 import numpy as np
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
-from calcium_activity_characterization.utilities.export import MetricExporter
+from calcium_activity_characterization.utilities.export import MetricExporter, NormalizedDataExporter
 from calcium_activity_characterization.utilities.loader import (
     save_tif_image,
     load_images,
@@ -43,8 +43,8 @@ class CalciumPipeline:
         config (dict): Configuration dictionary containing parameters for processing.
         population (Population): The population of cells processed in the pipeline.
         nuclei_mask (np.ndarray): Mask of the nuclei used for segmentation.
-        data_path (Path): Path to the input data directory containing ISX folders.
-        output_path (Path): Path to the output directory where results will be saved.
+        data_dir (Path): Path to the input data directory containing ISX folders.
+        output_dir (Path): Path to the output directory where results will be saved.
         directory_name (Path): Name of the parent directory containing the ISX folder.
         fitc_file_pattern (Path): Regex pattern to match FITC image files.
         hoechst_file_pattern (Path): Regex pattern to match HOECHST image files.
@@ -62,7 +62,7 @@ class CalciumPipeline:
         activity_trace_path (Path): Path to save the activity trace plot.
 
     Methods:
-        run(data_path: Path, output_path: Path) -> None:
+        run(data_dir: Path, output_dir: Path) -> None:
             Execute the full calcium imaging pipeline for one ISX folder.
 
     """
@@ -75,8 +75,8 @@ class CalciumPipeline:
         self.nuclei_mask: np.ndarray = None
 
         # folder paths
-        self.data_path: Path = None
-        self.output_path: Path = None
+        self.data_dir: Path = None
+        self.output_dir: Path = None
         self.directory_name: Path = None
 
         # file paths
@@ -94,16 +94,16 @@ class CalciumPipeline:
         self.population_level_metrics_path: Path = None
         self.spatial_neighbor_graph_path: Path = None
 
-    def run(self, data_path: Path, output_path: Path) -> None:
+    def run(self, data_dir: Path, output_dir: Path) -> None:
         """
         Execute the full calcium imaging pipeline for one ISX folder.
 
         Args:
-            data_path (Path): Path to the ISX folder (containing FITC/HOECHST subfolders).
-            output_path (Path): Destination folder for processed results.
+            data_dir (Path): Path to the ISX folder (containing FITC/HOECHST subfolders).
+            output_dir (Path): Destination folder for processed results.
         """
-        output_path.mkdir(parents=True, exist_ok=True)
-        self._init_paths(data_path, output_path)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._init_paths(data_dir, output_dir)
         self._segment_cells()
         self._compute_intensity()
 
@@ -113,42 +113,41 @@ class CalciumPipeline:
         self._initialize_activity_trace()
         self._detect_events()
 
-        self._export_population_metrics()
-        #self._save_population_metadata_report()
+        self.export_normalized_datasets()
 
 
-    def _init_paths(self, data_path: Path, output_path: Path) -> None:
+    def _init_paths(self, data_dir: Path, output_dir: Path) -> None:
         """
         Initialize and store all input/output paths and file patterns.
 
         Args:
-            data_path (Path): Root path to ISX experiment.
-            output_path (Path): Path to save all outputs for this experiment.
+            data_dir (Path): Root path to ISX experiment.
+            output_dir (Path): Path to save all outputs for this experiment.
         """
-        self.data_path = data_path
-        self.output_path = output_path
-        self.directory_name = data_path.parents[1].name
+        self.data_dir = data_dir
+        self.output_dir = output_dir
+        self.directory_name = data_dir.parents[1].name
 
         # Data paths
         self.fitc_file_pattern = rf"{self.directory_name}__w3FITC_t(\d+)\.TIF"
         self.hoechst_file_pattern = rf"{self.directory_name}__w2DAPI_t(\d+)\.TIF"
 
-        self.hoechst_img_path = data_path / "HOECHST"
-        self.fitc_img_path = data_path / "FITC"
+        self.hoechst_img_path = data_dir / "HOECHST"
+        self.fitc_img_path = data_dir / "FITC"
 
         # Pick paths for saving results
-        self.raw_cells_path = output_path / "00_raw_cells.pkl"
-        self.raw_traces_path = output_path / "01_raw_traces.pkl"
-        self.smoothed_traces_path = output_path / "02_smoothed_traces.pkl"
-        self.binary_traces_path = output_path / "03_binarized_traces.pkl"
-        self.events_path = output_path / "04_population_events.pkl"
+        self.raw_cells_path = output_dir / "00_raw_cells.pkl"
+        self.raw_traces_path = output_dir / "01_raw_traces.pkl"
+        self.smoothed_traces_path = output_dir / "02_smoothed_traces.pkl"
+        self.binary_traces_path = output_dir / "03_binarized_traces.pkl"
+        self.events_path = output_dir / "04_population_events.pkl"
 
         # Paths for saving images and plots
-        self.nuclei_mask_path = output_path / "nuclei_mask.TIF"
-        self.overlay_path = output_path / "overlay.TIF"
-        self.spatial_neighbor_graph_path = output_path / "neighbors_graph.png"
-        self.activity_trace_path = output_path / "activity_trace.pdf"
-        self.population_level_metrics_path = output_path / "population_metrics.pdf"
+        self.nuclei_mask_path = output_dir / "nuclei_mask.TIF"
+        self.overlay_path = output_dir / "overlay.TIF"
+        self.spatial_neighbor_graph_path = output_dir / "neighbors_graph.png"
+        self.activity_trace_path = output_dir / "activity_trace.pdf"
+        self.population_level_metrics_path = output_dir / "population_metrics.pdf"
 
 
     def _segment_cells(self) -> None:
@@ -176,7 +175,7 @@ class CalciumPipeline:
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
-            self.population = Population(cells=cells, mask=self.nuclei_mask, output_path=self.spatial_neighbor_graph_path)
+            self.population = Population(cells=cells, mask=self.nuclei_mask, output_dir=self.spatial_neighbor_graph_path)
             save_pickle_file(self.population, self.raw_cells_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
@@ -235,7 +234,7 @@ class CalciumPipeline:
             logger.info(f"Peaks detected for {len(self.population.cells)} active cells.")
             save_pickle_file(self.population, self.binary_traces_path)
 
-        plot_raster(self.output_path, self.population.cells)
+        plot_raster(self.output_dir, self.population.cells)
 
 
     def _initialize_activity_trace(self) -> None:
@@ -264,36 +263,21 @@ class CalciumPipeline:
 
         self.population.detect_sequential_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
 
+        self.population.assign_peak_event_ids()
+
         save_pickle_file(self.population, self.events_path)
 
 
-    def _save_population_metadata_report(self) -> None:
+    def export_normalized_datasets(self) -> None:
         """
-        Compute and save population-level metadata as a multi-page PDF report.
-        """
-        try:
-            self.population.compute_population_metrics()
-            self.population.plot_metadata_summary(save_path=self.population_level_metrics_path)
-            logger.info(f"✅ Population metadata summary saved to {self.population_level_metrics_path}")
-        except Exception as e:
-            logger.error(f"Failed to compute or save population metadata: {e}")
-
-
-    def _export_population_metrics(self) -> None:
-        """
-        Compute and export metric distributions for a given population.
+        Export normalized multi-table datasets: peaks, cells, events, and population-level metrics.
 
         Args:
-            population (Population): The population object to analyze.
-            output_dir (Path): Directory to save the outputs.
+            output_dir (Path): Directory where the datasets will be saved.
         """
         try:
-            logger.info("Computing population-level metric distributions...")
-            self.population.compute_population_distributions()
-
-            exporter = MetricExporter(self.population, self.output_path)
+            exporter = NormalizedDataExporter(self.population, self.output_dir)
             exporter.export_all()
-
-            logger.info("✅ Metric distributions exported successfully.")
+            logger.info(f"✅ Normalized datasets exported to {self.output_dir}")
         except Exception as e:
-            logger.error(f"Failed to compute/export population metrics: {e}")
+            logger.error(f"❌ Failed to export normalized datasets: {e}")

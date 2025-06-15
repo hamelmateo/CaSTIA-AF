@@ -15,7 +15,7 @@ class CoPeakingNeighbors:
 
     Attributes:
         frame (int): Frame index where peaks co-occur.
-        members (List[Tuple[int, int]]): List of (cell_label, peak_index) pairs.
+        members (List[Tuple[int, int]]): List of (cell_label, peak.id) pairs.
         subgraph (nx.Graph): Subgraph connecting spatial neighbors within the group.
     """
 
@@ -25,7 +25,7 @@ class CoPeakingNeighbors:
 
         Args:
             frame (int): The frame when the peaks co-occur.
-            members (List[Tuple[int, int]]): List of (cell_label, peak_index) pairs.
+            members (List[Tuple[int, int]]): List of (cell_label, peak.id) pairs.
             full_graph (nx.Graph): Full spatial neighbor graph of the population.
         """
         self.frame: int = frame

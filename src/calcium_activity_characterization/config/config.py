@@ -1,7 +1,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = True  # Enable debugging mode
+DEBUGGING = False  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
@@ -68,7 +68,7 @@ TRACE_EXTRACTION_PARAMETERS = {
 CELL_FILTERING_PARAMETERS = {
     "border_margin": 20,  # Margin from image border to exclude cells
     "object_size_thresholds": {
-        "min": 200,  # Minimum size in pixels for a cell to be considered valid
+        "min": 500,  # Minimum size in pixels for a cell to be considered valid
         "max": 10000  # Maximum size in pixels for a cell to be considered valid
     }  # Size thresholds for filtering cells
 }

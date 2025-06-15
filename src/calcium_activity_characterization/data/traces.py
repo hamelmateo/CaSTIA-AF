@@ -473,9 +473,14 @@ class Trace:
         return None
 
 
-def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 100, window: int = 5) -> tuple[int, int]:
+def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 300, window: int = 5) -> tuple[int, int]:
     """
-    Refine peak boundaries based on valley detection using windowed minima and derivative sign changes.
+    TODO: refactor this function to be a method of Trace class with proper parameters and less dependency on max_search.
+    Find the left and right bounds of a peak in a smoothed 1D signal.
+
+    This function searches for local minima on both sides of the peak center
+    (rel_start_time and rel_end_time) within a specified search range.
+    The bounds are refined based on the local minima found.
 
     Args:
         trace (np.ndarray): Smoothed 1D signal.

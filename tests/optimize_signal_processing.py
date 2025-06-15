@@ -18,7 +18,7 @@ from pathlib import Path
 import logging
 
 from calcium_activity_characterization.config.config import INDIV_SIGNAL_PROCESSING_PARAMETERS, INDIV_PEAK_DETECTION_PARAMETERS
-from calcium_activity_characterization.processing.signal_processing import SignalProcessor
+from calcium_activity_characterization.preprocessing.signal_processing import SignalProcessor
 from calcium_activity_characterization.utilities.loader import load_pickle_file
 
 logger = logging.getLogger(__name__)

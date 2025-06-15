@@ -18,8 +18,8 @@ class CellToCellCommunication:
     Represents a causal link between two peaks in neighboring cells.
 
     Attributes:
-        origin (Tuple[int, int]): Tuple (cell_label, peak_index) for the origin peak.
-        cause (Tuple[int, int]): Tuple (cell_label, peak_index) for the peak that was caused.
+        origin (Tuple[int, int]): Tuple (cell_label, peak.id) for the origin peak.
+        cause (Tuple[int, int]): Tuple (cell_label, peak.id) for the peak that was caused.
         origin_start_time (int): Start time of the origin peak.
         cause_start_time (int): Start time of the caused peak.
     """
@@ -71,10 +71,15 @@ def generate_cell_to_cell_communications(
         List[CellToCellCommunication]: All causal communications.
     """
     label_to_cell: Dict[int, Cell] = {cell.label: cell for cell in cells}
+    peak_id_to_index: Dict[int, int] = {
+    cell.label: {peak.id: idx for idx, peak in enumerate(cell.trace.peaks)}
+    for cell in label_to_cell.values()
+    }
     communications: List[CellToCellCommunication] = []
 
+
     for group in copeaking_groups:
-        comms = _resolve_copeaking_group(group, label_to_cell, neighbor_graph, max_time_gap)
+        comms = _resolve_copeaking_group(group, label_to_cell, peak_id_to_index, neighbor_graph, max_time_gap)
         communications.extend(comms)
 
     comms = _resolve_individual_peaks(cells, neighbor_graph, label_to_cell, max_time_gap)
@@ -89,6 +94,7 @@ def generate_cell_to_cell_communications(
 def _resolve_copeaking_group(
     group: CoPeakingNeighbors,
     label_to_cell: Dict[int, Cell],
+    peak_id_to_index: Dict[int, Dict[int, int]],
     neighbor_graph: nx.Graph,
     max_time_gap: int
 ) -> List[CellToCellCommunication]:
@@ -108,35 +114,35 @@ def _resolve_copeaking_group(
     # Sort external origins by time (decreasing) and label
     if external_origins:
         external_origins.sort(key=lambda x: (-x[2], x[0]))
-        origin_label, origin_idx, origin_time = external_origins[0]
+        origin_label, origin_id, origin_time = external_origins[0]
 
         # Create communications from external origin to direct neighbors copeaking cells
         direct_targets = set()
-        for target_label, target_idx in group.members:
+        for target_label, target_id in group.members:
             if target_label in neighbor_graph[origin_label]: 
-                cause_time = label_to_cell[target_label].trace.peaks[target_idx].rel_start_time
+                cause_time = label_to_cell[target_label].trace.peaks[peak_id_to_index[target_label][target_id]].rel_start_time
                 communications.append(CellToCellCommunication(
-                    origin=(origin_label, origin_idx),
-                    cause=(target_label, target_idx),
+                    origin=(origin_label, origin_id),
+                    cause=(target_label, target_id),
                     origin_start_time=origin_time,
                     cause_start_time=cause_time
                 ))
-                label_to_cell[target_label].trace.peaks[target_idx].is_analyzed = True
-                direct_targets.add((target_label, target_idx))
+                label_to_cell[target_label].trace.peaks[peak_id_to_index[target_label][target_id]].is_analyzed = True
+                direct_targets.add((target_label, target_id))
 
         # Spatially propagate communications within the group from the external origin using BFS
-        communications.extend(_bfs_propagate_within_group(group, label_to_cell, direct_targets))
+        communications.extend(_bfs_propagate_within_group(group, label_to_cell, peak_id_to_index, direct_targets))
 
     else:
         # If no external origins, use the earliest peak in the group as the origin
-        sorted_members = sorted(group.members, key=lambda p: label_to_cell[p[0]].trace.peaks[p[1]].start_time)
-        origin_label, origin_idx = sorted_members[0]
+        sorted_members = sorted(group.members, key=lambda p: label_to_cell[p[0]].trace.peaks[peak_id_to_index[p[0]][p[1]]].start_time)
+        origin_label, origin_id = sorted_members[0]
 
-        origin_peak = label_to_cell[origin_label].trace.peaks[origin_idx]
+        origin_peak = label_to_cell[origin_label].trace.peaks[peak_id_to_index[origin_label][origin_id]]
 
         origin_peak.is_analyzed = True
         communications.extend(
-            _bfs_propagate_within_group(group, label_to_cell, {(origin_label, origin_idx)})
+            _bfs_propagate_within_group(group, label_to_cell, peak_id_to_index, {(origin_label, origin_id)})
         )
 
     return communications
@@ -145,6 +151,7 @@ def _resolve_copeaking_group(
 def _bfs_propagate_within_group(
     group: CoPeakingNeighbors,
     label_to_cell: Dict[int, Cell],
+    peak_id_to_index: Dict[int, Dict[int, int]],
     start_labels: Set[Tuple[int, int]]
 ) -> List[CellToCellCommunication]:
     """
@@ -153,7 +160,7 @@ def _bfs_propagate_within_group(
     Args:
         group (CoPeakingNeighbors): Co-peaking group.
         label_to_cell (Dict[int, Cell]): Mapping from label to Cell.
-        start_labels (Set[int]): Copeaking cells to begin propagation.
+        start_labels (Set[Tuple[int, int]]): Starting labels for BFS propagation.
 
     Returns:
         List[CellToCellCommunication]: Communication edges inside the group.
@@ -167,20 +174,20 @@ def _bfs_propagate_within_group(
         # For each cell in the queue, find its copeaking neighbors
         current = queue.pop(0)
         for neighbor in group.subgraph.neighbors(current):
-            for (cand_label, cand_idx) in group.members: # For-loop over neighbor's peaks
-                if cand_label == neighbor and not label_to_cell[cand_label].trace.peaks[cand_idx].is_analyzed:
-                    current_peak_index = next(i for l, i in start_labels if l == current) # Get the index of the peak in the current cell
+            for (cand_label, cand_id) in group.members: # For-loop over neighbor's peaks
+                if cand_label == neighbor and not label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].is_analyzed:
+                    current_peak_id = next(i for l, i in start_labels if l == current) # Get the index of the peak in the current cell
                     comm = CellToCellCommunication(
-                        origin=(current, current_peak_index),  
-                        cause=(cand_label, cand_idx),
-                        origin_start_time=label_to_cell[current].trace.peaks[current_peak_index].rel_start_time,
-                        cause_start_time=label_to_cell[cand_label].trace.peaks[cand_idx].rel_start_time
+                        origin=(current, current_peak_id),  
+                        cause=(cand_label, cand_id),
+                        origin_start_time=label_to_cell[current].trace.peaks[peak_id_to_index[current][current_peak_id]].rel_start_time,
+                        cause_start_time=label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].rel_start_time
                     )
                     communications.append(comm)
-                    label_to_cell[cand_label].trace.peaks[cand_idx].is_analyzed = True
+                    label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].is_analyzed = True
                     visited.add(cand_label) 
                     queue.append(cand_label) # Add neighbor to queue for further spatial propagation
-                    start_labels.add((cand_label, cand_idx)) # Add to start labels for next iterations
+                    start_labels.add((cand_label, cand_id)) # Add to start labels for next iterations
 
     return communications
 
@@ -210,9 +217,9 @@ def _resolve_individual_peaks(
                         best_dt = dt
 
             if best_candidate:
-                origin_label, origin_idx, origin_time = best_candidate
+                origin_label, origin_id, origin_time = best_candidate
                 comm = CellToCellCommunication(
-                    origin=(origin_label, origin_idx),
+                    origin=(origin_label, origin_id),
                     cause=(cell.label, peak.id),
                     origin_start_time=origin_time,
                     cause_start_time=peak.rel_start_time

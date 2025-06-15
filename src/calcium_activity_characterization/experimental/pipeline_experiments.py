@@ -5,6 +5,7 @@ from collections import Counter
 import networkx as nx
 
 from calcium_activity_characterization.experimental.event_detection.arcos_event_detection import ArcosEventDetector
+from calcium_activity_characterization.experimental.analysis.metric_exporter import MetricExporter
 from calcium_activity_characterization.experimental.analysis.correlation import CorrelationAnalyzer
 from calcium_activity_characterization.experimental.event_detection.clustering import ClusteringEngine
 from calcium_activity_characterization.experimental.analysis.causality import GCAnalyzer
@@ -252,3 +253,36 @@ def run_wave_propagation_analysis(self) -> None:
             analyzer.plot_cluster_trajectory(cluster, self.overlay_path, save_path)
 
     logger.info(f"✅ Wave propagation analysis completed and saved in {output_dir}")
+
+
+
+def save_population_metadata_report(self) -> None:
+    """
+    Compute and save population-level metadata as a multi-page PDF report.
+    """
+    try:
+        self.population.compute_population_metrics()
+        self.population.plot_metadata_summary(save_path=self.population_level_metrics_path)
+        logger.info(f"✅ Population metadata summary saved to {self.population_level_metrics_path}")
+    except Exception as e:
+        logger.error(f"Failed to compute or save population metadata: {e}")
+
+
+def export_population_metrics(self) -> None:
+    """
+    Compute and export metric distributions for a given population.
+
+    Args:
+        population (Population): The population object to analyze.
+        output_dir (Path): Directory to save the outputs.
+    """
+    try:
+        logger.info("Computing population-level metric distributions...")
+        self.population.compute_population_distributions()
+
+        exporter = MetricExporter(self.population, self.output_dir)
+        exporter.export_all()
+
+        logger.info("✅ Metric distributions exported successfully.")
+    except Exception as e:
+        logger.error(f"Failed to compute/export population metrics: {e}")
