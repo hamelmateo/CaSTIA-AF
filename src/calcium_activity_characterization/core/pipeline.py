@@ -12,7 +12,7 @@ from pathlib import Path
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
-from calcium_activity_characterization.utilities.export import MetricExporter, NormalizedDataExporter
+from calcium_activity_characterization.utilities.export import NormalizedDataExporter
 from calcium_activity_characterization.utilities.loader import (
     save_tif_image,
     load_images,
@@ -175,7 +175,7 @@ class CalciumPipeline:
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
-            self.population = Population(cells=cells, mask=self.nuclei_mask, output_dir=self.spatial_neighbor_graph_path)
+            self.population = Population(cells=cells, mask=self.nuclei_mask, output_path=self.spatial_neighbor_graph_path)
             save_pickle_file(self.population, self.raw_cells_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:

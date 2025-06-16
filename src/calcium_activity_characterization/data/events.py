@@ -129,7 +129,11 @@ class SequentialEvent(Event):
         super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_active_labels())
 
         self.communication_time_distribution: Distribution = self._communication_time_distribution()
+        self.communication_time_mean: float = self.communication_time_distribution.mean
+        self.communication_time_std: float = self.communication_time_distribution.std
         self.communication_speed_distribution: Distribution = self._communication_speed_distribution()
+        self.communication_speed_mean: float = self.communication_speed_distribution.mean
+        self.communication_speed_std: float = self.communication_speed_distribution.std
         self.area_propagation_speed: float = self._compute_area_propagation_speed(config_hull)
 
         self.elongation_score: float = self._compute_elongation_score()

@@ -114,7 +114,7 @@ class NormalizedDataExporter:
                 "dag_avg_out_degree", "dag_avg_path_length",
                 "communication_speed_mean", "communication_speed_std",
                 "communication_time_mean", "communication_time_std",
-                "elongation_score", "compactness_score", "global_propagation_speed"
+                "elongation_score", "radiality_score", "compactness_score"
             ])
             writer.writeheader()
             for event in tqdm(self.population.events, desc="Exporting events", unit="event"):
@@ -137,7 +137,13 @@ class NormalizedDataExporter:
                     "n_cells_involved": event.n_cells_involved,
                     "dominant_direction_vector": str(event.dominant_direction_vector),
                     "directional_propagation_speed": event.directional_propagation_speed,
-                    "dag_n_nodes": getattr(event, "dag_n_nodes", None),
+                    "dag_n_nodes": event.dag_metrics.get("n_nodes", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_n_edges": event.dag_metrics.get("n_edges", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_n_roots": event.dag_metrics.get("n_roots", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_depth": event.dag_metrics.get("depth", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_width": event.dag_metrics.get("width", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_avg_out_degree": event.dag_metrics.get("avg_out_degree", None) if hasattr(event, "dag_metrics") else None,
+                    "dag_avg_path_length": event.dag_metrics.get("avg_path_length", None) if hasattr(event, "dag_metrics") else None,
                     "dag_n_edges": getattr(event, "dag_n_edges", None),
                     "dag_n_roots": getattr(event, "dag_n_roots", None),
                     "dag_depth": getattr(event, "dag_depth", None),
@@ -149,8 +155,8 @@ class NormalizedDataExporter:
                     "communication_time_mean": getattr(event, "communication_time_mean", None),
                     "communication_time_std": getattr(event, "communication_time_std", None),
                     "elongation_score": getattr(event, "elongation_score", None),
-                    "compactness_score": getattr(event, "compactness_score", None),
-                    "global_propagation_speed": getattr(event, "global_propagation_speed", None)
+                    "radiality_score": getattr(event, "radiality_score", None),
+                    "compactness_score": getattr(event, "compactness_score", None)
                 })
 
     def export_population_metrics(self) -> None:
