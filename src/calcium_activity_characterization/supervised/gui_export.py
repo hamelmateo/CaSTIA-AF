@@ -38,7 +38,7 @@ class FinalExportGUI(QMainWindow):
         layout = QVBoxLayout(central)
 
         layout.addWidget(QLabel("Select Output Directory:"))
-        self.out_dir_input = QLineEdit(str(self.pipeline.output_path))
+        self.out_dir_input = QLineEdit(str(self.pipeline.output_dir))
         layout.addWidget(self.out_dir_input)
 
         self.browse_btn = QPushButton("Browse")
@@ -67,8 +67,22 @@ class FinalExportGUI(QMainWindow):
         self.repaint()
 
         try:
-            self.pipeline.output_path = output_dir
-            self.pipeline._save_population_metadata_report()
+            self.pipeline.output_dir = output_dir
+
+            # Save pipeline configuration as JSON
+            import json
+            config_path = output_dir / "config_used.json"
+            with open(config_path, 'w') as f:
+                json.dump(self.pipeline.config, f, indent=4)
+            logger.info(f"✅ Saved config to {config_path}")
+
+            # Export normalized dataset traces, assuming this method is implemented
+            if hasattr(self.pipeline, "_export_normalized_datasets"):
+                self.pipeline._export_normalized_datasets()
+                logger.info("✅ Normalized datasets exported.")
+            else:
+                logger.warning("⚠️ Method _export_normalized_datasets not found on pipeline.")
+
             self.status_label.setText("Status: Export completed ✓")
             QMessageBox.information(self, "Done", "Export completed successfully.")
             self.close()

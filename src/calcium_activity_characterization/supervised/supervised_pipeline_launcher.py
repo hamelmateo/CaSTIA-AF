@@ -130,10 +130,7 @@ class SupervisedPipelineLauncher:
         self.launch_export_gui()
 
     def launch_export_gui(self):
-        self.export_gui = FinalExportGUI(
-            config=self.pipeline.config,
-            population=self.pipeline.population
-        )
+        self.export_gui = FinalExportGUI(self.pipeline)
         self.export_gui.show()
 
 

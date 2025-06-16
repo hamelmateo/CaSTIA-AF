@@ -113,7 +113,7 @@ class CalciumPipeline:
         self._initialize_activity_trace()
         self._detect_events()
 
-        self.export_normalized_datasets()
+        self._export_normalized_datasets()
 
 
     def _init_paths(self, data_dir: Path, output_dir: Path) -> None:
@@ -268,7 +268,7 @@ class CalciumPipeline:
         save_pickle_file(self.population, self.events_path)
 
 
-    def export_normalized_datasets(self) -> None:
+    def _export_normalized_datasets(self) -> None:
         """
         Export normalized multi-table datasets: peaks, cells, events, and population-level metrics.
 
