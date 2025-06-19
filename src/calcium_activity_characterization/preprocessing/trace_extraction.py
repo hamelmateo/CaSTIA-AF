@@ -7,9 +7,9 @@ Example:
     >>> extractor.compute(file_pattern=".*FITC.*\\.TIF")
 """
 
-import tifffile
 import numpy as np
 import os
+import cupy as cp
 from pathlib import Path
 from typing import List
 from functools import partial
@@ -54,10 +54,14 @@ class TraceExtractor:
         """
         self.file_pattern = file_pattern
 
-        if self.parallelize:
-            self._compute_traces_parallel()
-        else:
-            self._compute_traces_serial()
+        try:
+            if self.parallelize:
+                self._compute_traces_parallel()
+            else:
+                self._compute_traces_serial()
+        except Exception as cpu_error:
+            logger.error(f"❌ CPU parallel/serial fallback failed: {cpu_error}")
+            raise
 
     def _compute_traces_serial(self) -> None:
         """Compute cell-wise intensity traces in serial."""
@@ -93,6 +97,46 @@ class TraceExtractor:
         results_per_cell = list(zip(*results))
         for cell, trace in zip(self.cells, results_per_cell):
             cell.trace.add_trace(trace=list(map(float, trace)), version_name=self.trace_version)
+
+    def _compute_traces_gpu(self) -> None:
+        """
+        Compute raw calcium traces using GPU with CuPy for parallel pixel ops.
+        """
+        logger.info("🚀 Attempting GPU-based trace computation...")
+
+        images_cpu = self.processor.process_all(self.images_dir, self.file_pattern)
+        if images_cpu.size == 0:
+            raise RuntimeError("No images to process.")
+
+        images = cp.asarray(images_cpu)
+        h, w = images.shape[1:]
+
+        masks = []
+        for cell in self.cells:
+            mask = cp.zeros((h, w), dtype=cp.float32)
+            coords = np.array(cell.pixel_coords)
+            if coords.size > 0:
+                ys, xs = coords[:, 0], coords[:, 1]
+                mask[ys, xs] = 1.0
+            masks.append(mask)
+
+        masks = cp.stack(masks)
+        pixel_counts = cp.sum(masks, axis=(1, 2)) + 1e-8
+
+        n_frames = images.shape[0]
+        traces = []
+        for t in range(n_frames):
+            img = images[t]
+            masked = masks * img
+            trace_t = cp.sum(masked, axis=(1, 2)) / pixel_counts
+            traces.append(trace_t.get())
+
+        trace_matrix = np.stack(traces, axis=1)
+        for i, cell in enumerate(self.cells):
+            cell.trace.add_trace(trace=trace_matrix[i].tolist(), version_name=self.trace_version)
+
+        logger.info("✅ GPU-based trace computation completed.")
+
 
     @staticmethod
     def _process_single_image(image_path: Path, cell_coords: List[np.ndarray], processor: ImageProcessor) -> List[float]:
