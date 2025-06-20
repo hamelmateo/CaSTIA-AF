@@ -11,10 +11,12 @@ import re
 import numpy as np
 from pathlib import Path
 from typing import List
-from scipy.ndimage import uniform_filter
+import cupy as cp
+import cupyx.scipy.ndimage
 
 from calcium_activity_characterization.utilities.loader import (
     load_existing_img,
+    load_image_fast,
     get_config_with_fallback
 )
 
@@ -69,14 +71,15 @@ class ImageProcessor:
         Returns:
             np.ndarray: Preprocessed 2D image.
         """
-        img = load_existing_img(path)
-
+        try:
+            img = load_image_fast(path)
+        except Exception as e:
+            logger.warning(f"⚠️ Fast load failed for {path.name}: {e}. Falling back to standard loader.") 
+            img = load_existing_img(path)
         if self.apply.get("cropping", True):
             img = self._crop_image(img)
-
         if self.apply.get("hot_pixel_cleaning", False):
             img = self._clean_single_image(img, image_name=path.name)
-
         return img
 
     def rename_with_padding(self, images_dir: Path, file_pattern: str) -> None:
@@ -121,7 +124,57 @@ class ImageProcessor:
         start_w = (width - crop_w) // 2
         return img[start_h:start_h + crop_h, start_w:start_w + crop_w]
 
+    def _clean_single_image_gpu(self, img: np.ndarray, image_name: str = "") -> np.ndarray:
+        """
+        GPU-compatible hot pixel cleaning. Keeps final result on CPU.
+        Uses MAD and cp.percentile, with CuPy acceleration.
 
+        Args:
+            img (np.ndarray): Image array.
+            image_name (str): Name used in logging.
+
+        Returns:
+            np.ndarray: Cleaned image (still on CPU).
+        """
+        try:
+            window = get_config_with_fallback(self.hot_cfg, "window_size", 3)
+
+            img_gpu = cp.asarray(img, dtype=cp.float32)
+
+            if get_config_with_fallback(self.hot_cfg, "use_auto_threshold", True):
+                percentile = get_config_with_fallback(self.hot_cfg, "percentile", 99.9)
+                scale = get_config_with_fallback(self.hot_cfg, "mad_scale", 10.0)
+
+                stride = 4
+                sampled = img_gpu[::stride, ::stride]  # Downsample by 4 in both axes → 1/16th the pixels
+                base = cp.percentile(sampled, percentile)
+
+                residual = cp.abs(img_gpu - base)
+                mad = cp.median(residual)
+                threshold = base + scale * mad
+
+            else:
+                threshold = get_config_with_fallback(self.hot_cfg, "static_threshold", 1000.0)
+
+            # Try uniform filter instead of median if you want speed over accuracy
+            local_median = cupyx.scipy.ndimage.median_filter(img_gpu, size=window)
+            # local_median = cupyx.scipy.ndimage.uniform_filter(img_gpu, size=window)
+
+            diff = cp.abs(img_gpu - local_median)
+            hot_mask = diff > threshold
+
+            corrected = img_gpu.copy()
+            corrected[hot_mask] = local_median[hot_mask]
+
+            num_hot = int(cp.sum(hot_mask).get())
+            if num_hot > 0:
+                logger.info(f"Replaced {num_hot} hot pixels > {threshold:.2f} in {image_name or 'image'}")
+
+            return corrected.get()
+
+        except Exception as e:
+            logger.error(f"GPU hot pixel correction failed for {image_name}: {e}")
+            raise
 
     def _clean_single_image(self, img: np.ndarray, image_name: str = "") -> np.ndarray:
         """
@@ -136,20 +189,21 @@ class ImageProcessor:
         """
         method = get_config_with_fallback(self.hot_cfg, "method", "replace")
         window = get_config_with_fallback(self.hot_cfg, "window_size", 3)
-
-        if get_config_with_fallback(self.hot_cfg, "use_auto_threshold", True):
+        if get_config_with_fallback(self.hot_cfg, "use_auto_threshold", False):
             threshold = self._compute_auto_threshold(
                 img,
                 percentile=get_config_with_fallback(self.hot_cfg, "percentile", 99.9),
                 scale=get_config_with_fallback(self.hot_cfg, "mad_scale", 10.0)
             )
-        else:
-            threshold = get_config_with_fallback(self.hot_cfg, "static_threshold", 1000.0)
 
+        else:
+            threshold = get_config_with_fallback(self.hot_cfg, "static_threshold", 1500.0)
         if method == "replace":
-            return self._replace_hot_pixels(img, threshold, window, image_name)
+            images = self._replace_hot_pixels(img, threshold, window, image_name)
+            return images
         elif method == "clip":
             cleaned = np.clip(img, 0, threshold)
+
             if np.max(cleaned) > threshold:
                 logger.warning(f"⚠️ Clipping failed in {image_name}")
             return cleaned
@@ -159,27 +213,39 @@ class ImageProcessor:
     @staticmethod
     def _replace_hot_pixels(img: np.ndarray, threshold: float, window: int, image_name: str = "") -> np.ndarray:
         """
-        Replace pixels above threshold with local mean.
+        Replace hot pixels using local mean around each pixel individually.
+        Much faster when very few hot pixels are present.
 
         Args:
-            img (np.ndarray): Image to correct.
-            threshold (float): Intensity threshold.
-            window (int): Local window size.
-            image_name (str): Logging context.
+            img (np.ndarray): Input image (uint16 or float32).
+            threshold (float): Intensity threshold to detect hot pixels.
+            window (int): Window size for local averaging.
+            image_name (str): Optional name for logging context.
 
         Returns:
-            np.ndarray: Corrected image.
+            np.ndarray: Cleaned image.
         """
         mask = img > threshold
-        num_hot = np.sum(mask)
+        hot_indices = np.argwhere(mask)
+
+        num_hot = len(hot_indices)
         if num_hot == 0:
             return img
 
-        local_mean = uniform_filter(img.astype(float), size=window, mode='reflect')
         corrected = img.copy()
-        corrected[mask] = local_mean[mask]
+        r = window // 2
+        H, W = img.shape
 
-        logger.info(f"🧽 Replaced {num_hot} hot pixels > {threshold} in {image_name or 'image'}")
+        for y, x in hot_indices:
+            y_min = max(0, y - r)
+            y_max = min(H, y + r + 1)
+            x_min = max(0, x - r)
+            x_max = min(W, x + r + 1)
+
+            patch = img[y_min:y_max, x_min:x_max]
+            corrected[y, x] = np.mean(patch)
+
+        logger.info(f"🧽 Locally replaced {num_hot} hot pixels > {threshold} in {image_name or 'image'}")
         return corrected
 
     @staticmethod
@@ -195,6 +261,8 @@ class ImageProcessor:
         Returns:
             float: Computed threshold.
         """
-        base = np.percentile(img, percentile)
+        stride = 4
+        sampled = img[::stride, ::stride]
+        base = np.percentile(sampled, 99.9)
         mad = np.median(np.abs(img - base))
         return base + scale * mad

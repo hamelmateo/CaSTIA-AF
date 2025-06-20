@@ -158,7 +158,7 @@ class CalciumPipeline:
         logger.info(f"Trying segmentation with parameters: {get_config_with_fallback(self.config, 'SEGMENTATION_PARAMETERS')}")
         if not self.raw_cells_path.exists():
             if not self.nuclei_mask_path.exists():
-                processor = ImageProcessor(get_config_with_fallback(self.config, "IMAGE_PROCESSING_PARAMETERS"))
+                processor = ImageProcessor(get_config_with_fallback(self.config, "HOECHST_IMAGE_PROCESSING_PARAMETERS"))
                 self.nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
@@ -192,7 +192,7 @@ class CalciumPipeline:
                 cells=self.population.cells,
                 images_dir=self.fitc_img_path,
                 config=get_config_with_fallback(self.config, "TRACE_EXTRACTION_PARAMETERS"),
-                processor=ImageProcessor(get_config_with_fallback(self.config, "IMAGE_PROCESSING_PARAMETERS"))
+                processor=ImageProcessor(get_config_with_fallback(self.config, "FITC_IMAGE_PROCESSING_PARAMETERS"))
             )
             extractor.compute(self.fitc_file_pattern)
             save_pickle_file(self.population, self.raw_traces_path)

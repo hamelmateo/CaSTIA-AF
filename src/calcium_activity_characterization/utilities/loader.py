@@ -1,14 +1,12 @@
 from pathlib import Path
 import tifffile
 import numpy as np
-import re
 import pickle
 import matplotlib.pyplot as plt
 import random
 import logging
 from typing import List, Optional
 import colorsys
-import networkx as nx
 
 from calcium_activity_characterization.data.cells import Cell
 
@@ -129,6 +127,13 @@ def load_existing_img(img_path: Path) -> np.ndarray:
     """
     return tifffile.imread(str(img_path))
 
+
+def load_image_fast(img_path: Path) -> np.ndarray:
+    try:
+        return tifffile.memmap(str(img_path))
+    except Exception as e:
+        logger.error(f"Failed to memmap {img_path.name}: {e}")
+        raise
 
 
 # ==========================

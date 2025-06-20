@@ -34,7 +34,27 @@ SEGMENTATION_PARAMETERS = {
 # IMAGE PROCESSING PARAMETERS
 # ==========================
 
-IMAGE_PROCESSING_PARAMETERS = {
+HOECHST_IMAGE_PROCESSING_PARAMETERS = {
+    "apply": {
+        "padding": True,
+        "cropping": True,
+        "hot_pixel_cleaning": False
+    },
+
+    "padding_digits": 5,  # e.g. t00001
+    "roi_scale": 0.75,  # 1.0 = no crop
+
+    "hot_pixel_cleaning": {
+        "method": "replace",         # "replace" or "clip"
+        "use_auto_threshold": True,
+        "percentile": 99.9,
+        "mad_scale": 20.0,
+        "static_threshold": 2000,
+        "window_size": 3
+    }
+}
+
+FITC_IMAGE_PROCESSING_PARAMETERS = {
     "apply": {
         "padding": True,
         "cropping": True,
@@ -46,10 +66,10 @@ IMAGE_PROCESSING_PARAMETERS = {
 
     "hot_pixel_cleaning": {
         "method": "replace",         # "replace" or "clip"
-        "use_auto_threshold": True,
+        "use_auto_threshold": False,
         "percentile": 99.9,
         "mad_scale": 20.0,
-        "static_threshold": 5000,
+        "static_threshold": 2000,
         "window_size": 3
     }
 }

@@ -9,6 +9,8 @@ Example:
 
 import numpy as np
 import os
+import gc
+import math
 import cupy as cp
 from pathlib import Path
 from typing import List
@@ -47,20 +49,23 @@ class TraceExtractor:
 
     def compute(self, file_pattern: str) -> None:
         """
-        Compute traces for all cells across FITC frames.
+        Compute traces for all cells across FITC frames using GPU if enabled.
 
         Args:
             file_pattern (str): Regex pattern for FITC image filenames.
         """
         self.file_pattern = file_pattern
 
+        USE_GPU = False  # Temporary hardcoded flag
         try:
-            if self.parallelize:
+            if USE_GPU:
+                self._compute_traces_gpu()
+            elif self.parallelize:
                 self._compute_traces_parallel()
             else:
                 self._compute_traces_serial()
         except Exception as cpu_error:
-            logger.error(f"❌ CPU parallel/serial fallback failed: {cpu_error}")
+            logger.error(f"❌ CPU fallback failed: {cpu_error}")
             raise
 
     def _compute_traces_serial(self) -> None:
@@ -100,43 +105,95 @@ class TraceExtractor:
 
     def _compute_traces_gpu(self) -> None:
         """
-        Compute raw calcium traces using GPU with CuPy for parallel pixel ops.
+        Compute raw calcium traces using streamed GPU operations with CuPy.
         """
-        logger.info("🚀 Attempting GPU-based trace computation...")
+        try:
+            logger.info("Starting GPU-based trace extraction...")
 
-        images_cpu = self.processor.process_all(self.images_dir, self.file_pattern)
-        if images_cpu.size == 0:
-            raise RuntimeError("No images to process.")
+            if get_config_with_fallback(self.processor.apply, "padding", True):
+                self.processor.rename_with_padding(self.images_dir, self.file_pattern)
 
-        images = cp.asarray(images_cpu)
-        h, w = images.shape[1:]
+            image_paths = sorted(self.images_dir.glob("*.TIF"))
+            n_frames = len(image_paths)
+            logger.info(f"Found {n_frames} image frames in {self.images_dir}")
 
-        masks = []
-        for cell in self.cells:
-            mask = cp.zeros((h, w), dtype=cp.float32)
-            coords = np.array(cell.pixel_coords)
-            if coords.size > 0:
+            frame_cpu = self.processor.process_single_image(image_paths[0])
+            frame_shape = frame_cpu.shape  # (H, W)
+            frame_gpu = cp.asarray(frame_cpu)
+
+            mask_stack = cp.zeros((len(self.cells), *frame_shape), dtype=cp.bool_)
+            for i, cell in enumerate(self.cells):
+                coords = cell.pixel_coords
                 ys, xs = coords[:, 0], coords[:, 1]
-                mask[ys, xs] = 1.0
-            masks.append(mask)
+                mask = (ys < frame_shape[0]) & (xs < frame_shape[1])
+                mask_stack[i, ys[mask], xs[mask]] = True
 
-        masks = cp.stack(masks)
-        pixel_counts = cp.sum(masks, axis=(1, 2)) + 1e-8
+            pixel_counts = cp.sum(mask_stack, axis=(1, 2))
+            # Parameters
+            batch_size = 100  # hardcoded for now
+            n_batches = math.ceil(n_frames / batch_size)
+            trace_parts = []
 
-        n_frames = images.shape[0]
-        traces = []
-        for t in range(n_frames):
-            img = images[t]
-            masked = masks * img
-            trace_t = cp.sum(masked, axis=(1, 2)) / pixel_counts
-            traces.append(trace_t.get())
+            for batch_idx in range(n_batches):
+                batch_start = batch_idx * batch_size
+                batch_end = min((batch_idx + 1) * batch_size, n_frames)
+                batch_paths = image_paths[batch_start:batch_end]
+                logger.info(f"\n🚀 Batch {batch_idx + 1}/{n_batches}: Processing frames {batch_start} to {batch_end - 1}")
 
-        trace_matrix = np.stack(traces, axis=1)
-        for i, cell in enumerate(self.cells):
-            cell.trace.add_trace(trace=trace_matrix[i].tolist(), version_name=self.trace_version)
+                traces_gpu_batch = cp.zeros((len(self.cells), len(batch_paths)))
 
-        logger.info("✅ GPU-based trace computation completed.")
+                for t, image_path in enumerate(tqdm(batch_paths, desc=f"🔄 [Batch {batch_idx + 1}/{n_batches}] Processing")):
+                    try:
+                        frame_cpu = self.processor.process_single_image(image_path)
+                        frame_gpu = cp.asarray(frame_cpu)
+                        traces_gpu_batch[:, t] = self._compute_trace_batch_gpu(frame_gpu, mask_stack, pixel_counts)
+                        del frame_gpu
+                    except Exception as frame_error:
+                        logger.warning(f"⚠️ Failed to process frame {image_path.name}: {frame_error}")
 
+                trace_parts.append(traces_gpu_batch.get())  # Transfer to CPU
+                del traces_gpu_batch
+
+                used_bytes = cp.get_default_memory_pool().used_bytes()
+                total_bytes = cp.get_default_memory_pool().total_bytes()
+                logger.info(f"🧠 GPU Memory Pool: Used = {used_bytes / 1e6:.2f} MB / Total = {total_bytes / 1e6:.2f} MB")
+
+                cp.get_default_memory_pool().free_all_blocks()
+                gc.collect()
+
+            trace_matrix = np.concatenate(trace_parts, axis=1)
+            logger.info(f"✅ Successfully assembled trace matrix: {trace_matrix.shape}")
+
+            for i, cell in enumerate(self.cells):
+                cell.trace.add_trace(trace=trace_matrix[i].tolist(), version_name=self.trace_version)
+
+        except cp.cuda.memory.OutOfMemoryError as gpu_error:
+            logger.error(f"GPU out of memory: {gpu_error}. Falling back to CPU.")
+            self._compute_traces_parallel()
+
+    @staticmethod
+    def _free_gpu_memory():
+        cp.get_default_memory_pool().free_all_blocks()
+        cp.get_default_pinned_memory_pool().free_all_blocks()
+        cp.cuda.runtime.deviceSynchronize()  # ⏱️ Forces sync & GC
+
+
+    @staticmethod
+    def _compute_trace_batch_gpu(frame_gpu: cp.ndarray, mask_stack: cp.ndarray, pixel_counts: cp.ndarray) -> cp.ndarray:
+        """
+        Compute average intensity per cell using precomputed GPU masks.
+
+        Args:
+            frame_gpu (cp.ndarray): Single image on GPU.
+            mask_stack (cp.ndarray): Boolean masks per cell (N, H, W).
+            pixel_counts (cp.ndarray): Number of pixels in each mask.
+
+        Returns:
+            cp.ndarray: Mean intensity per cell.
+        """
+        masked = mask_stack * frame_gpu[None, :, :]
+        summed = cp.sum(masked, axis=(1, 2))
+        return summed / pixel_counts
 
     @staticmethod
     def _process_single_image(image_path: Path, cell_coords: List[np.ndarray], processor: ImageProcessor) -> List[float]:
