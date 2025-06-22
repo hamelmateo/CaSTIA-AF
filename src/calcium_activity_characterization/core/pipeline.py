@@ -24,6 +24,7 @@ from calcium_activity_characterization.utilities.loader import (
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
 from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
+from tqdm import tqdm
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -210,9 +211,13 @@ class CalciumPipeline:
             return
 
         else:
-            for cell in self.population.cells:
-                cell.trace.process_trace("raw","smoothed",get_config_with_fallback(self.config,"INDIV_SIGNAL_PROCESSING_PARAMETERS"))
+            cell_trace_dir = self.output_dir / "cell_trace_processing"
+            cell_trace_dir.mkdir(exist_ok=True)
+            for cell in tqdm(self.population.cells, desc="Signal processing"):
+                cell.trace.process_trace("raw", "smoothed", get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"))
                 cell.trace.default_version = "smoothed"
+                cell_plot_path = cell_trace_dir / f"{cell.label}.png"
+                cell.trace.plot_all_versions(cell_plot_path)
             
             save_pickle_file(self.population, self.smoothed_traces_path)
 

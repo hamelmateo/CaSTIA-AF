@@ -74,32 +74,40 @@ class Trace:
             raise TypeError("version_name must be a string.")
         self.versions[version_name] = trace
 
-    def process_trace(self, input_trace_name: str, output_trace_name: str, processing_params: dict) -> None:
+    def process_trace(self, input_version: str, output_version: str, processing_params: dict) -> None:
         """
         Apply a SignalProcessor to a given trace and store the result as a new version.
 
         Args:
-            input_trace_name (str): Name of the input trace to process.
-            output_trace_name (str): Name for the processed trace version.
+            input_version (str): Name of the input trace to process.
+            output_version (str): Name for the processed trace version.
             config (dict): Configuration dictionary containing processor parameters.
 
         Returns:
             None
         """
         try:
-            if input_trace_name not in self.versions:
-                raise ValueError(f"Trace version '{input_trace_name}' not found in self.versions.")
+            if input_version not in self.versions:
+                raise ValueError(f"Trace version '{input_version}' not found in self.versions.")
 
-            input_trace = self.versions[input_trace_name]
-            processor = SignalProcessor(params=processing_params)
+            input_trace = self.versions[input_version]
+            processor = SignalProcessor(config=processing_params)
             processed = processor.run(input_trace)
 
-            self.versions[output_trace_name] = processed
+            SAVE_INTERMEDIATE_VERSIONS = True
+
+            if SAVE_INTERMEDIATE_VERSIONS:
+                intermediate_versions = processor.get_intermediate_versions()
+                for name, version in intermediate_versions.items():
+                    self.versions[f"{output_version}_{name}"] = version
+                
+            self.versions[output_version] = processed
+            self.default_version = output_version
         except Exception as e:
-            logger.error(f"Failed to process trace from '{input_trace_name}' to '{output_trace_name}': {e}")
+            logger.error(f"Failed to process trace from '{input_version}' to '{output_version}': {e}")
             raise
 
-    def detect_peaks(self, detector_params: dict = None) -> None:
+    def detect_peaks(self, detector_params: dict = None, version: str = None) -> None:
         """
         Detect peaks in the active trace using the provided detector parameters.
 
@@ -111,7 +119,12 @@ class Trace:
             return
         
         detector = PeakDetector(params=detector_params)
-        trace = self.active_trace
+        if version is not None:
+            if version not in self.versions:
+                raise ValueError(f"Trace version '{version}' not found in self.versions.")
+            trace = self.versions[version]
+        else:
+            trace = self.active_trace
         self.peaks = detector.run(trace) if len(trace) > 0 else []
         self._refine_peaks_duration(self.default_version)
 
@@ -375,6 +388,35 @@ class Trace:
         else:
             plt.show()
 
+    def plot_all_versions(self, save_path: Optional[Path] = None) -> None:
+        """Plot or save all versions of the trace.
+
+        Args:
+            save_path (Optional[Path]): If provided, the figure is saved instead of shown.
+        """
+        if not self.versions:
+            raise ValueError("No trace versions available to plot.")
+
+        fig, axs = plt.subplots(len(self.versions), 1, figsize=(10, 3 * len(self.versions)))
+
+        axs = np.atleast_1d(axs).flatten()
+
+        for idx, (version_name, trace) in enumerate(self.versions.items()):
+            axs[idx].plot(trace)
+            axs[idx].set_title(f"Trace Version: {version_name}")
+            axs[idx].set_ylabel("Intensity")
+            axs[idx].set_xlabel("Time")
+            axs[idx].grid(True)
+
+        plt.tight_layout()
+
+        if save_path:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, dpi=300)
+            plt.close()
+        else:
+            plt.show()
+
     def plot_all_traces(self, save_path: Optional[Path] = None) -> None:
         """Plot or save all traces: raw, versions, binary, and peak overlay.
 
@@ -473,7 +515,7 @@ class Trace:
         return None
 
 
-def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 300, window: int = 5) -> tuple[int, int]:
+def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 350, window: int = 5) -> tuple[int, int]:
     """
     TODO: refactor this function to be a method of Trace class with proper parameters and less dependency on max_search.
     Find the left and right bounds of a peak in a smoothed 1D signal.

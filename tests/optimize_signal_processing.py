@@ -56,17 +56,29 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         # Left: Controls
         control_layout = QVBoxLayout()
 
+        self.presmoothing_checkbox = QCheckBox("Apply Presmoothing")
+        self.presmoothing_checkbox.setChecked(False)
+        control_layout.addWidget(self.presmoothing_checkbox)
+
         self.detrend_checkbox = QCheckBox("Apply Detrending")
-        self.detrend_checkbox.setChecked(True)
+        self.detrend_checkbox.setChecked(False)
         control_layout.addWidget(self.detrend_checkbox)
 
         self.smooth_checkbox = QCheckBox("Apply Smoothing")
-        self.smooth_checkbox.setChecked(True)
+        self.smooth_checkbox.setChecked(False)
         control_layout.addWidget(self.smooth_checkbox)
 
         self.normalize_checkbox = QCheckBox("Apply Normalization")
-        self.normalize_checkbox.setChecked(True)
+        self.normalize_checkbox.setChecked(False)
         control_layout.addWidget(self.normalize_checkbox)
+
+        self.cut_trace_checkbox = QCheckBox("Cut Trace to Peaks")
+        self.cut_trace_checkbox.setChecked(False)
+        control_layout.addWidget(self.cut_trace_checkbox)
+
+        control_layout.addWidget(QLabel("Sigma (presmoothing):"))
+        self.pre_sigma_input = QLineEdit("2.0")
+        control_layout.addWidget(self.pre_sigma_input)
 
         control_layout.addWidget(QLabel("Detrending Method:"))
         self.detrending_combo = QComboBox()
@@ -82,6 +94,10 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         control_layout.addWidget(QLabel("Sigma (smoothing):"))
         self.sigma_input = QLineEdit("2.0")
         control_layout.addWidget(self.sigma_input)
+
+        control_layout.addWidget(QLabel("cut_trace_num_points:"))
+        self.cut_trace_num_points_input = QLineEdit("100")
+        control_layout.addWidget(self.cut_trace_num_points_input)
 
         self.dynamic_form = QFormLayout()
         self.dynamic_fields = {}
@@ -150,13 +166,17 @@ class SignalProcessingBinarizedGUI(QMainWindow):
     def get_processor(self):
         params = {
             "apply": {
+                "presmoothing": self.presmoothing_checkbox.isChecked(),
                 "detrending": self.detrend_checkbox.isChecked(),
                 "smoothing": self.smooth_checkbox.isChecked(),
-                "normalization": self.normalize_checkbox.isChecked()
+                "normalization": self.normalize_checkbox.isChecked(),
+                "cut_trace": self.cut_trace_checkbox.isChecked(),
             },
             "detrending_mode": self.detrending_combo.currentText(),
             "normalizing_method": self.norm_combo.currentText(),
-            "sigma": float(self.sigma_input.text()),
+            "presmoothing_sigma": float(self.pre_sigma_input.text()),
+            "smoothing_sigma": float(self.sigma_input.text()),
+            "cut_trace_num_points": int(self.cut_trace_num_points_input.text()),
             "methods": {}
         }
 

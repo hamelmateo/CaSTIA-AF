@@ -93,65 +93,96 @@ CELL_FILTERING_PARAMETERS = {
     }  # Size thresholds for filtering cells
 }
 
+
+# ==========================
+# BASELINE SIGNAL PROCESSING PARAMETERS
+# ==========================
+
+BASELINE_PEAK_DETECTION_PARAMETERS = {
+    "method": "skimage",  # only 'skimage' supported for now
+    "params": {
+        "skimage": {
+            "prominence": 3, # Minimum prominence of peaks
+            "distance": 20,  # Minimum distance between peaks
+            "height": None,
+            "threshold": None,
+            "width": None,
+            "scale_class_quantiles": [0.33, 0.66],
+            "relative_height": 0.9, # Relative height for relative duration calculation
+            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
+        }
+    },
+    "peak_grouping": {
+        "overlap_margin": 0,  # Margin for grouping overlapping peaks
+        "verbose": False  # Print grouping information
+    },
+    "start_frame": None,  # Starting frame for peak detection (None for no limit)
+    "end_frame": None,  # Ending frame for peak detection (None for no limit)
+    "filter_overlapping_peaks": False  # Filter overlapping peaks based on prominence
+}
+
+
+
 # ==========================
 # INDIVIDUAL CELLS SIGNAL PROCESSING PARAMETERS
 # ==========================
-
 INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
-        "detrending": False,
+        "presmoothing": True,
+        "detrending": True,
         "smoothing": True,
-        "normalization": False,
-        "cut_trace": False
+        "normalization": True
     },
-
-    "detrending_mode": "butterworth",  # Used only if pipeline == 'custom' - 'butterworth', 'wavelet', 'fir', 'exponentialfit', 'diff', 'savgol', 'movingaverage'
-    "normalizing_method": "deltaf",  # Used only if pipeline == 'custom' - 'deltaf', 'zscore', 'minmax', 'percentile'
-    "sigma": 10.0,          # Global Gaussian smoothing σ
-    "cut_trace_num_points": 0,  # Number of points to keep after cutting the trace
+    "cut_trace_num_points": 100, # Number of points to cut from the start of the trace
+    "presmoothing_sigma": 2.0, # Sigma for Gaussian smoothing before detrending
+    "smoothing_sigma": 1.5, # Sigma for Gaussian smoothing after detrending
+    "normalizing_method": "deltaf", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
+    "normalization_parameters": {
+        "epsilon": 1e-8,
+        "min_range": 1e-2, 
+        "percentile_baseline": 10, 
+    },
+    "detrending_mode": "movingaverage",  # or polynomial, exponentialfit, butterworth, savgol, robustpoly, fir, wavelet
 
     "methods": {
-        "wavelet": {
-            "wavelet": "db4", # Wavelet type: 'db4', 'haar', etc.
-            "level": None     # Decomposition level (None for automatic)
-        },
-
-        "fir": {
-            "cutoff": 0.001,
-            "numtaps": 201,
-            "sampling_freq": 1.0  # Sampling rate in Hz
-        },
-
-        "butterworth": {
-            "cutoff": 0.003,
-            "order": 6,
-            "mode": "ba",   # 'ba' for Butterworth, 'sos' for SOS
-            "btype": "highpass",
-            "sampling_freq": 1.0  # Sampling rate in Hz
-        },
-
-        "exponentialfit": {},
-
-        "diff": {},
-
-        "savgol": {
-            "presmoothing_sigma": 6.0,
-            "window_length": 601,
-            "polyorder": 2
-        },
-
+        # One entry per method, only the one matching `detrending_mode` is used.
         "movingaverage": {
-            "window_size": 101
+            "window_size": 401, # Window size for moving average detrending
+            "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
+        },
+        "polynomial": {
+            "degree": 2, # Polynomial degree for detrending
+            "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
+        },
+        "robustpoly": {
+            "degree": 2, # Polynomial degree for robust detrending
+            "method": "huber",  # or "ransac"
+            "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
+        },
+        "exponentialfit": {
+            "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
+        },
+        "savgol": {
+            "window_length": 101, # Window length for Savitzky-Golay filter
+            "polyorder": 2, # Polynomial order for Savitzky-Golay filter
+            "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
+        },
+        "butterworth": {
+            "cutoff": 0.003, # Cutoff frequency for Butterworth filter
+            "order": 6, # Order of the Butterworth filter
+            "sampling_freq": 1.0
+        },
+        "fir": {
+            "cutoff": 0.001, # Cutoff frequency for FIR filter
+            "numtaps": 201, # Number of taps for FIR filter
+            "sampling_freq": 1.0
+        },
+        "wavelet": {
+            "wavelet": "db4", # Wavelet type for wavelet detrending - 'db4', 'haar', etc.
+            "level": 3 # Decomposition level for wavelet transform (None for automatic)
         }
-    },
-
-    "normalization_parameters": {
-        "percentile_baseline": 10,   # for percentile and deltaf
-        "epsilon": 1e-8,             # for all modes to prevent divide-by-zero
-        "min_range": 1e-2            # Minimum range for normalization
-    }    
+    }
 }
-
 
 # ==========================
 # INDIVIDUAL CELLS PEAK DETECTION PARAMETERS
