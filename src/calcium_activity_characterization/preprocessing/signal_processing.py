@@ -9,6 +9,7 @@ Usage Example:
     >>> processor.run(trace, input_version="raw", output_version="processed")
 """
 
+import time
 import numpy as np
 from scipy.signal import butter, firwin, filtfilt, savgol_filter, sosfilt
 from scipy.ndimage import gaussian_filter1d
@@ -59,23 +60,23 @@ class SignalProcessor:
             np.ndarray: Processed trace data.
         """
         processed_trace = trace
-
+        
         if self.apply_flags.get("presmoothing", False):
             processed_trace = gaussian_filter1d(processed_trace, sigma=self.pre_sigma)
             self.trace_versions["presmoothed"] = processed_trace.copy()
-
+            
         if self.apply_flags.get("detrending", False):
             processed_trace = self._detrend(processed_trace)
             self.trace_versions["detrended"] = processed_trace.copy()
-
+            
         if self.apply_flags.get("smoothing", False):
             processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
             self.trace_versions["smoothed"] = processed_trace.copy()
-
+            
         if self.apply_flags.get("normalization", False):
             processed_trace = self._normalize(processed_trace)
             self.trace_versions["normalized"] = processed_trace.copy()
-
+            
         return processed_trace
 
     def get_intermediate_versions(self) -> dict[str, np.ndarray]:
@@ -116,7 +117,7 @@ class SignalProcessor:
         Returns:
             np.ndarray: Detrended trace.
         """
-        trace = self._cut_trace(trace)
+        trace = self._cut_trace(trace, self.cut_length)
         mode = self.detrending_mode
 
         if mode == "butterworth":
@@ -156,30 +157,30 @@ class SignalProcessor:
         # Detect peaks and create a mask for long peaks
         detector = PeakDetector(self.detrending_params.get("peak_detector_params"))
         peak_list = detector.run(trace)
-
+        
         # Create a mask for the detected peaks
         mask = np.zeros_like(trace, dtype=bool)
         for peak in peak_list:
             mask[peak.rel_start_time:peak.rel_end_time + 1] = True
         self.trace_versions["mask"] = mask.astype(np.float32)
-
+        
         # Interpolate the trace where the mask is True
         x = np.arange(len(trace))
         interpolated = trace.copy()
         interpolated[mask] = np.interp(x[mask], x[~mask], trace[~mask])
         self.trace_versions["interpolated"] = interpolated.copy()
-
+        
         # Cut the trace to remove initial frames if specified
-        cut_interpolated = self._cut_trace(interpolated)
+        cut_interpolated = self._cut_trace(interpolated, self.cut_length)
         baseline = self._fit_baseline(cut_interpolated)
         self.trace_versions["baseline"] = baseline.copy()
-
+        
         # Compute the residual and store it
         residual = cut_interpolated - baseline
         self.trace_versions["residual"] = residual.copy()
-
+        
         # Compute the final detrended trace
-        cut_original = self._cut_trace(trace)
+        cut_original = self._cut_trace(trace, self.cut_length)
         return cut_original - baseline
 
     def _fit_baseline(self, trace: np.ndarray) -> np.ndarray:
@@ -268,7 +269,7 @@ class SignalProcessor:
         else:
             raise ValueError(f"Unknown normalization method: {method}")
 
-    def _cut_trace(self, trace: np.ndarray) -> np.ndarray:
+    def _cut_trace(self, trace: np.ndarray, nb_frames: int) -> np.ndarray:
         """
         Remove the initial frames from the trace to avoid early photobleaching effects.
 
@@ -278,4 +279,4 @@ class SignalProcessor:
         Returns:
             np.ndarray: Truncated trace.
         """
-        return trace[self.cut_length:] if len(trace) > self.cut_length else np.array([], dtype=trace.dtype)
+        return trace[nb_frames:] if len(trace) > nb_frames else np.array([], dtype=trace.dtype)

@@ -23,6 +23,7 @@ from calcium_activity_characterization.utilities.loader import load_pickle_file
 
 logger = logging.getLogger(__name__)
 
+
 def _safe_parse(text):
     text = text.strip()
     if text.lower() == "none":
@@ -31,6 +32,7 @@ def _safe_parse(text):
         return eval(text, {"__builtins__": {}})
     except Exception:
         return text
+
 
 class SignalProcessingBinarizedGUI(QMainWindow):
     """
@@ -45,7 +47,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.setWindowTitle("Signal Processing + Peaks + Binarized GUI")
         self.resize(1800, 900)
         self.cells = cells
-        self.random_cells = random.sample(cells, 5)
+        self.random_cells = random.sample(cells, min(5, len(cells)))
         self.selected_cells = []
 
         # Layouts
@@ -57,23 +59,18 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         control_layout = QVBoxLayout()
 
         self.presmoothing_checkbox = QCheckBox("Apply Presmoothing")
-        self.presmoothing_checkbox.setChecked(False)
         control_layout.addWidget(self.presmoothing_checkbox)
 
         self.detrend_checkbox = QCheckBox("Apply Detrending")
-        self.detrend_checkbox.setChecked(False)
         control_layout.addWidget(self.detrend_checkbox)
 
         self.smooth_checkbox = QCheckBox("Apply Smoothing")
-        self.smooth_checkbox.setChecked(False)
         control_layout.addWidget(self.smooth_checkbox)
 
         self.normalize_checkbox = QCheckBox("Apply Normalization")
-        self.normalize_checkbox.setChecked(False)
         control_layout.addWidget(self.normalize_checkbox)
 
         self.cut_trace_checkbox = QCheckBox("Cut Trace to Peaks")
-        self.cut_trace_checkbox.setChecked(False)
         control_layout.addWidget(self.cut_trace_checkbox)
 
         control_layout.addWidget(QLabel("Sigma (presmoothing):"))
@@ -183,7 +180,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         method_name = self.detrending_combo.currentText()
         method_params = {key: _safe_parse(field.text()) for key, field in self.dynamic_fields.items()}
         params["methods"][method_name] = method_params
-        return SignalProcessor(params=params)
+        return SignalProcessor(config=params)
 
     def get_peak_params(self):
         parsed = {"method": "skimage", "params": {"skimage": {}}}
@@ -193,7 +190,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
     def refresh_cells(self):
         self.selected_cells = []
-        self.random_cells = random.sample(self.cells, 5)
+        self.random_cells = random.sample(self.cells, min(5, len(self.cells)))
         self.update_plots()
 
     def load_selected_cells(self):
@@ -215,21 +212,19 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.peak_text.clear()
         colors = plt.cm.tab10.colors
 
+        processor = self.get_processor()
+        peak_params = self.get_peak_params()
+
         for i, cell in enumerate(cells_to_plot):
             raw = np.array(cell.trace.versions["raw"], dtype=float)
-            processor = self.get_processor()
             processed = processor.run(raw)
             cell.trace.versions["smoothed"] = processed.tolist()
             cell.trace.default_version = "smoothed"
 
-            cell.trace.detect_peaks(self.get_peak_params())
+            cell.trace.detect_peaks(peak_params)
             cell.trace.binarize_trace_from_peaks()
 
             ax_raw, ax_proc, ax_bin = self.axs[i]
-            ax_raw.cla()
-            ax_proc.cla()
-            ax_bin.cla()
-
             ax_raw.plot(raw, color='black')
             ax_raw.set_title(f"Cell {cell.label} - Raw")
             ax_raw.set_xlabel("Time")
@@ -247,7 +242,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_proc.grid(True)
 
             ax_bin.plot(cell.trace.binary, color='green')
-            ax_bin.set_title("Binarized (zscore>2)")
+            ax_bin.set_title("Binarized (from peaks)")
             ax_bin.set_xlabel("Time")
             ax_bin.set_ylabel("0/1")
             ax_bin.grid(True)

@@ -130,13 +130,13 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
         "presmoothing": True,
         "detrending": True,
-        "smoothing": True,
+        "smoothing": False,
         "normalization": True
     },
     "cut_trace_num_points": 100, # Number of points to cut from the start of the trace
-    "presmoothing_sigma": 2.0, # Sigma for Gaussian smoothing before detrending
-    "smoothing_sigma": 1.5, # Sigma for Gaussian smoothing after detrending
-    "normalizing_method": "deltaf", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
+    "presmoothing_sigma": 5.0, # Sigma for Gaussian smoothing before detrending
+    "smoothing_sigma": 2.0, # Sigma for Gaussian smoothing after detrending
+    "normalizing_method": "zscore", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
     "normalization_parameters": {
         "epsilon": 1e-8,
         "min_range": 1e-2, 
@@ -147,7 +147,7 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "methods": {
         # One entry per method, only the one matching `detrending_mode` is used.
         "movingaverage": {
-            "window_size": 401, # Window size for moving average detrending
+            "window_size": 51, # Window size for moving average detrending
             "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
         },
         "polynomial": {
@@ -192,7 +192,7 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
-            "prominence": 3, # Minimum prominence of peaks
+            "prominence": 0.6, # Minimum prominence of peaks
             "distance": 20,  # Minimum distance between peaks
             "height": None,
             "threshold": None,

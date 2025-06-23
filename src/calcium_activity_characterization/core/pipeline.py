@@ -8,8 +8,9 @@ Example:
 
 import numpy as np
 import logging
+import os
 from pathlib import Path
-
+from concurrent.futures import ProcessPoolExecutor
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.export import NormalizedDataExporter
@@ -94,6 +95,7 @@ class CalciumPipeline:
         self.events_path: Path = None
         self.population_level_metrics_path: Path = None
         self.spatial_neighbor_graph_path: Path = None
+        self.activity_trace_path: Path = None
 
     def run(self, data_dir: Path, output_dir: Path) -> None:
         """
@@ -147,6 +149,7 @@ class CalciumPipeline:
         self.nuclei_mask_path = output_dir / "nuclei_mask.TIF"
         self.overlay_path = output_dir / "overlay.TIF"
         self.spatial_neighbor_graph_path = output_dir / "neighbors_graph.png"
+        self.intermediate_traces_path = output_dir / "intermediate_traces"
         self.activity_trace_path = output_dir / "activity_trace.pdf"
         self.population_level_metrics_path = output_dir / "population_metrics.pdf"
 
@@ -156,7 +159,6 @@ class CalciumPipeline:
         Perform segmentation on DAPI images if needed and convert the mask to Cell objects.
         Reloads from file if available and permitted.
         """
-        logger.info(f"Trying segmentation with parameters: {get_config_with_fallback(self.config, 'SEGMENTATION_PARAMETERS')}")
         if not self.raw_cells_path.exists():
             if not self.nuclei_mask_path.exists():
                 processor = ImageProcessor(get_config_with_fallback(self.config, "HOECHST_IMAGE_PROCESSING_PARAMETERS"))
@@ -211,14 +213,12 @@ class CalciumPipeline:
             return
 
         else:
-            cell_trace_dir = self.output_dir / "cell_trace_processing"
-            cell_trace_dir.mkdir(exist_ok=True)
-            for cell in tqdm(self.population.cells, desc="Signal processing"):
-                cell.trace.process_trace("raw", "smoothed", get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"))
-                cell.trace.default_version = "smoothed"
-                cell_plot_path = cell_trace_dir / f"{cell.label}.png"
-                cell.trace.plot_all_versions(cell_plot_path)
-            
+            self.output_dir.mkdir(exist_ok=True, parents=True)
+            args = [(cell, "raw", "processed", get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"), self.intermediate_traces_path) for cell in self.population.cells]
+
+            with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+                list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
+
             save_pickle_file(self.population, self.smoothed_traces_path)
 
 
@@ -286,3 +286,21 @@ class CalciumPipeline:
             logger.info(f"✅ Normalized datasets exported to {self.output_dir}")
         except Exception as e:
             logger.error(f"❌ Failed to export normalized datasets: {e}")
+
+
+
+def process_and_plot_worker(args: tuple[Cell, str, str, dict, Path]) -> Cell:
+    """
+    Function to process and plot a single trace in a subprocess.
+
+    Args:
+        args (tuple): (cell, input_version, output_version, config, output_path)
+
+    Returns:
+        Cell: The processed cell object.
+    """
+    cell, input_version, output_version, config, output_path = args
+    try:
+        cell.trace.process_and_plot_trace(input_version, output_version, config, output_path / f"{cell.label}.png")
+    except Exception as e:
+        logger.error(f"Worker error on processing trace of cell {cell.label}: {e}")

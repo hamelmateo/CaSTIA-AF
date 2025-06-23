@@ -74,7 +74,7 @@ class Trace:
             raise TypeError("version_name must be a string.")
         self.versions[version_name] = trace
 
-    def process_trace(self, input_version: str, output_version: str, processing_params: dict) -> None:
+    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict, output_path: Path) -> None:
         """
         Apply a SignalProcessor to a given trace and store the result as a new version.
 
@@ -94,17 +94,18 @@ class Trace:
             processor = SignalProcessor(config=processing_params)
             processed = processor.run(input_trace)
 
-            SAVE_INTERMEDIATE_VERSIONS = True
+            SAVE_INTERMEDIATE_VERSIONS = False
 
             if SAVE_INTERMEDIATE_VERSIONS:
                 intermediate_versions = processor.get_intermediate_versions()
                 for name, version in intermediate_versions.items():
                     self.versions[f"{output_version}_{name}"] = version
-                
+
             self.versions[output_version] = processed
             self.default_version = output_version
+
         except Exception as e:
-            logger.error(f"Failed to process trace from '{input_version}' to '{output_version}': {e}")
+            logger.error(f"Failed to process and plot trace from '{input_version}' to '{output_version}': {e}")
             raise
 
     def detect_peaks(self, detector_params: dict = None, version: str = None) -> None:
