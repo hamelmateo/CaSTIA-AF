@@ -90,7 +90,7 @@ class NormalizedDataExporter:
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
                 # Save trace arrays externally
                 np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_raw.npy", cell.trace.versions["raw"])
-                np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_smoothed.npy", cell.trace.versions["smoothed"])
+                np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_smoothed.npy", cell.trace.versions["processed"])
                 np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_binary.npy", cell.trace.binary)
 
                 writer.writerow({

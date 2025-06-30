@@ -134,7 +134,7 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
         ax3 = self.canvas.figure.add_subplot(313)
 
         raw = self.selected_cell.trace.versions.get("raw")
-        smoothed = self.selected_cell.trace.versions.get("smoothed")
+        smoothed = self.selected_cell.trace.versions.get("processed")
         binary = self.selected_cell.trace.binary
         peaks = self.selected_cell.trace.peaks
 

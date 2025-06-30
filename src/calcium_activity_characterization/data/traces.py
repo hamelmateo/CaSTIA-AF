@@ -1,8 +1,8 @@
 """
 Example usage:
     >>> t = Trace(raw_trace=[1, 2, 3, 2, 1, 0, 1, 3, 4, 2])
-    >>> t.versions["smoothed"] = some_smoothed_version
-    >>> t.default_version = "smoothed"
+    >>> t.versions["processed"] = some_smoothed_version
+    >>> t.default_version = "processed"
     >>> t.detect_peaks(detector)
     >>> t.binarize_trace_from_peaks()
     >>> t.plot_all_traces(save_path=Path("trace_summary.png"))
@@ -18,6 +18,7 @@ from calcium_activity_characterization.preprocessing.signal_processing import Si
 from calcium_activity_characterization.data.peaks import PeakDetector
 
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
+from calcium_activity_characterization.utilities.peak_utils import find_valley_bounds
 
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
@@ -74,7 +75,7 @@ class Trace:
             raise TypeError("version_name must be a string.")
         self.versions[version_name] = trace
 
-    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict, output_path: Path) -> None:
+    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict, output_path: Optional[Path] = None) -> None:
         """
         Apply a SignalProcessor to a given trace and store the result as a new version.
 
@@ -82,6 +83,7 @@ class Trace:
             input_version (str): Name of the input trace to process.
             output_version (str): Name for the processed trace version.
             config (dict): Configuration dictionary containing processor parameters.
+            
 
         Returns:
             None
@@ -94,7 +96,7 @@ class Trace:
             processor = SignalProcessor(config=processing_params)
             processed = processor.run(input_trace)
 
-            SAVE_INTERMEDIATE_VERSIONS = False
+            SAVE_INTERMEDIATE_VERSIONS = True
 
             if SAVE_INTERMEDIATE_VERSIONS:
                 intermediate_versions = processor.get_intermediate_versions()
@@ -514,46 +516,3 @@ class Trace:
             if peak.rel_start_time == frame:
                 return peak
         return None
-
-
-def find_valley_bounds(trace: np.ndarray, rel_start_time: int, rel_end_time: int, max_search: int = 350, window: int = 5) -> tuple[int, int]:
-    """
-    TODO: refactor this function to be a method of Trace class with proper parameters and less dependency on max_search.
-    Find the left and right bounds of a peak in a smoothed 1D signal.
-
-    This function searches for local minima on both sides of the peak center
-    (rel_start_time and rel_end_time) within a specified search range.
-    The bounds are refined based on the local minima found.
-
-    Args:
-        trace (np.ndarray): Smoothed 1D signal.
-        peak_time (int): Index of the peak center.
-        max_search (int): Max points to search on each side.
-        window (int): Half-window size to validate local minima.
-
-    Returns:
-        (start_index, end_index): Refined left/right bounds of the peak.
-    """
-    trace = np.asarray(trace, dtype=float)
-
-    n = len(trace)
-    left_bound = rel_start_time
-    right_bound = rel_end_time
-
-    # --- Left side ---
-    for i in range(rel_start_time - 1, max(rel_start_time - max_search - 1, 0), -1):
-        window_vals = trace[max(i - window,0): min(i + window + 1,n-1)]
-        center_val = trace[i]
-        if np.all(center_val <= window_vals):
-            left_bound = i
-            break
-
-    # --- Right side ---
-    for i in range(rel_end_time + 1, min(rel_end_time + max_search + 1,n-1), 1):
-        window_vals = trace[max(i - window,0): min(i + window + 1,n-1)]
-        center_val = trace[i]
-        if np.all(center_val <= window_vals):
-            right_bound = i
-            break
-
-    return left_bound, right_bound

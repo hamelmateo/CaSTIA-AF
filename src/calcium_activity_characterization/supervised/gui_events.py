@@ -129,7 +129,7 @@ class ActivityAndEventDetectionGUI(QMainWindow):
         ax1.set_title("Raw Activity Trace")
 
         ax2 = self.canvas.figure.add_subplot(412)
-        ax2.plot(activity_trace.versions.get("smoothed", []), color='blue')
+        ax2.plot(activity_trace.versions.get("processed", []), color='blue')
         ax2.set_title("Smoothed Activity Trace")
 
         ax3 = self.canvas.figure.add_subplot(413)
@@ -137,7 +137,7 @@ class ActivityAndEventDetectionGUI(QMainWindow):
         ax3.set_title("Binarized Activity Trace")
 
         ax4 = self.canvas.figure.add_subplot(414)
-        smoothed = activity_trace.versions.get("smoothed", [])
+        smoothed = activity_trace.versions.get("processed", [])
         peaks = getattr(activity_trace, "peaks", []) or []
         for peak in peaks:
             ax4.axvspan(peak.start_time, peak.end_time, color='orange', alpha=0.3)

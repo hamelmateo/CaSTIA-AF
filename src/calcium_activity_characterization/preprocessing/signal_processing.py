@@ -9,9 +9,9 @@ Usage Example:
     >>> processor.run(trace, input_version="raw", output_version="processed")
 """
 
-import time
 import numpy as np
-from scipy.signal import butter, firwin, filtfilt, savgol_filter, sosfilt
+import matplotlib.pyplot as plt
+from scipy.signal import butter, firwin, filtfilt, savgol_filter
 from scipy.ndimage import gaussian_filter1d
 from scipy.optimize import curve_fit
 from sklearn.pipeline import make_pipeline
@@ -20,6 +20,8 @@ from sklearn.preprocessing import PolynomialFeatures
 import logging
 
 from calcium_activity_characterization.data.peaks import PeakDetector
+from calcium_activity_characterization.preprocessing.local_minima_detrender import LocalMinimaDetrender
+from calcium_activity_characterization.preprocessing.double_curve_detrender import DoubleCurveDetrender
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ class SignalProcessor:
             
         if self.apply_flags.get("smoothing", False):
             processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
-            self.trace_versions["smoothed"] = processed_trace.copy()
+            self.trace_versions["processed"] = processed_trace.copy()
             
         if self.apply_flags.get("normalization", False):
             processed_trace = self._normalize(processed_trace)
@@ -93,7 +95,7 @@ class SignalProcessor:
         Apply the selected detrending method to the trace.
         This method supports both filtering-based detrending (e.g., Butterworth, FIR, wavelet)
         and baseline subtraction methods (e.g., moving average, polynomial fitting).
-        
+
         Args:
             trace (np.ndarray): Raw trace data.
 
@@ -101,9 +103,13 @@ class SignalProcessor:
             np.ndarray: Detrended trace.
         """
         if self.detrending_mode in {"butterworth", "fir", "wavelet"}:
-            return self._detrend_filter_based(trace)
+            return self._detrend_filter_based(trace), {}
         elif self.detrending_mode in {"movingaverage", "polynomial", "robustpoly", "exponentialfit", "savgol"}:
-            return self._detrend_baseline_subtraction(trace)
+            return self._detrend_baseline_subtraction(trace), {}
+        elif self.detrending_mode == "doublecurvefitting":
+            return self._detrend_double_curve_fitting(trace), {}
+        elif self.detrending_mode == "localminima":
+            return self._detrend_local_minima(trace)
         else:
             raise ValueError(f"Unsupported detrending mode: {self.detrending_mode}")
 
@@ -157,7 +163,7 @@ class SignalProcessor:
         # Detect peaks and create a mask for long peaks
         detector = PeakDetector(self.detrending_params.get("peak_detector_params"))
         peak_list = detector.run(trace)
-        
+
         # Create a mask for the detected peaks
         mask = np.zeros_like(trace, dtype=bool)
         for peak in peak_list:
@@ -182,6 +188,49 @@ class SignalProcessor:
         # Compute the final detrended trace
         cut_original = self._cut_trace(trace, self.cut_length)
         return cut_original - baseline
+
+
+    def _detrend_double_curve_fitting(self, trace: np.ndarray) -> np.ndarray:
+        """
+        Detrend trace using the DoubleCurveDetrender.
+
+        Args:
+            trace (np.ndarray): Raw input trace.
+
+        Returns:
+            np.ndarray: Final detrended trace
+        """
+        try:
+            detrender = DoubleCurveDetrender(self.detrending_params, trace, self.cut_length)
+            detrended = detrender.run()
+            self.trace_versions.update(detrender.get_intermediate_versions())
+            return detrended
+        except Exception as e:
+            logger.error(f"Double curve fitting failed: {e}")
+            return trace.copy(), {"detrended_clipped": trace.copy()}
+
+
+    def _detrend_local_minima(self, trace: np.ndarray) -> np.ndarray:
+        """
+        Detrend trace using the LocalMinimaDetrender.
+
+        Args:
+            trace (np.ndarray): Input trace (usually smoothed).
+
+        Returns:
+            np.ndarray: Final detrended trace.
+        """
+        try:
+            detrender = LocalMinimaDetrender(self.config.get("detrending", {}), trace)
+            detrended = detrender.run()
+            self.trace_versions.update(detrender.get_intermediate_versions())
+
+            detrended = self._cut_trace(detrended, self.cut_length)
+            return detrended
+        except Exception as e:
+            logger.error(f"Local minima detrending failed: {e}")
+            return trace.copy(), {"detrended_clipped": trace.copy()}
+
 
     def _fit_baseline(self, trace: np.ndarray) -> np.ndarray:
         """

@@ -1,7 +1,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = False  # Enable debugging mode
+DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
@@ -102,13 +102,13 @@ BASELINE_PEAK_DETECTION_PARAMETERS = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
-            "prominence": 3, # Minimum prominence of peaks
+            "prominence": 1, # Minimum prominence of peaks
             "distance": 20,  # Minimum distance between peaks
             "height": None,
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.9, # Relative height for relative duration calculation
+            "relative_height": 0.97, # Relative height for relative duration calculation
             "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
@@ -134,7 +134,7 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
         "normalization": True
     },
     "cut_trace_num_points": 100, # Number of points to cut from the start of the trace
-    "presmoothing_sigma": 5.0, # Sigma for Gaussian smoothing before detrending
+    "presmoothing_sigma": 3.0, # Sigma for Gaussian smoothing before detrending
     "smoothing_sigma": 2.0, # Sigma for Gaussian smoothing after detrending
     "normalizing_method": "zscore", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
     "normalization_parameters": {
@@ -142,12 +142,12 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
         "min_range": 1e-2, 
         "percentile_baseline": 10, 
     },
-    "detrending_mode": "movingaverage",  # or polynomial, exponentialfit, butterworth, savgol, robustpoly, fir, wavelet
+    "detrending_mode": "localminima",  # or localminima, polynomial, exponentialfit, butterworth, savgol, robustpoly, fir, wavelet, doublecurvefitting, movingaverage, diff
 
     "methods": {
         # One entry per method, only the one matching `detrending_mode` is used.
         "movingaverage": {
-            "window_size": 51, # Window size for moving average detrending
+            "window_size": 201, # Window size for moving average detrending
             "peak_detector_params": BASELINE_PEAK_DETECTION_PARAMETERS
         },
         "polynomial": {
@@ -180,9 +180,42 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
         "wavelet": {
             "wavelet": "db4", # Wavelet type for wavelet detrending - 'db4', 'haar', etc.
             "level": 3 # Decomposition level for wavelet transform (None for automatic)
+        },
+        "doublecurvefitting": { # On-going development, not yet implemented
+            "fit_method": "movingaverage",
+            "window_size": 121,
+            "mask_method": "percentile",  # or "histogram"
+            "percentile_bounds": [0, 75],
+            "max_iterations": 5,
+        },
+        "localminima": {
+            "minima_detection": {
+                "order": 15
+            },
+            "edge_anchors": {
+                "window": 50,
+                "delta": 0.03
+            },
+            "filtering": {
+                "shoulder_neighbor_dist": 400,
+                "angle_thresh_deg": 10
+            },
+            "crossing_correction": {
+                "min_dist": 10,
+                "max_iterations": 10
+            },
+            "fitting": {
+                "method": "linear"  # only 'linear' supported for now
+            },
+            "diagnostics": {
+                "enabled": True, # Enable diagnostics plots
+                "output_dir": "D:/Mateo/20250326/Output/IS1/detrending-testing-script"
+            }
         }
     }
 }
+
+
 
 # ==========================
 # INDIVIDUAL CELLS PEAK DETECTION PARAMETERS

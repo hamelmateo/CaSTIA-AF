@@ -3,13 +3,101 @@ import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
-
-from calcium_activity_characterization.data.cells import Cell
+from typing import List
 
 logger = logging.getLogger(__name__)
 
 
-def show_cell_plot(cell: Cell) -> None:
+def plot_minima_diagnostics(
+    trace: np.ndarray,
+    anchor_idx: List[int],
+    inserted_idx: List[int],
+    discarded1: List[int],
+    discarded2: List[int],
+    discarded3: List[int],
+    save_path: Path
+) -> None:
+    """
+    Plot trace with all categories of local minima overlaid.
+
+    Args:
+        trace (np.ndarray): The smoothed intensity trace.
+        anchor_idx (List[int]): Final retained anchor indices.
+        inserted_idx (List[int]): Newly added anchors.
+        discarded1 (List[int]): Discarded after shoulder rejection.
+        discarded2 (List[int]): Discarded after angle filtering.
+        discarded3 (List[int]): Reserved for future use.
+        save_path (Path): Path to save the plot.
+    """
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(trace, label="Trace", lw=1.5)
+
+    if anchor_idx:
+        ax.scatter(anchor_idx, trace[anchor_idx], c="red", label="Final Anchors", s=15)
+    if inserted_idx:
+        ax.scatter(inserted_idx, trace[inserted_idx], c="orange", label="Inserted Anchors", s=15)
+    if discarded1:
+        ax.scatter(discarded1, trace[discarded1], c="gray", label="Shoulder Rejected", s=10, alpha=0.7)
+    if discarded2:
+        ax.scatter(discarded2, trace[discarded2], c="deepskyblue", label="Angle Rejected", s=10, alpha=0.5)
+    if discarded3:
+        ax.scatter(discarded3, trace[discarded3], c="lightgreen", label="Extra Discarded", s=10, alpha=0.5)
+
+    ax.set_title("Local Minima Filtering Diagnostics")
+    ax.legend()
+    ax.grid(True)
+    plt.tight_layout()
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_final_baseline_fit(
+    trace: np.ndarray,
+    baseline: np.ndarray,
+    anchor_idx: List[int],
+    detrended: np.ndarray,
+    label: str,
+    output_dir: Path,
+    model_name: str
+) -> None:
+    """
+    Plot the raw trace, baseline, anchor points, and final detrended result.
+
+    Args:
+        trace (np.ndarray): Smoothed input trace.
+        baseline (np.ndarray): Fitted baseline.
+        anchor_idx (List[int]): Anchor indices used for baseline fit.
+        detrended (np.ndarray): Detrended result.
+        label (str): Label suffix for filename.
+        output_dir (Path): Directory to save plot.
+        model_name (str): Label for the model type.
+    """
+    fig, axs = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+
+    axs[0].plot(trace, label="Trace")
+    axs[0].scatter(anchor_idx, trace[anchor_idx], c='red', label="Anchors", s=15)
+    axs[0].legend()
+    axs[0].set_title("Raw Trace with Anchor Points")
+
+    axs[1].plot(trace, label="Trace")
+    axs[1].plot(baseline, label=f"Baseline ({model_name})")
+    axs[1].legend()
+    axs[1].set_title("Fitted Baseline")
+
+    axs[2].plot(detrended, label="Detrended Trace")
+    axs[2].legend()
+    axs[2].set_title("Detrended Output")
+
+    for ax in axs:
+        ax.grid(True)
+
+    plt.tight_layout()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_dir / f"baseline_fit_{label}.png")
+    plt.close()
+
+
+def show_cell_plot(cell) -> None:
     """
     Plot the intensity trace of a single cell.
 

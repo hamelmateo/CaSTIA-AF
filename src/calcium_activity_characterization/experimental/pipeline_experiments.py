@@ -183,7 +183,7 @@ def initialize_global_trace(self):
     peak detection, binarization, and metadata extraction.
     """
     version = "raw"
-    default_version = "smoothed"
+    default_version = "processed"
     self.population.compute_global_trace(version=version , 
                                             default_version=default_version, 
                                             signal_processing_params=get_config_with_fallback(self.config,"POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS"), 
@@ -197,7 +197,7 @@ def initialize_activity_trace(self):
     Compute the global trace from active cells and process it through smoothing,
     peak detection, binarization, and metadata extraction.
     """
-    default_version = "smoothed"
+    default_version = "processed"
     self.population.compute_activity_trace(default_version=default_version,
                                             signal_processing_params=get_config_with_fallback(self.config,"POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS"),
                                             peak_detection_params=get_config_with_fallback(self.config, "GLOBAL_PEAK_DETECTION_PARAMETERS"))
@@ -210,7 +210,7 @@ def initialize_impulse_trace(self):
     Compute the impulse trace from active cells and process it through smoothing,
     peak detection, binarization, and metadata extraction.
     """
-    default_version = "smoothed"
+    default_version = "processed"
     self.population.compute_impulse_trace(default_version=default_version,
                                             signal_processing_params=get_config_with_fallback(self.config,"POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS"),
                                             peak_detection_params=get_config_with_fallback(self.config, "IMPULSE_PEAK_DETECTION_PARAMETERS"))

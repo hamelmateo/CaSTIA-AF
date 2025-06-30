@@ -245,7 +245,7 @@ class ImageProcessor:
             patch = img[y_min:y_max, x_min:x_max]
             corrected[y, x] = np.mean(patch)
 
-        logger.info(f"🧽 Locally replaced {num_hot} hot pixels > {threshold} in {image_name or 'image'}")
+        #logger.info(f"🧽 Locally replaced {num_hot} hot pixels > {threshold} in {image_name or 'image'}")
         return corrected
 
     @staticmethod

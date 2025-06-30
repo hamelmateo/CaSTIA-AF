@@ -81,7 +81,9 @@ class Population:
             Trace: A Trace object with peak detection and binarization applied.
         """
         t = Trace(trace.tolist())
-        t.process_trace("raw", default_version, signal_processing_params)
+        t.process_and_plot_trace(input_version="raw", 
+                                 output_version=default_version, 
+                                 processing_params=signal_processing_params)
         t.default_version = default_version
         t.detect_peaks(peak_detection_params)
         t.binarize_trace_from_peaks()

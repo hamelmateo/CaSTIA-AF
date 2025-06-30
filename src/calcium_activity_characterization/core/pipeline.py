@@ -26,6 +26,7 @@ from calcium_activity_characterization.preprocessing.image_processing import Ima
 from calcium_activity_characterization.preprocessing.segmentation import segmented
 from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
 from tqdm import tqdm
+import random
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -56,7 +57,7 @@ class CalciumPipeline:
         overlay_path (Path): Path to the overlay image file.
         raw_cells_path (Path): Path to save raw cell data.
         raw_traces_path (Path): Path to save raw intensity traces.
-        smoothed_traces_path (Path): Path to save smoothed intensity traces.
+        processed_traces_path (Path): Path to save smoothed intensity traces.
         binary_traces_path (Path): Path to save binarized intensity traces.
         events_path (Path): Path to save detected events.
         population_level_metrics_path (Path): Path to save population-level metrics report.
@@ -90,7 +91,7 @@ class CalciumPipeline:
         self.overlay_path: Path = None
         self.raw_cells_path: Path = None
         self.raw_traces_path: Path = None
-        self.smoothed_traces_path: Path = None
+        self.processed_traces_path: Path = None
         self.binary_traces_path: Path = None
         self.events_path: Path = None
         self.population_level_metrics_path: Path = None
@@ -141,7 +142,7 @@ class CalciumPipeline:
         # Pick paths for saving results
         self.raw_cells_path = output_dir / "00_raw_cells.pkl"
         self.raw_traces_path = output_dir / "01_raw_traces.pkl"
-        self.smoothed_traces_path = output_dir / "02_smoothed_traces.pkl"
+        self.processed_traces_path = output_dir / "02_smoothed_traces.pkl"
         self.binary_traces_path = output_dir / "03_binarized_traces.pkl"
         self.events_path = output_dir / "04_population_events.pkl"
 
@@ -208,8 +209,33 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if self.smoothed_traces_path.exists():
-            self.population = load_pickle_file(self.smoothed_traces_path)
+        if self.processed_traces_path.exists():
+            self.population = load_pickle_file(self.processed_traces_path)
+            return
+
+        else:
+            self.output_dir.mkdir(exist_ok=True, parents=True)
+            for cell in self.population.cells:
+                cell.trace.process_and_plot_trace(
+                    input_version="raw",
+                    output_version="processed",
+                    processing_params=get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"),
+                    output_path=self.intermediate_traces_path / f"{cell.label}.png"
+                )
+            save_pickle_file(self.population, self.processed_traces_path)
+
+            # Select 10 random cells (or all if fewer than 10)
+            sample_cells = random.sample(self.population.cells, min(15, len(self.population.cells)))
+            for cell in sample_cells:
+                cell.trace.plot_all_traces(self.intermediate_traces_path / f"{cell.label}_all_traces.png")
+
+    def _signal_processing_pipeline_parallelized(self) -> None:
+        """
+        Run signal processing pipeline on all active cells.
+        Reloads from file if permitted.
+        """
+        if self.processed_traces_path.exists():
+            self.population = load_pickle_file(self.processed_traces_path)
             return
 
         else:
@@ -219,7 +245,7 @@ class CalciumPipeline:
             with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
                 list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
 
-            save_pickle_file(self.population, self.smoothed_traces_path)
+            save_pickle_file(self.population, self.processed_traces_path)
 
 
     def _binarization_pipeline(self) -> None: 
@@ -247,7 +273,7 @@ class CalciumPipeline:
         Compute the global trace from active cells and process it through smoothing,
         peak detection, binarization, and metadata extraction.
         """
-        default_version = "smoothed"
+        default_version = "processed"
         self.population.compute_activity_trace(default_version=default_version,
                                                signal_processing_params=get_config_with_fallback(self.config,"POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS"),
                                                peak_detection_params=get_config_with_fallback(self.config, "ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS"))

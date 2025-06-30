@@ -218,8 +218,8 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         for i, cell in enumerate(cells_to_plot):
             raw = np.array(cell.trace.versions["raw"], dtype=float)
             processed = processor.run(raw)
-            cell.trace.versions["smoothed"] = processed.tolist()
-            cell.trace.default_version = "smoothed"
+            cell.trace.versions["processed"] = processed.tolist()
+            cell.trace.default_version = "processed"
 
             cell.trace.detect_peaks(peak_params)
             cell.trace.binarize_trace_from_peaks()
