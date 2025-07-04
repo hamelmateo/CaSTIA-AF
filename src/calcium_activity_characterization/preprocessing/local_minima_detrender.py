@@ -6,6 +6,7 @@
 
 from typing import Dict, List, Tuple
 import numpy as np
+from pathlib import Path
 import logging
 from scipy.signal import argrelmin
 from math import atan2, degrees
@@ -83,15 +84,15 @@ class LocalMinimaDetrender:
         This method uses on-peak local minimas rejection and angle-based filtering to refine the anchor points.
         """
         try:
-            shoulder_dist = self.config.get("filtering", {}).get("shoulder_neighbor_dist", 200)
-            filtered, discarded1 = self._filter_by_shoulder_rejection_iterative(neighbor_dist=shoulder_dist)
-            logger.info(f"After shoulder rejection: {len(filtered)} kept, {len(discarded1)} discarded")
+            shoulder_dist = self.config.get("filtering", {}).get("shoulder_neighbor_dist", 400)
+            window = self.config.get("filtering", {}).get("shoulder_window", 50)
+            self.anchor_indices, discarded1 = self._filter_by_shoulder_rejection_iterative(neighbor_dist=shoulder_dist, window=window)
+            logger.info(f"After shoulder rejection: {len(self.anchor_indices)} kept, {len(discarded1)} discarded")
 
             angle_thresh = self.config.get("filtering", {}).get("angle_thresh_deg", 15)
-            filtered, discarded2 = self._filter_by_angle_valley(filtered, angle_thresh_deg=angle_thresh)
-            logger.info(f"After angle filtering: {len(filtered)} kept, {len(discarded2)} discarded")
+            self.anchor_indices, discarded2 = self._filter_by_angle_valley(angle_thresh_deg=angle_thresh)
+            logger.info(f"After angle filtering: {len(self.anchor_indices)} kept, {len(discarded2)} discarded")
 
-            self.anchor_indices = filtered
             self.discarded_minima = {
                 "shoulder": discarded1,
                 "angle": discarded2
@@ -111,7 +112,7 @@ class LocalMinimaDetrender:
             window = cfg.get("window", 50)
             delta = cfg.get("delta", 0.03)
 
-            before = set(self.anchor_indices)
+            before = set(sorted(self.anchor_indices))
 
             # Start
             if self.anchor_indices:
@@ -123,13 +124,14 @@ class LocalMinimaDetrender:
 
             # End
             end_start = len(self.trace) - window
-            if not any(m >= end_start for m in self.anchor_indices):
-                segment = self.trace[end_start:]
-                idx = np.argmin(segment) + end_start
-                if not self.anchor_indices or self.trace[idx] <= self.trace[self.anchor_indices[-1]] * (1 + delta):
-                    self.anchor_indices.append(idx)
+            if self.anchor_indices:
+                segment = self.trace[max(end_start, self.anchor_indices[-1]+1):]
+                if len(segment) > 0:
+                    idx = int(np.argmin(segment) + max(end_start, self.anchor_indices[-1]+1))
+                    if self.trace[idx] <= self.trace[self.anchor_indices[-1]] * (1 + delta):
+                        self.anchor_indices.append(idx)
 
-            after = set(self.anchor_indices)
+            after = set(sorted(self.anchor_indices))
             self.inserted_anchors = sorted(list(after - before))
             self.anchor_indices = sorted(self.anchor_indices)
 
@@ -224,7 +226,7 @@ class LocalMinimaDetrender:
         and final baseline fit if enabled. It saves the plots to the specified output directory.
         """
         try:
-            output_dir = self.config.get("diagnostics", {}).get("output_dir", None)
+            output_dir = Path(self.config.get("diagnostics", {}).get("output_dir", None))
             if output_dir is None:
                 logger.warning("Diagnostics enabled but no output_dir provided.")
                 return
@@ -237,7 +239,7 @@ class LocalMinimaDetrender:
                 discarded1=discarded.get("shoulder", []),
                 discarded2=discarded.get("angle", []),
                 discarded3=[],
-                save_path=output_dir / "minima_diagnostics.png"
+                output_dir=output_dir
             )
 
             plot_final_baseline_fit(
@@ -253,7 +255,7 @@ class LocalMinimaDetrender:
             logger.error(f"Failed to plot diagnostics: {e}")
 
     # Internal helpers (inlined from baseline_utils)
-    def _filter_by_shoulder_rejection_iterative(self, neighbor_dist: int) -> Tuple[List[int], List[int]]:
+    def _filter_by_shoulder_rejection_iterative(self, neighbor_dist: int, window: int) -> Tuple[List[int], List[int]]:
         """
         Discard minima higher than both neighbors within given distance.
 
@@ -268,11 +270,17 @@ class LocalMinimaDetrender:
             for i, m in enumerate(minima):
                 left = minima[i - 1] if i > 0 and abs(minima[i - 1] - m) <= neighbor_dist else None
                 right = minima[i + 1] if i < len(minima) - 1 and abs(minima[i + 1] - m) <= neighbor_dist else None
-                if i == len(minima) - 1 and i > 0:
-                    right = left
                 if left is not None and right is not None and self.trace[m] > self.trace[left] and self.trace[m] > self.trace[right]:
                     discarded.append(m)
                     continue
+                if left is not None and self.trace[m] > self.trace[left] and m > (len(self.trace) - window) and i == len(minima) - 1:
+                    discarded.append(m)
+                    continue
+                """
+                if left is not None and right is None and self.trace[m] > self.trace[left]:
+                    discarded.append(m)
+                    continue
+                """
                 filtered.append(m)
             if not discarded:
                 break
@@ -280,7 +288,7 @@ class LocalMinimaDetrender:
             minima = filtered
         return minima, discarded_total
 
-    def _filter_by_angle_valley(self, minima: List[int], angle_thresh_deg: float) -> Tuple[List[int], List[int]]:
+    def _filter_by_angle_valley(self, angle_thresh_deg: float) -> Tuple[List[int], List[int]]:
         """
         Discard middle minima with sharp valley angle using atan2 geometry.
 
@@ -291,7 +299,7 @@ class LocalMinimaDetrender:
         Returns:
             Tuple[List[int], List[int]]: (retained, discarded)
         """
-        minima = sorted(minima)
+        minima = sorted(self.anchor_indices)
         discarded_total = []
         while True:
             filtered = []

@@ -73,7 +73,7 @@ class SignalProcessor:
             
         if self.apply_flags.get("smoothing", False):
             processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
-            self.trace_versions["processed"] = processed_trace.copy()
+            self.trace_versions["smoothed"] = processed_trace.copy()
             
         if self.apply_flags.get("normalization", False):
             processed_trace = self._normalize(processed_trace)
@@ -207,7 +207,7 @@ class SignalProcessor:
             return detrended
         except Exception as e:
             logger.error(f"Double curve fitting failed: {e}")
-            return trace.copy(), {"detrended_clipped": trace.copy()}
+            return trace.copy()
 
 
     def _detrend_local_minima(self, trace: np.ndarray) -> np.ndarray:
@@ -221,7 +221,7 @@ class SignalProcessor:
             np.ndarray: Final detrended trace.
         """
         try:
-            detrender = LocalMinimaDetrender(self.config.get("detrending", {}), trace)
+            detrender = LocalMinimaDetrender(self.detrending_params, trace)
             detrended = detrender.run()
             self.trace_versions.update(detrender.get_intermediate_versions())
 
@@ -229,8 +229,7 @@ class SignalProcessor:
             return detrended
         except Exception as e:
             logger.error(f"Local minima detrending failed: {e}")
-            return trace.copy(), {"detrended_clipped": trace.copy()}
-
+            return trace.copy()
 
     def _fit_baseline(self, trace: np.ndarray) -> np.ndarray:
         """

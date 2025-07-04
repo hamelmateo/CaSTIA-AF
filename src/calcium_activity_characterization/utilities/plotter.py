@@ -15,7 +15,7 @@ def plot_minima_diagnostics(
     discarded1: List[int],
     discarded2: List[int],
     discarded3: List[int],
-    save_path: Path
+    output_dir: Path
 ) -> None:
     """
     Plot trace with all categories of local minima overlaid.
@@ -27,7 +27,7 @@ def plot_minima_diagnostics(
         discarded1 (List[int]): Discarded after shoulder rejection.
         discarded2 (List[int]): Discarded after angle filtering.
         discarded3 (List[int]): Reserved for future use.
-        save_path (Path): Path to save the plot.
+        output_dir (Path): Path to save the plot.
     """
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.plot(trace, label="Trace", lw=1.5)
@@ -47,7 +47,11 @@ def plot_minima_diagnostics(
     ax.legend()
     ax.grid(True)
     plt.tight_layout()
-    save_path.parent.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    counter = 0
+    while (output_dir / f"local_minimas_filtering_{counter}.png").exists():
+        counter += 1
+    save_path = output_dir / f"local_minimas_filtering_{counter}.png"
     plt.savefig(save_path)
     plt.close()
 
@@ -93,7 +97,11 @@ def plot_final_baseline_fit(
 
     plt.tight_layout()
     output_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_dir / f"baseline_fit_{label}.png")
+    counter = 0
+    while (output_dir / f"baseline_fit_{counter}.png").exists():
+        counter += 1
+    save_path = output_dir / f"baseline_fit_{counter}.png"
+    plt.savefig(save_path)
     plt.close()
 
 
