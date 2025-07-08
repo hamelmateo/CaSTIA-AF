@@ -311,6 +311,7 @@ class SignalProcessor:
             return deltaf / (np.max(np.abs(deltaf)) + eps)
 
         elif method == "zscore":
+            # TODO: implement a z score that takes only the std of the noise into account instead of the whole signal.
             mean, std = np.mean(trace), np.std(trace)
             return (trace - mean) / (std + eps) if std >= min_range else trace - mean
 

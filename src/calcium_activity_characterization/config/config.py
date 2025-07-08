@@ -1,7 +1,7 @@
 # ==========================
 # FLAGS
 # ==========================
-DEBUGGING = False  # Enable debugging mode
+DEBUGGING = True  # Enable debugging mode
 DEBUGGING_FILE_PATH = "D:/Mateo/20250326/Data/IS1"
 
 HARDDRIVE_PATH = "D:/Mateo" # Path to the hard drive for file operations
@@ -189,6 +189,7 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
             "max_iterations": 5,
         },
         "localminima": {
+            "verbose": False,
             "minima_detection": {
                 "order": 15
             },
@@ -209,8 +210,8 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
                 "method": "linear"  # only 'linear' supported for now
             },
             "diagnostics": {
-                "enabled": True, # Enable diagnostics plots
-                "output_dir": "D:/Mateo/20250404/Output/IS3/detrending-testing-script"
+                "enabled": False, # Enable diagnostics plots
+                "output_dir": "D:/Mateo/20250326/Output/IS1/plot-diagnostics"
             }
         }
     }

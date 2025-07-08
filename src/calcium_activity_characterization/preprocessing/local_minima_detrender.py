@@ -31,6 +31,7 @@ class LocalMinimaDetrender:
 
     def __init__(self, config: Dict, trace: ndarray) -> None:
         self.config = config
+        self.verbose = config.get("verbose", False)
         self.trace = trace
         self.trace_versions: Dict[str, ndarray] = {}
         self.anchor_indices: List[int] = []
@@ -73,7 +74,8 @@ class LocalMinimaDetrender:
             order = self.config.get("minima_detection", {}).get("order", 15)
             minima = argrelmin(self.trace, order=order, mode="clip")[0]
             self.anchor_indices = sorted(minima.tolist())
-            logger.info(f"Detected {len(self.anchor_indices)} local minima with order={order}.")
+            if self.verbose:
+                logger.info(f"Detected {len(self.anchor_indices)} local minima with order={order}.")
         except Exception as e:
             logger.error(f"Failed to detect local minima: {e}")
             self.anchor_indices = []
@@ -87,11 +89,13 @@ class LocalMinimaDetrender:
             shoulder_dist = self.config.get("filtering", {}).get("shoulder_neighbor_dist", 400)
             window = self.config.get("filtering", {}).get("shoulder_window", 50)
             self.anchor_indices, discarded1 = self._filter_by_shoulder_rejection_iterative(neighbor_dist=shoulder_dist, window=window)
-            logger.info(f"After shoulder rejection: {len(self.anchor_indices)} kept, {len(discarded1)} discarded")
+            if self.verbose:
+                logger.info(f"After shoulder rejection: {len(self.anchor_indices)} kept, {len(discarded1)} discarded")
 
             angle_thresh = self.config.get("filtering", {}).get("angle_thresh_deg", 15)
             self.anchor_indices, discarded2 = self._filter_by_angle_valley(angle_thresh_deg=angle_thresh)
-            logger.info(f"After angle filtering: {len(self.anchor_indices)} kept, {len(discarded2)} discarded")
+            if self.verbose:
+                logger.info(f"After angle filtering: {len(self.anchor_indices)} kept, {len(discarded2)} discarded")
 
             self.discarded_minima = {
                 "shoulder": discarded1,
@@ -135,7 +139,8 @@ class LocalMinimaDetrender:
             self.inserted_anchors = sorted(list(after - before))
             self.anchor_indices = sorted(self.anchor_indices)
 
-            logger.info(f"Inserted {len(self.inserted_anchors)} edge anchor(s). Total anchors: {len(self.anchor_indices)}")
+            if self.verbose:
+                logger.info(f"Inserted {len(self.inserted_anchors)} edge anchor(s). Total anchors: {len(self.anchor_indices)}")
         except Exception as e:
             logger.error(f"Failed to add edge minima: {e}")
 
@@ -173,7 +178,8 @@ class LocalMinimaDetrender:
 
             self.inserted_anchors.extend(inserted)
             self.anchor_indices = sorted(anchor_idx)
-            logger.info(f"Corrected crossings. Inserted {len(inserted)} anchor(s). Total anchors: {len(self.anchor_indices)}")
+            if self.verbose:
+                logger.info(f"Corrected crossings. Inserted {len(inserted)} anchor(s). Total anchors: {len(self.anchor_indices)}")
         except Exception as e:
             logger.error(f"Failed to correct baseline crossings: {e}")
 
@@ -193,7 +199,8 @@ class LocalMinimaDetrender:
             baseline = np.interp(t, x, y)
             self.trace_versions["baseline"] = baseline
 
-            logger.info("Baseline successfully fitted and stored.")
+            if self.verbose:
+                logger.info("Baseline successfully fitted and stored.")
         except Exception as e:
             logger.error(f"Failed to fit linear baseline: {e}")
 
@@ -213,7 +220,8 @@ class LocalMinimaDetrender:
             detrended = np.maximum(residual, 0)
             self.trace_versions["detrended_clipped"] = detrended
 
-            logger.info("Detrended trace computed and stored.")
+            if self.verbose:
+                logger.info("Detrended trace computed and stored.")
             return detrended
         except Exception as e:
             logger.error(f"Failed to subtract and clip baseline: {e}")
