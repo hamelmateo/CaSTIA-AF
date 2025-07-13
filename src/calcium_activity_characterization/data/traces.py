@@ -75,7 +75,7 @@ class Trace:
             raise TypeError("version_name must be a string.")
         self.versions[version_name] = trace
 
-    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict, output_path: Optional[Path] = None) -> None:
+    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict) -> None:
         """
         Apply a SignalProcessor to a given trace and store the result as a new version.
 

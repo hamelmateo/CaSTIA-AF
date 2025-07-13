@@ -62,22 +62,18 @@ class SignalProcessor:
             np.ndarray: Processed trace data.
         """
         processed_trace = trace
-        
-        if self.apply_flags.get("presmoothing", False):
-            processed_trace = gaussian_filter1d(processed_trace, sigma=self.pre_sigma)
-            self.trace_versions["presmoothed"] = processed_trace.copy()
-            
+
         if self.apply_flags.get("detrending", False):
             processed_trace = self._detrend(processed_trace)
             self.trace_versions["detrended"] = processed_trace.copy()
             
-        if self.apply_flags.get("smoothing", False):
-            processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
-            self.trace_versions["smoothed"] = processed_trace.copy()
-            
         if self.apply_flags.get("normalization", False):
             processed_trace = self._normalize(processed_trace)
             self.trace_versions["normalized"] = processed_trace.copy()
+            
+        if self.apply_flags.get("smoothing", False):
+            processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
+            self.trace_versions["smoothed"] = processed_trace.copy()
             
         return processed_trace
 
@@ -314,6 +310,14 @@ class SignalProcessor:
             # TODO: implement a z score that takes only the std of the noise into account instead of the whole signal.
             mean, std = np.mean(trace), np.std(trace)
             return (trace - mean) / (std + eps) if std >= min_range else trace - mean
+        
+        elif method == "zscore_residual":
+            return self._zscore_residual(
+                trace, 
+                sigma=self.normalize_params.get("sigma", 2.0),
+                clip_percentile=self.normalize_params.get("clip_percentile", 80.0),
+                eps=eps
+            )
 
         else:
             raise ValueError(f"Unknown normalization method: {method}")
@@ -329,3 +333,52 @@ class SignalProcessor:
             np.ndarray: Truncated trace.
         """
         return trace[nb_frames:] if len(trace) > nb_frames else np.array([], dtype=trace.dtype)
+
+
+    def _zscore_residual(
+        self,
+        trace: np.ndarray,
+        sigma: float = 5.0,
+        clip_percentile: float = 95.0,
+        eps: float = 1e-8
+    ) -> np.ndarray:
+        """
+        Normalize the trace using noise-based z-score computed from residuals.
+
+        Args:
+            trace (np.ndarray): Detrended trace.
+            sigma (float): Gaussian smoothing sigma.
+            clip_percentile (float): Threshold to exclude outlier residuals.
+            eps (float): Small value to avoid division by zero.
+            plot (bool): Whether to display diagnostic plots.
+            label (str): Trace label.
+
+        Returns:
+            np.ndarray: z-scored trace.
+        """
+        try:
+            smoothed = gaussian_filter1d(trace, sigma=sigma)
+            residual = trace - smoothed
+
+            abs_residual = np.abs(residual)
+            clip_threshold = np.percentile(abs_residual, clip_percentile)
+
+            # Keep only residuals within threshold to compute std
+            valid_residuals = residual[abs_residual < clip_threshold]
+
+            if len(valid_residuals) < 20:
+                raise ValueError("Too few valid residuals to compute robust std.")
+
+            sigma_noise = np.std(valid_residuals)
+            logger.info(f"Computed noise std: {sigma_noise:.4f} from {len(valid_residuals)} valid residuals.")
+
+            self.trace_versions["zscore_residual_smoothed"] = smoothed.copy()
+            self.trace_versions["zscore_residual"] = residual.copy()
+            self.trace_versions["zscore_residual_clip_threshold"] = np.full_like(trace, clip_threshold)
+            self.trace_versions["zscore_valid_residual"] = valid_residuals.copy()
+
+            return trace / (sigma_noise + eps)
+
+        except Exception as e:
+            logger.error(f"Failed to compute residual z-score: {e}")
+            return trace.copy()

@@ -128,15 +128,13 @@ BASELINE_PEAK_DETECTION_PARAMETERS = {
 # ==========================
 INDIV_SIGNAL_PROCESSING_PARAMETERS = {
     "apply": {
-        "presmoothing": True,
         "detrending": True,
-        "smoothing": False,
-        "normalization": True
+        "normalization": True,
+        "smoothing": True,
     },
     "cut_trace_num_points": 100, # Number of points to cut from the start of the trace
-    "presmoothing_sigma": 3.0, # Sigma for Gaussian smoothing before detrending
-    "smoothing_sigma": 2.0, # Sigma for Gaussian smoothing after detrending
-    "normalizing_method": "zscore", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
+    "smoothing_sigma": 3.0, # Sigma for Gaussian smoothing after detrending
+    "normalizing_method": "zscore_residual", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
     "normalization_parameters": {
         "epsilon": 1e-8,
         "min_range": 1e-2, 

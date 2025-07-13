@@ -219,13 +219,12 @@ class CalciumPipeline:
                 cell.trace.process_and_plot_trace(
                     input_version="raw",
                     output_version="processed",
-                    processing_params=get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"),
-                    output_path=self.intermediate_traces_path / f"{cell.label}.png"
+                    processing_params=get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS")
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
-            # Select 10 random cells (or all if fewer than 10)
-            sample_cells = random.sample(self.population.cells, min(15, len(self.population.cells)))
+            # Select 25 random cells (or all if fewer than 25)
+            sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
             for cell in sample_cells:
                 cell.trace.plot_all_traces(self.intermediate_traces_path / f"{cell.label}_all_traces.png")
 

@@ -10,7 +10,6 @@ from pathlib import Path
 import logging
 from scipy.signal import argrelmin
 from math import atan2, degrees
-from numpy import ndarray
 from calcium_activity_characterization.utilities.plotter import (
     plot_minima_diagnostics,
     plot_final_baseline_fit,
@@ -29,16 +28,16 @@ class LocalMinimaDetrender:
         trace (np.ndarray): Smoothed intensity trace.
     """
 
-    def __init__(self, config: Dict, trace: ndarray) -> None:
+    def __init__(self, config: Dict, trace: np.ndarray) -> None:
         self.config = config
         self.verbose = config.get("verbose", False)
-        self.trace = trace
-        self.trace_versions: Dict[str, ndarray] = {}
+        self.trace = np.asarray(trace, dtype=np.float32)
+        self.trace_versions: Dict[str, np.ndarray] = {}
         self.anchor_indices: List[int] = []
         self.discarded_minima: Dict[str, List[int]] = {}
         self.inserted_anchors: List[int] = []
 
-    def run(self) -> ndarray:
+    def run(self) -> np.ndarray:
         """
         Execute the full baseline detection and detrending process.
 
@@ -55,7 +54,7 @@ class LocalMinimaDetrender:
             self._plot_diagnostics()
         return detrended
 
-    def get_intermediate_versions(self) -> Dict[str, ndarray]:
+    def get_intermediate_versions(self) -> Dict[str, np.ndarray]:
         """
         Return intermediate trace versions for debugging or plotting.
 
@@ -204,7 +203,7 @@ class LocalMinimaDetrender:
         except Exception as e:
             logger.error(f"Failed to fit linear baseline: {e}")
 
-    def _subtract_and_clip(self) -> ndarray:
+    def _subtract_and_clip(self) -> np.ndarray:
         """
         Subtract the baseline from the trace and clip negative values to zero.
         This method computes the residual trace by subtracting the baseline from the original trace,
@@ -284,11 +283,7 @@ class LocalMinimaDetrender:
                 if left is not None and self.trace[m] > self.trace[left] and m > (len(self.trace) - window) and i == len(minima) - 1:
                     discarded.append(m)
                     continue
-                """
-                if left is not None and right is None and self.trace[m] > self.trace[left]:
-                    discarded.append(m)
-                    continue
-                """
+
                 filtered.append(m)
             if not discarded:
                 break
