@@ -1,3 +1,4 @@
+# TODO: there are still some detection problem even so i dont know it does come from. needs to be checked and solved asap.
 # global_event_detection.py
 # Usage Example:
 # >>> windows = find_significant_activity_peaks(trace, len(cells), threshold_ratio=0.4)
