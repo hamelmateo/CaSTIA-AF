@@ -8,9 +8,12 @@ Example:
 
 from typing import Optional, Literal, List
 import numpy as np
-from scipy.signal import find_peaks, peak_widths
+from scipy.signal import find_peaks, peak_widths, peak_prominences
 from collections import defaultdict, deque
 import logging
+from dataclasses import asdict
+
+from calcium_activity_characterization.config.presets import PeakDetectionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -120,17 +123,17 @@ class PeakDetector:
     """
     Base scaffold for detecting peaks from a calcium trace.
     """
-    def __init__(self, params: dict):
+    def __init__(self, config: PeakDetectionConfig):
         """
         Initialize the PeakDetector with parameters.
         
         Args:
-            params (dict): Parameters for peak detection.
+            params (PeakDetectionConfig): Parameters for peak detection.
         """
-        self.params = params
-        self.method = params.get("method", "skimage")
-        self.method_params = params.get("params", {}).get(self.method, {})
-        self.grouping_params = params.get("peak_grouping", {})
+        self.config = config
+        self.method = config.method
+        self.detection_params = config.params
+        self.grouping_params = config.peak_grouping
 
 
     def run(self, trace: list[float]) -> list[Peak]:
@@ -146,7 +149,7 @@ class PeakDetector:
         peaks = self._detect(trace)
         peaks = self._group_overlapping_peaks(peaks)
 
-        if self.params.get("filter_overlapping_peaks", False):
+        if self.config.filter_overlapping_peaks:
             peaks = self._filter_non_parent_peaks(peaks)
             peaks = reassign_peak_ids(peaks)
 
@@ -166,39 +169,36 @@ class PeakDetector:
 
         trace = np.array(trace, dtype=float)
 
-        start_frame = self.method_params.get("start_frame") or 0
-        end_frame = self.method_params.get("end_frame") or len(trace)
+        start_frame = self.config.start_frame or 0
+        end_frame = self.config.end_frame or len(trace)
 
         subtrace = trace[start_frame:end_frame]
 
         if self.method == "skimage":
 
+            # Extract params safely from structured config
+            from dataclasses import asdict
 
+            kwargs = {
+                key: value
+                for key, value in asdict(self.detection_params).items()
+                if key in ["prominence", "distance", "height", "threshold", "width"] and value is not None
+            }
 
-            peaks, properties = find_peaks(
-                subtrace,
-                prominence=self.method_params.get("prominence", 0.1),
-                distance=self.method_params.get("distance", 5),
-                height=self.method_params.get("height"),
-                threshold=self.method_params.get("threshold"),
-                width=self.method_params.get("width")
-            )
+            peaks, _ = find_peaks(subtrace, **kwargs)
 
-            prominences = properties["prominences"]
+            # Compute peak prominences parameters
+            prominences, _, _ = peak_prominences(subtrace, peaks)
 
             # Compute relative heights parameters
-            rel_peak_metadata = peak_widths(subtrace, peaks, rel_height=self.method_params.get("relative_height", 0.6))
-            rel_left_ips = rel_peak_metadata[2]
-            rel_right_ips = rel_peak_metadata[3]
+            _, _, rel_left_ips, rel_right_ips = peak_widths(subtrace, peaks, rel_height=self.detection_params.relative_height)
 
             # Compute whole widths
-            peak_metadata = peak_widths(subtrace, peaks, rel_height=self.method_params.get("full_duration_threshold", 0.95))
-            left_ips = peak_metadata[2]
-            right_ips = peak_metadata[3]
+            _, _, left_ips, right_ips = peak_widths(subtrace, peaks, rel_height=self.detection_params.full_duration_threshold)
 
             # Step 2: Classify peaks by scale
             if len(prominences) > 0:
-                quantiles = np.quantile(prominences, self.params.get("scale_class_quantiles", [0.33, 0.66]))
+                quantiles = np.quantile(prominences, self.detection_params.scale_class_quantiles)
             else:
                 quantiles = [0, 0]
 
@@ -228,7 +228,7 @@ class PeakDetector:
                     rel_end_time=rel_end_time,
                     height=height,
                     prominence=prominence,
-                    rel_height=self.method_params.get("relative_height")
+                    rel_height=self.detection_params.relative_height
                 )
                 peak.scale_class = scale_class
                 peak_list.append(peak)
@@ -251,8 +251,8 @@ class PeakDetector:
         if not peaks:
             return []
 
-        overlap_margin = self.grouping_params.get("overlap_margin", 0)
-        verbose = self.grouping_params.get("verbose", False)
+        overlap_margin = self.grouping_params.overlap_margin
+        verbose = self.grouping_params.verbose
 
         # Build adjacency list for overlapping peaks
         graph = defaultdict(set)

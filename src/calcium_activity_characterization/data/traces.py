@@ -20,6 +20,8 @@ from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
 from calcium_activity_characterization.utilities.peak_utils import find_valley_bounds
 
+from calcium_activity_characterization.config.presets import SignalProcessingConfig, PeakDetectionConfig
+
 if TYPE_CHECKING:
     from calcium_activity_characterization.data.peaks import Peak
 
@@ -75,15 +77,14 @@ class Trace:
             raise TypeError("version_name must be a string.")
         self.versions[version_name] = trace
 
-    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: dict) -> None:
+    def process_and_plot_trace(self, input_version: str, output_version: str, processing_params: SignalProcessingConfig) -> None:
         """
         Apply a SignalProcessor to a given trace and store the result as a new version.
 
         Args:
             input_version (str): Name of the input trace to process.
             output_version (str): Name for the processed trace version.
-            config (dict): Configuration dictionary containing processor parameters.
-            
+            config (SignalProcessingConfig): Configuration object containing processor parameters.
 
         Returns:
             None
@@ -110,18 +111,18 @@ class Trace:
             logger.error(f"Failed to process and plot trace from '{input_version}' to '{output_version}': {e}")
             raise
 
-    def detect_peaks(self, detector_params: dict = None, version: str = None) -> None:
+    def detect_peaks(self, detector_params: PeakDetectionConfig = None, version: str = None) -> None:
         """
         Detect peaks in the active trace using the provided detector parameters.
 
         Args:
-            detector_params (dict): Dictionary of parameters for the peak detection algorithm.
+            detector_params (PeakDetectionConfig): Configuration object for the peak detection algorithm.
         """
         if detector_params is None:
             logger.error("No detector parameters provided.")
             return
         
-        detector = PeakDetector(params=detector_params)
+        detector = PeakDetector(detector_params)
         if version is not None:
             if version not in self.versions:
                 raise ValueError(f"Trace version '{version}' not found in self.versions.")

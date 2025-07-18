@@ -12,6 +12,8 @@ from typing import List, Dict, Optional, Any
 import copy
 from pathlib import Path
 import numpy as np
+import networkx as nx
+
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication, generate_cell_to_cell_communications, assign_peak_classifications
@@ -23,8 +25,11 @@ from calcium_activity_characterization.event_detection.global_event import (
 )
 from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
 from calcium_activity_characterization.utilities.metrics import Distribution
-from calcium_activity_characterization.utilities.loader import get_config_with_fallback
-import networkx as nx
+from calcium_activity_characterization.config.presets import (
+    SignalProcessingConfig, 
+    PeakDetectionConfig,
+    EventExtractionConfig
+)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -68,7 +73,9 @@ class Population:
             self.neighbor_graph = None
 
 
-    def _create_trace_object(self, trace: np.ndarray, default_version: str, signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> Trace:
+    def _create_trace_object(self, trace: np.ndarray, default_version: str, 
+                             signal_processing_params: SignalProcessingConfig = None, 
+                             peak_detection_params: PeakDetectionConfig = None) -> Trace:
         """
         Internal helper to create a Trace object from a raw array.
 
@@ -76,6 +83,7 @@ class Population:
             trace (np.ndarray): The raw trace array.
             trace_type (str): Name to use for the trace version.
             default_version (str): Which version to default to for downstream use.
+            signal_processing_params (SignalProcessingConfig): Parameters for signal processing.
 
         Returns:
             Trace: A Trace object with peak detection and binarization applied.
@@ -90,15 +98,17 @@ class Population:
         return t
 
 
-    def compute_global_trace(self, version: str = "raw", default_version: str = "raw", signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> None:
+    def compute_global_trace(self, version: str = "raw", default_version: str = "raw", 
+                             signal_processing_params: SignalProcessingConfig = None, 
+                             peak_detection_params: PeakDetectionConfig = None) -> None:
         """
         Compute the mean trace across all active cells based on the specified version.
 
         Args:
             version (str): The key in trace.versions to average.
             default_version (str): The version to set as default in the returned Trace.
-            signal_processing_params (Dict[str, Any]): Parameters for signal processing.
-            peak_detection_params (Dict[str, Any]): Parameters for peak detection.
+            signal_processing_params (SignalProcessingConfig): Parameters for signal processing.
+            peak_detection_params (PeakDetectionConfig): Parameters for peak detection.
 
         Raises:
             ValueError: If no cells contain the specified version.
@@ -122,7 +132,9 @@ class Population:
         )
 
 
-    def compute_activity_trace(self, default_version: str = "raw", signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> None:
+    def compute_activity_trace(self, default_version: str = "raw", 
+                               signal_processing_params: SignalProcessingConfig = None, 
+                               peak_detection_params: PeakDetectionConfig = None) -> None:
         """
         Compute the activity trace as the sum of binary traces across all cells.
 
@@ -132,8 +144,8 @@ class Population:
 
         Args:
             default_version (str): The version to set as default in the returned Trace.
-            signal_processing_params (Dict[str, Any]): Parameters for signal processing.
-            peak_detection_params (Dict[str, Any]): Parameters for peak detection.
+            signal_processing_params (SignalProcessingConfig): Parameters for signal processing.
+            peak_detection_params (PeakDetectionConfig): Parameters for peak detection.
 
         Raises:
             ValueError: If no binary traces are found in the cells, or if the binary traces are not of uniform length.
@@ -158,7 +170,9 @@ class Population:
         )
 
 
-    def compute_impulse_trace(self, default_version: str = "raw", signal_processing_params: Dict[str, Any] = None, peak_detection_params: Dict[str, Any] = None) -> None:
+    def compute_impulse_trace(self, default_version: str = "raw", 
+                               signal_processing_params: SignalProcessingConfig = None, 
+                               peak_detection_params: PeakDetectionConfig = None) -> None:
         """
         Compute the impulse trace as the sum of rel_start_time occurrences across all cells.
 
@@ -166,8 +180,8 @@ class Population:
 
         Args:
             default_version (str): The version to set as default in the returned Trace.
-            signal_processing_params (Dict[str, Any]): Smoothing or filtering params.
-            peak_detection_params (Dict[str, Any]): Parameters for peak detection.
+            signal_processing_params (SignalProcessingConfig): Smoothing or filtering params.
+            peak_detection_params (PeakDetectionConfig): Parameters for peak detection.
 
         Raises:
             ValueError: If no impulses are found in the cells (empty peak lists) or if the impulse traces are not of uniform length.
@@ -203,12 +217,12 @@ class Population:
         )
 
 
-    def detect_global_events(self, config: Dict[str, Any] = None) -> None:
+    def detect_global_events(self, config: EventExtractionConfig = None) -> None:
         """
         Generate global events from the activity trace by detecting significant activity peaks.
 
         Args:
-            config (Dict[str, Any]): Configuration dictionary with parameters for global event detection.
+            config (EventExtractionConfig): Configuration object with parameters for global event detection.
                 Expected keys:
                     - "threshold_ratio": Ratio of active cells at peak to trigger detection.
                     - "radius": Radius for peak classification.
@@ -218,7 +232,7 @@ class Population:
         windows = find_significant_activity_peaks(
             trace=self.activity_trace,
             total_cells=len(self.cells),
-            threshold_ratio=get_config_with_fallback(config,"threshold_ratio")
+            threshold_ratio=config.threshold_ratio
             )
 
         logger.info("✅ Significant activity windows (start_frame, end_frame):")
@@ -228,9 +242,9 @@ class Population:
         blocks = extract_global_event_blocks(
             cells=self.cells,
             peak_windows=windows,
-            radius=get_config_with_fallback(config,"radius"),
-            global_max_comm_time=get_config_with_fallback(config,"global_max_comm_time"),
-            min_cell_count=get_config_with_fallback(config,"min_cell_count")
+            radius=config.radius,
+            global_max_comm_time=config.global_max_comm_time,
+            min_cell_count=config.min_cell_count
         )
 
         self.events.extend(GlobalEvent.from_framewise_active_labels(
@@ -240,14 +254,14 @@ class Population:
         ))
 
 
-    def detect_sequential_events(self, config: Dict[str, Any] = None) -> None:
+    def detect_sequential_events(self, config: EventExtractionConfig = None) -> None:
         """
         Generate sequential events from cell-to-cell communications.
         This method identifies groups of cells that communicate with each other
         based on their spatial proximity and temporal activity patterns.
         
         Args:
-            config (Dict[str, Any]): Configuration dictionary with parameters for sequential event detection.
+            config (EventExtractionConfig): Configuration object with parameters for sequential event detection.
         """
         clean_cells = self._create_cells_without_global_peaks()
 
@@ -260,7 +274,7 @@ class Population:
             clean_cells,
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
-            max_time_gap=get_config_with_fallback(config,"seq_max_comm_time")
+            max_time_gap=config.seq_max_comm_time
         )
 
         del clean_cells  # Free memory

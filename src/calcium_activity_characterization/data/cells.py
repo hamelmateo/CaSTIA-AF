@@ -4,6 +4,7 @@ import logging
 import pandas as pd
 
 from calcium_activity_characterization.data.traces import Trace
+from calcium_activity_characterization.config.presets import CellFilteringConfig, ObjectSizeThresholds
 
 
 
@@ -27,12 +28,12 @@ class Cell:
         label: int,
         centroid: np.ndarray = None,
         pixel_coords: np.ndarray = None,
-        object_size_thresholds: dict = None,
+        object_size_thresholds: ObjectSizeThresholds = None,
     ) -> None:
         self.label = label
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
-        self.is_valid: bool = len(self.pixel_coords) >= object_size_thresholds.get("min",200) and len(self.pixel_coords) <= object_size_thresholds.get("max", 10000)
+        self.is_valid: bool = len(self.pixel_coords) >= object_size_thresholds.min and len(self.pixel_coords) <= object_size_thresholds.max
         self.exclude_from_umap = False
 
         self.trace: Trace = Trace()
@@ -116,14 +117,14 @@ class Cell:
         return pd.DataFrame(data)
     
     @classmethod
-    def from_segmentation_mask(cls, mask: np.ndarray, cell_filtering_parameters: dict) -> list["Cell"]:
+    def from_segmentation_mask(cls, mask: np.ndarray, cell_filtering_parameters: CellFilteringConfig) -> list["Cell"]:
         """
         Construct Cell instances from a labeled segmentation mask.
 
         Args:
             mask (np.ndarray): Labeled mask where each cell is identified by a unique integer.
-            cell_filtering_parameters (dict): Parameters for filtering cells, including:
-                - object_size_thresholds: dict with 'min' and 'max' pixel count thresholds.
+            cell_filtering_parameters (CellFilteringConfig): Parameters for filtering cells, including:
+                - object_size_thresholds: ObjectSizeThresholds with 'min' and 'max' pixel count thresholds.
                 - border_margin: int, margin to exclude cells near the image border.
 
         Returns:
@@ -138,7 +139,7 @@ class Cell:
                 cell = cls(label=label, centroid=centroid, pixel_coords=pixel_coords, object_size_thresholds=cell_filtering_parameters["object_size_thresholds"])
 
                 h, w = mask.shape[:2]
-                border_margin = cell_filtering_parameters["border_margin"]
+                border_margin = cell_filtering_parameters.border_margin
                 if (
                     centroid[0] < border_margin or centroid[1] < border_margin or
                     centroid[0] > h - border_margin or centroid[1] > w - border_margin

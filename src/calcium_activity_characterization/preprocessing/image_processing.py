@@ -14,10 +14,10 @@ from typing import List
 import cupy as cp
 import cupyx.scipy.ndimage
 
+from calcium_activity_characterization.config.presets import ImageProcessingConfig
 from calcium_activity_characterization.utilities.loader import (
     load_existing_img,
-    load_image_fast,
-    get_config_with_fallback
+    load_image_fast
 )
 
 import logging
@@ -36,12 +36,12 @@ class ImageProcessor:
             - hot_pixel_cleaning: dict with 'method', 'threshold', etc.
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: ImageProcessingConfig):
         self.config = config
-        self.apply = get_config_with_fallback(config, "apply", {})
-        self.padding_digits = get_config_with_fallback(config, "padding_digits", 5)
-        self.roi_scale = get_config_with_fallback(config, "roi_scale", 1.0)
-        self.hot_cfg = get_config_with_fallback(config, "hot_pixel_cleaning", {})
+        self.pipeline = config.pipeline
+        self.padding_digits = config.padding_digits
+        self.roi_scale = config.roi_scale
+        self.hot_cfg = config.hot_pixel_cleaning
 
     def process_all(self, images_dir: Path, file_pattern: str) -> List[np.ndarray]:
         """
@@ -54,7 +54,7 @@ class ImageProcessor:
         Returns:
             List[np.ndarray]: List of cleaned, cropped images.
         """
-        if self.apply.get("padding", True):
+        if self.pipeline.padding:
             self.rename_with_padding(images_dir, file_pattern)
 
         image_paths = sorted(images_dir.glob("*.TIF"))
@@ -76,9 +76,9 @@ class ImageProcessor:
         except Exception as e:
             logger.warning(f"⚠️ Fast load failed for {path.name}: {e}. Falling back to standard loader.") 
             img = load_existing_img(path)
-        if self.apply.get("cropping", True):
+        if self.pipeline.cropping:
             img = self._crop_image(img)
-        if self.apply.get("hot_pixel_cleaning", False):
+        if self.pipeline.hot_pixel_cleaning:
             img = self._clean_single_image(img, image_name=path.name)
         return img
 
@@ -137,13 +137,13 @@ class ImageProcessor:
             np.ndarray: Cleaned image (still on CPU).
         """
         try:
-            window = get_config_with_fallback(self.hot_cfg, "window_size", 3)
+            window = self.hot_cfg.window_size
 
             img_gpu = cp.asarray(img, dtype=cp.float32)
 
-            if get_config_with_fallback(self.hot_cfg, "use_auto_threshold", True):
-                percentile = get_config_with_fallback(self.hot_cfg, "percentile", 99.9)
-                scale = get_config_with_fallback(self.hot_cfg, "mad_scale", 10.0)
+            if self.hot_cfg.use_auto_threshold:
+                percentile = self.hot_cfg.percentile
+                scale = self.hot_cfg.mad_scale
 
                 stride = 4
                 sampled = img_gpu[::stride, ::stride]  # Downsample by 4 in both axes → 1/16th the pixels
@@ -154,7 +154,7 @@ class ImageProcessor:
                 threshold = base + scale * mad
 
             else:
-                threshold = get_config_with_fallback(self.hot_cfg, "static_threshold", 1000.0)
+                threshold = self.hot_cfg.static_threshold
 
             # Try uniform filter instead of median if you want speed over accuracy
             local_median = cupyx.scipy.ndimage.median_filter(img_gpu, size=window)
@@ -187,17 +187,18 @@ class ImageProcessor:
         Returns:
             np.ndarray: Cleaned image.
         """
-        method = get_config_with_fallback(self.hot_cfg, "method", "replace")
-        window = get_config_with_fallback(self.hot_cfg, "window_size", 3)
-        if get_config_with_fallback(self.hot_cfg, "use_auto_threshold", False):
+        method = self.hot_cfg.method
+        window = self.hot_cfg.window_size
+
+        if self.hot_cfg.use_auto_threshold:
             threshold = self._compute_auto_threshold(
                 img,
-                percentile=get_config_with_fallback(self.hot_cfg, "percentile", 99.9),
-                scale=get_config_with_fallback(self.hot_cfg, "mad_scale", 10.0)
+                percentile=self.hot_cfg.percentile,
+                scale=self.hot_cfg.mad_scale
             )
 
         else:
-            threshold = get_config_with_fallback(self.hot_cfg, "static_threshold", 1500.0)
+            threshold = self.hot_cfg.static_threshold
         if method == "replace":
             images = self._replace_hot_pixels(img, threshold, window, image_name)
             return images

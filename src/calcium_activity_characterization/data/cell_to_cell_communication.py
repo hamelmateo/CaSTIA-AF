@@ -7,8 +7,10 @@
 
 from typing import Tuple, List, Dict, Set
 import networkx as nx
+
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors
+from calcium_activity_characterization.config.presets import EventExtractionConfig
 
 import logging
 logger = logging.getLogger(__name__)

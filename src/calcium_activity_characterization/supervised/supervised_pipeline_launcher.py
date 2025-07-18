@@ -2,23 +2,13 @@
 # Usage Example:
 # >>> python supervised_pipeline_launcher.py
 # GUI will walk through segmentation, signal processing, event detection, and export
+# TODO finish the implementation of the new config format
 
 import sys
 from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QFileDialog, QMessageBox
 
-from calcium_activity_characterization.config.config import (
-    IMAGE_PROCESSING_PARAMETERS,
-    SEGMENTATION_PARAMETERS,
-    TRACE_EXTRACTION_PARAMETERS,
-    CELL_FILTERING_PARAMETERS,
-    INDIV_SIGNAL_PROCESSING_PARAMETERS,
-    INDIV_PEAK_DETECTION_PARAMETERS,
-    POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS,
-    ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS,
-    EVENT_EXTRACTION_PARAMETERS,
-    HARDDRIVE_PATH
-)
+from calcium_activity_characterization.config.presets import GLOBAL_CONFIG
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 from calcium_activity_characterization.supervised.gui_segmentation import SegmentationTunerGUI
@@ -37,17 +27,7 @@ class SupervisedPipelineLauncher:
     """
 
     def __init__(self):
-        self.config = {
-            "IMAGE_PROCESSING_PARAMETERS": IMAGE_PROCESSING_PARAMETERS,
-            "SEGMENTATION_PARAMETERS": SEGMENTATION_PARAMETERS,
-            "TRACE_EXTRACTION_PARAMETERS": TRACE_EXTRACTION_PARAMETERS,
-            "CELL_FILTERING_PARAMETERS": CELL_FILTERING_PARAMETERS,
-            "INDIV_SIGNAL_PROCESSING_PARAMETERS": INDIV_SIGNAL_PROCESSING_PARAMETERS,
-            "INDIV_PEAK_DETECTION_PARAMETERS": INDIV_PEAK_DETECTION_PARAMETERS,
-            "POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS": POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS,
-            "ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS": ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS,
-            "EVENT_EXTRACTION_PARAMETERS": EVENT_EXTRACTION_PARAMETERS,
-        }
+        self.config = GLOBAL_CONFIG
         self.pipeline: CalciumPipeline = None
         self.data_path: Path = None
         self.output_path: Path = None
@@ -66,7 +46,7 @@ class SupervisedPipelineLauncher:
     def select_isx_folder(self):
         dialog = QFileDialog()
         dialog.setFileMode(QFileDialog.Directory)
-        dialog.setDirectory(str(HARDDRIVE_PATH))
+        dialog.setDirectory(str(GLOBAL_CONFIG.debug.harddrive_path))
         dialog.setWindowTitle("Select an ISX folder (e.g., IS1)")
         if dialog.exec_():
             selected = dialog.selectedFiles()
@@ -98,7 +78,7 @@ class SupervisedPipelineLauncher:
         self.segmentation_gui.show()
 
     def handle_segmentation_validated(self, updated_config: dict):
-        self.pipeline.config.update(updated_config)
+        self.pipeline.config = updated_config
         self.pipeline._segment_cells()
         self.pipeline._compute_intensity()
         self.launch_signal_processing_gui()
@@ -111,7 +91,7 @@ class SupervisedPipelineLauncher:
         self.signal_gui.show()
 
     def handle_signal_processing_validated(self, updated_config: dict):
-        self.pipeline.config.update(updated_config)
+        self.pipeline.config = updated_config
         self.pipeline._signal_processing_pipeline()
         self.pipeline._binarization_pipeline()
         self.launch_activity_event_gui()
@@ -124,7 +104,7 @@ class SupervisedPipelineLauncher:
         self.activity_gui.show()
 
     def handle_event_detection_validated(self, updated_config: dict):
-        self.pipeline.config.update(updated_config)
+        self.pipeline.config = updated_config
         self.pipeline._initialize_activity_trace()
         self.pipeline._detect_events()
         self.launch_export_gui()

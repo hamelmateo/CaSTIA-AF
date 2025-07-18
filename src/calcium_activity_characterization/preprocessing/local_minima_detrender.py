@@ -10,10 +10,12 @@ from pathlib import Path
 import logging
 from scipy.signal import argrelmin
 from math import atan2, degrees
+
 from calcium_activity_characterization.utilities.plotter import (
     plot_minima_diagnostics,
     plot_final_baseline_fit,
 )
+from calcium_activity_characterization.config.presets import LocalMinimaParams
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +26,13 @@ class LocalMinimaDetrender:
     and a piecewise linear baseline fit.
 
     Args:
-        config (dict): Configuration parameters for minima detection, filtering, and fitting.
+        config (LocalMinimaParams): Configuration parameters for minima detection, filtering, and fitting.
         trace (np.ndarray): Smoothed intensity trace.
     """
 
-    def __init__(self, config: Dict, trace: np.ndarray) -> None:
+    def __init__(self, config: LocalMinimaParams, trace: np.ndarray) -> None:
         self.config = config
-        self.verbose = config.get("verbose", False)
+        self.verbose = config.verbose
         self.trace = np.asarray(trace, dtype=np.float32)
         self.trace_versions: Dict[str, np.ndarray] = {}
         self.anchor_indices: List[int] = []
@@ -50,7 +52,7 @@ class LocalMinimaDetrender:
         self._correct_crossings()
         self._fit_linear_baseline()
         detrended = self._subtract_and_clip()
-        if self.config.get("diagnostics", {}).get("enabled", False):
+        if self.config.diagnostics_enabled:
             self._plot_diagnostics()
         return detrended
 
@@ -70,7 +72,7 @@ class LocalMinimaDetrender:
         based on the specified order in the configuration.
         """
         try:
-            order = self.config.get("minima_detection", {}).get("order", 15)
+            order = self.config.minima_detection_order
             minima = argrelmin(self.trace, order=order, mode="clip")[0]
             self.anchor_indices = sorted(minima.tolist())
             if self.verbose:
@@ -85,13 +87,13 @@ class LocalMinimaDetrender:
         This method uses on-peak local minimas rejection and angle-based filtering to refine the anchor points.
         """
         try:
-            shoulder_dist = self.config.get("filtering", {}).get("shoulder_neighbor_dist", 400)
-            window = self.config.get("filtering", {}).get("shoulder_window", 50)
+            shoulder_dist = self.config.filtering_shoulder_neighbor_dist
+            window = self.config.filtering_shoulder_window
             self.anchor_indices, discarded1 = self._filter_by_shoulder_rejection_iterative(neighbor_dist=shoulder_dist, window=window)
             if self.verbose:
                 logger.info(f"After shoulder rejection: {len(self.anchor_indices)} kept, {len(discarded1)} discarded")
 
-            angle_thresh = self.config.get("filtering", {}).get("angle_thresh_deg", 15)
+            angle_thresh = self.config.filtering_angle_thresh_deg
             self.anchor_indices, discarded2 = self._filter_by_angle_valley(angle_thresh_deg=angle_thresh)
             if self.verbose:
                 logger.info(f"After angle filtering: {len(self.anchor_indices)} kept, {len(discarded2)} discarded")
@@ -111,9 +113,8 @@ class LocalMinimaDetrender:
         the existing anchors, ensuring that edge cases are captured.
         """
         try:
-            cfg = self.config.get("edge_anchors", {})
-            window = cfg.get("window", 50)
-            delta = cfg.get("delta", 0.03)
+            window = self.config.edge_anchors_window
+            delta = self.config.edge_anchors_delta
 
             before = set(sorted(self.anchor_indices))
 
@@ -151,8 +152,8 @@ class LocalMinimaDetrender:
         without introducing anchors too close to existing ones.
         """
         try:
-            min_dist = self.config.get("crossing_correction", {}).get("min_dist", 10)
-            max_iter = self.config.get("crossing_correction", {}).get("max_iterations", 10)
+            min_dist = self.config.crossing_correction_min_dist
+            max_iter = self.config.crossing_correction_max_iterations
 
             anchor_idx = sorted(self.anchor_indices)
             inserted = []
@@ -233,7 +234,7 @@ class LocalMinimaDetrender:
         and final baseline fit if enabled. It saves the plots to the specified output directory.
         """
         try:
-            output_dir = Path(self.config.get("diagnostics", {}).get("output_dir", None))
+            output_dir = Path(self.config.diagnostics_output_dir)
             if output_dir is None:
                 logger.warning("Diagnostics enabled but no output_dir provided.")
                 return

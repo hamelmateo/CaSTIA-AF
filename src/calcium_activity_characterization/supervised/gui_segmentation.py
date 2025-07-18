@@ -4,6 +4,9 @@
 # >>> gui.show()
 
 import numpy as np
+from dataclasses import asdict, is_dataclass, replace
+from copy import deepcopy
+
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QMainWindow,
     QFormLayout, QLineEdit, QMessageBox, QScrollArea
@@ -14,7 +17,6 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
-from calcium_activity_characterization.utilities.loader import get_config_with_fallback
 
 import logging
 
@@ -76,21 +78,42 @@ class SegmentationTunerGUI(QMainWindow):
         form_layout.addRow(self.status_label)
 
     def load_params(self):
-        params = get_config_with_fallback(self.pipeline.config, "SEGMENTATION_PARAMETERS")
+        from dataclasses import asdict
+
         self.fields.clear()
-        for key, value in params.items():
+        flat_config = asdict(self.pipeline.config.segmentation)
+
+        # Optionally also flatten nested mesmer params
+        mesmer_flat = asdict(self.pipeline.config.segmentation.params)
+        flat_config.update({f"mesmer.{k}": v for k, v in mesmer_flat.items()})
+
+        for key, value in flat_config.items():
             field = QLineEdit(str(value))
             self.fields[key] = field
             self.form_layout.addRow(QLabel(key), field)
+
 
     def apply_parameters(self):
         self.status_label.setText("Status: Computing...")
         self.repaint()
 
         try:
-            new_params = {key: self.safe_eval(field.text()) for key, field in self.fields.items()}
+            updated_config = deepcopy(self.pipeline.config)
+            flat_seg = asdict(updated_config.segmentation)
+            flat_mesmer = asdict(updated_config.segmentation.params)
 
-            self.pipeline.config["SEGMENTATION_PARAMETERS"] = new_params
+            for key, field in self.fields.items():
+                val = self.safe_eval(field.text())
+                if key.startswith("mesmer."):
+                    k = key.split("mesmer.")[1]
+                    flat_mesmer[k] = val
+                else:
+                    flat_seg[key] = val
+
+            updated_config.segmentation = replace(updated_config.segmentation, **flat_seg)
+            updated_config.segmentation = replace(updated_config.segmentation, mesmer=replace(updated_config.segmentation.params, **flat_mesmer))
+            self.pipeline.config = updated_config
+            
             self.pipeline._segment_cells()
             self.update_image()
             self.status_label.setText("Status: Updated ✓")
@@ -127,8 +150,22 @@ class SegmentationTunerGUI(QMainWindow):
 
     def validate_parameters(self):
         try:
-            new_params = {key: self.safe_eval(field.text()) for key, field in self.fields.items()}
-            self.pipeline.config["SEGMENTATION_PARAMETERS"] = new_params
+            updated_config = deepcopy(self.pipeline.config)
+            flat_seg = asdict(updated_config.segmentation)
+            flat_mesmer = asdict(updated_config.segmentation.params)
+
+            for key, field in self.fields.items():
+                val = self.safe_eval(field.text())
+                if key.startswith("mesmer."):
+                    k = key.split("mesmer.")[1]
+                    flat_mesmer[k] = val
+                else:
+                    flat_seg[key] = val
+
+            updated_config.segmentation = replace(updated_config.segmentation, **flat_seg)
+            updated_config.segmentation = replace(updated_config.segmentation, mesmer=replace(updated_config.segmentation.params, **flat_mesmer))
+            self.pipeline.config = updated_config
+
             self.pipeline._segment_cells()
             self.pipeline._compute_intensity()
             self.on_validate(self.pipeline.config)

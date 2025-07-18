@@ -11,9 +11,12 @@ from scipy.spatial.distance import euclidean, pdist
 from scipy.spatial import ConvexHull
 import networkx as nx
 from abc import ABC, abstractmethod
+
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication
 from calcium_activity_characterization.utilities.metrics import Distribution
+from calcium_activity_characterization.config.presets import EventExtractionConfig, ConvexHullParams
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -116,7 +119,7 @@ class SequentialEvent(Event):
         id: int,
         communications: List[CellToCellCommunication],
         label_to_centroid: Dict[int, np.ndarray],
-        config_hull: Dict,
+        config_hull: ConvexHullParams,
         population_centroid: List[np.ndarray]
     ) -> None:
         peak_indices = list({comm.origin for comm in communications}.union({comm.cause for comm in communications}))
@@ -276,7 +279,7 @@ class SequentialEvent(Event):
             return Distribution.from_values([])
 
 
-    def _compute_area_propagation_speed(self, config_hull: Dict) -> float:
+    def _compute_area_propagation_speed(self, config_hull: ConvexHullParams) -> float:
         """
         TODO: if going to be used, need to take care of the plateau problem.
         Compute speed as convex hull area increase over time.
@@ -286,8 +289,8 @@ class SequentialEvent(Event):
         """
         areas = []
         times = []
-        min_points = config_hull.get("min_points", 3)
-        min_dt = config_hull.get("min_duration", 1)
+        min_points = config_hull.min_points
+        min_dt = config_hull.min_duration
 
         for t, points in self.wavefront.items():
             if len(points) < min_points:
@@ -521,7 +524,7 @@ class SequentialEvent(Event):
         n_global_events: int,
         communications: List[CellToCellCommunication],
         cells: List[Cell],
-        config: Dict,
+        config: EventExtractionConfig,
         population_centroids: List[np.ndarray] = None
     ) -> List["SequentialEvent"]:
         """
@@ -544,7 +547,7 @@ class SequentialEvent(Event):
         components = list(nx.connected_components(G))
         events = []
         counter = n_global_events
-        min_cells = config.get("min_cell_count", 2)
+        min_cells = config.min_cell_count
 
         for component in components:
             if len(component) < min_cells:
@@ -555,7 +558,7 @@ class SequentialEvent(Event):
             label_ids = {peak_id[0] for peak_id in peak_ids}
             event_label_to_cell = {label: label_to_cell[label] for label in label_ids if label in label_to_cell}
             label_to_centroid = {label: cell.centroid for label, cell in event_label_to_cell.items()}
-            event = cls(counter, group_comms, label_to_centroid, config.get("convex_hull"), population_centroids)
+            event = cls(counter, group_comms, label_to_centroid, config.convex_hull, population_centroids)
             events.append(event)
             counter += 1
 
@@ -688,7 +691,7 @@ class GlobalEvent(Event):
         cls,
         framewise_label_blocks: List[Dict[int, List[int]]],
         cells: List[Cell],
-        config: Dict
+        config: EventExtractionConfig
     ) -> List["GlobalEvent"]:
         """
         Create multiple GlobalEvent objects from a list of framewise label dictionaries.
@@ -696,12 +699,12 @@ class GlobalEvent(Event):
         Args:
             framewise_label_blocks (List[Dict[int, List[int]]]): List of frame-label mappings, one per event.
             cells (List[Cell]): All available cell objects.
-            config (Dict): Configuration dict. Should contain 'min_cell_count'.
+            config (EventExtractionConfig): Configuration object. Should contain 'min_cell_count'.
 
         Returns:
             List[GlobalEvent]: List of created GlobalEvent instances.
         """
-        min_cells = config.get("min_cell_count", 3)
+        min_cells = config.min_cell_count
         label_to_cell = {cell.label: cell for cell in cells}
 
         events = []

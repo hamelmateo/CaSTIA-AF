@@ -5,6 +5,9 @@
 
 import random
 import numpy as np
+from dataclasses import asdict, replace, is_dataclass
+from copy import deepcopy
+
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QFormLayout, QLineEdit, QSplitter, QMessageBox
@@ -15,7 +18,7 @@ import matplotlib.pyplot as plt
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 from calcium_activity_characterization.data.cells import Cell
-from calcium_activity_characterization.utilities.loader import get_config_with_fallback
+
 import ast
 import logging
 
@@ -80,13 +83,21 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
         splitter.addWidget(control_widget)
 
     def load_params(self):
-        for section in ["INDIV_SIGNAL_PROCESSING_PARAMETERS", "INDIV_PEAK_DETECTION_PARAMETERS"]:
-            config = get_config_with_fallback(self.pipeline.config, section)
-            for key, value in config.items():
+        self.param_fields.clear()
+
+        section_map = {
+            "cell_trace_processing": self.pipeline.config.cell_trace_processing,
+            "cell_trace_peak_detection": self.pipeline.config.cell_trace_peak_detection,
+        }
+
+        for section, obj in section_map.items():
+            config_dict = asdict(obj)
+            for key, value in config_dict.items():
                 full_key = f"{section}:{key}"
                 field = QLineEdit(str(value))
                 self.param_fields[full_key] = field
                 self.form_layout.addRow(QLabel(full_key), field)
+
 
     def safe_eval(self, value: str):
         try:
@@ -95,12 +106,25 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
             return value
 
     def get_updated_config(self):
-        config = self.pipeline.config.copy()
+        config = deepcopy(self.pipeline.config)
+
+        flat_signal = asdict(config.cell_trace_processing)
+        flat_peaks = asdict(config.cell_trace_peak_detection)
+
         for full_key, field in self.param_fields.items():
             section, key = full_key.split(":")
             val = self.safe_eval(field.text())
-            config[section][key] = val
+
+            if section == "cell_trace_processing":
+                flat_signal[key] = val
+            elif section == "cell_trace_peak_detection":
+                flat_peaks[key] = val
+
+        config.cell_trace_processing = replace(config.cell_trace_processing, **flat_signal)
+        config.cell_trace_peak_detection = replace(config.cell_trace_peak_detection, **flat_peaks)
+
         return config
+
 
     def select_random_cell(self):
         try:

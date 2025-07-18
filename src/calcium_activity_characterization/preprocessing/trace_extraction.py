@@ -18,11 +18,9 @@ from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
 
+from calcium_activity_characterization.config.presets import TraceExtractionConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
-from calcium_activity_characterization.utilities.loader import (
-    get_config_with_fallback
-)
 
 import logging
 logger = logging.getLogger(__name__)
@@ -39,12 +37,12 @@ class TraceExtractor:
         processor (ImageProcessor, optional): Image processing utility for preprocessing steps.
     """
 
-    def __init__(self, cells: List[Cell], images_dir: Path, config: dict, processor: any = None) -> None:
+    def __init__(self, cells: List[Cell], images_dir: Path, config: TraceExtractionConfig, processor: any = None) -> None:
         self.cells = cells
         self.images_dir = images_dir
         self.processor = processor
-        self.parallelize = get_config_with_fallback(config, "parallelize", False)
-        self.trace_version: str = get_config_with_fallback(config, "trace_version_name", "raw")
+        self.parallelize = config.parallelize
+        self.trace_version: str = config.trace_version_name
         self.file_pattern: str = None
 
     def compute(self, file_pattern: str) -> None:
@@ -83,7 +81,7 @@ class TraceExtractor:
         """Compute cell-wise intensity traces in parallel using multiprocessing."""
         logger.info("🔄 Computing cell traces in parallel...")
 
-        if get_config_with_fallback(self.processor.apply, "padding", True):
+        if self.processor.apply.padding:
             self.processor.rename_with_padding(self.images_dir, self.file_pattern)
 
         image_paths = sorted(self.images_dir.glob("*.TIF"))
@@ -110,7 +108,7 @@ class TraceExtractor:
         try:
             logger.info("Starting GPU-based trace extraction...")
 
-            if get_config_with_fallback(self.processor.apply, "padding", True):
+            if self.processor.apply.padding:
                 self.processor.rename_with_padding(self.images_dir, self.file_pattern)
 
             image_paths = sorted(self.images_dir.glob("*.TIF"))

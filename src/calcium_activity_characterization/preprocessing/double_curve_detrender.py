@@ -10,6 +10,8 @@ import logging
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
+from calcium_activity_characterization.config.presets import DoubleCurveFittingParams
+
 logger = logging.getLogger(__name__)
 
 class DoubleCurveDetrender:
@@ -18,12 +20,12 @@ class DoubleCurveDetrender:
     using iterative masking and interpolation over a moving average baseline.
 
     Args:
-        config (dict): Configuration parameters for curve fitting and masking.
+        config (DoubleCurveFittingParams): Configuration parameters for curve fitting and masking.
         trace (np.ndarray): Raw intensity trace.
         cut_length (int): Final trace length after cutting.
     """
 
-    def __init__(self, config: Dict, trace: np.ndarray, cut_length: int) -> None:
+    def __init__(self, config: DoubleCurveFittingParams, trace: np.ndarray, cut_length: int) -> None:
         self.config = config
         self.trace = trace
         self.cut_length = cut_length
@@ -38,11 +40,11 @@ class DoubleCurveDetrender:
         """
         try:
             trace = self._cut_trace(self.trace, self.cut_length)
-            method = self.config.get("fit_method", "movingaverage")
-            window = self.config.get("window_size", 801)
-            mask_method = self.config.get("mask_method", "percentile")
-            percentile_bounds = self.config.get("percentile_bounds", [10, 90])
-            max_iter = self.config.get("max_iterations", 5)
+            method = self.config.fit_method
+            window = self.config.window_size
+            mask_method = self.config.mask_method
+            percentile_bounds = self.config.percentile_bounds
+            max_iter = self.config.max_iterations
 
             baseline = np.zeros_like(trace)
             interpolated = trace.copy()

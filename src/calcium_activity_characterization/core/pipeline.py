@@ -11,6 +11,7 @@ import logging
 import os
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
+from calcium_activity_characterization.config.presets import GlobalConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.export import NormalizedDataExporter
@@ -19,8 +20,7 @@ from calcium_activity_characterization.utilities.loader import (
     load_images,
     save_pickle_file,
     load_pickle_file,
-    plot_raster,
-    get_config_with_fallback
+    plot_raster
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
@@ -70,7 +70,7 @@ class CalciumPipeline:
 
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: GlobalConfig):
         self.config = config
         
         # data
@@ -162,20 +162,20 @@ class CalciumPipeline:
         """
         if not self.raw_cells_path.exists():
             if not self.nuclei_mask_path.exists():
-                processor = ImageProcessor(get_config_with_fallback(self.config, "HOECHST_IMAGE_PROCESSING_PARAMETERS"))
+                processor = ImageProcessor(config=self.config.image_processing_hoechst)
                 self.nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
                     ),
                     self.overlay_path,
-                    get_config_with_fallback(self.config, "SEGMENTATION_PARAMETERS")
+                    self.config.segmentation
                 )
                 save_tif_image(self.nuclei_mask, self.nuclei_mask_path)
             else:
                 self.nuclei_mask = load_images(self.nuclei_mask_path)
 
-            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, get_config_with_fallback(self.config,"CELL_FILTERING_PARAMETERS"))
+            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, self.config.image_processing_fitc)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
@@ -195,8 +195,8 @@ class CalciumPipeline:
             extractor = TraceExtractor(
                 cells=self.population.cells,
                 images_dir=self.fitc_img_path,
-                config=get_config_with_fallback(self.config, "TRACE_EXTRACTION_PARAMETERS"),
-                processor=ImageProcessor(get_config_with_fallback(self.config, "FITC_IMAGE_PROCESSING_PARAMETERS"))
+                config=self.config.trace_extraction,
+                processor=ImageProcessor(self.config.image_processing_fitc)
             )
             extractor.compute(self.fitc_file_pattern)
             save_pickle_file(self.population, self.raw_traces_path)
@@ -219,14 +219,16 @@ class CalciumPipeline:
                 cell.trace.process_and_plot_trace(
                     input_version="raw",
                     output_version="processed",
-                    processing_params=get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS")
+                    processing_params=self.config.cell_trace_processing
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
+            """
             # Select 25 random cells (or all if fewer than 25)
             sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
             for cell in sample_cells:
                 cell.trace.plot_all_traces(self.intermediate_traces_path / f"{cell.label}_all_traces.png")
+            """
 
     def _signal_processing_pipeline_parallelized(self) -> None:
         """
@@ -239,7 +241,7 @@ class CalciumPipeline:
 
         else:
             self.output_dir.mkdir(exist_ok=True, parents=True)
-            args = [(cell, "raw", "processed", get_config_with_fallback(self.config, "INDIV_SIGNAL_PROCESSING_PARAMETERS"), self.intermediate_traces_path) for cell in self.population.cells]
+            args = [(cell, "raw", "processed", self.config.cell_trace_processing, self.intermediate_traces_path) for cell in self.population.cells]
 
             with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
                 list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
@@ -257,7 +259,7 @@ class CalciumPipeline:
         
         else:
             for cell in self.population.cells:
-                cell.trace.detect_peaks(get_config_with_fallback(self.config, "INDIV_PEAK_DETECTION_PARAMETERS"))
+                cell.trace.detect_peaks(self.config.cell_trace_peak_detection)
                 cell.trace.binarize_trace_from_peaks()
 
             
@@ -274,8 +276,8 @@ class CalciumPipeline:
         """
         default_version = "processed"
         self.population.compute_activity_trace(default_version=default_version,
-                                               signal_processing_params=get_config_with_fallback(self.config,"POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS"),
-                                               peak_detection_params=get_config_with_fallback(self.config, "ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS"))
+                                               signal_processing_params=self.config.activity_trace_processing,
+                                               peak_detection_params=self.config.activity_trace_peak_detection)
 
         self.population.activity_trace.plot_all_traces(self.activity_trace_path)
 
@@ -289,9 +291,9 @@ class CalciumPipeline:
             self.population = load_pickle_file(self.events_path)
             return
 
-        self.population.detect_global_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
+        self.population.detect_global_events(self.config.event_extraction)
 
-        self.population.detect_sequential_events(get_config_with_fallback(self.config, "EVENT_EXTRACTION_PARAMETERS"))
+        self.population.detect_sequential_events(self.config.event_extraction)
 
         self.population.assign_peak_event_ids()
 

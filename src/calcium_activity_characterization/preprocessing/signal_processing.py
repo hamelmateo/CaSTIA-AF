@@ -19,6 +19,7 @@ from sklearn.linear_model import RANSACRegressor, HuberRegressor
 from sklearn.preprocessing import PolynomialFeatures
 import logging
 
+from calcium_activity_characterization.config.presets import SignalProcessingConfig
 from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.preprocessing.local_minima_detrender import LocalMinimaDetrender
 from calcium_activity_characterization.preprocessing.double_curve_detrender import DoubleCurveDetrender
@@ -35,19 +36,18 @@ class SignalProcessor:
         config (dict): Configuration dictionary for the processing pipeline.
     """
 
-    def __init__(self, config: dict):
-        self.config = config
+    def __init__(self, config: SignalProcessingConfig):
         self.trace_versions: dict[str, np.ndarray] = {}
 
-        self.apply_flags = config.get("apply", {})
-        self.cut_length = config.get("cut_trace_num_points", 0)
-        self.pre_sigma = config.get("presmoothing_sigma", 1.0)
-        self.sigma = config.get("smoothing_sigma", 1.0)
-        self.normalize_method = config.get("normalizing_method", "zscore")
-        self.normalize_params = config.get("normalization_parameters", {})
+        self.pipeline = config.pipeline
+        self.cut_length = config.detrending.params.cut_trace_num_points
+        self.sigma = config.smoothing_sigma
 
-        self.detrending_mode = config.get("detrending_mode", "movingaverage")
-        self.detrending_params = config.get("methods", {}).get(self.detrending_mode, {})
+        self.normalize_method = config.normalization.method
+        self.normalize_params = config.normalization.params
+
+        self.detrending_mode = config.detrending.method
+        self.detrending_params = config.detrending.params
 
     def run(self, trace: np.ndarray) -> np.ndarray:
         """
@@ -63,15 +63,15 @@ class SignalProcessor:
         """
         processed_trace = trace
 
-        if self.apply_flags.get("detrending", False):
+        if self.pipeline.detrending:
             processed_trace = self._detrend(processed_trace)
             self.trace_versions["detrended"] = processed_trace.copy()
             
-        if self.apply_flags.get("normalization", False):
+        if self.pipeline.normalization:
             processed_trace = self._normalize(processed_trace)
             self.trace_versions["normalized"] = processed_trace.copy()
-            
-        if self.apply_flags.get("smoothing", False):
+
+        if self.pipeline.smoothing:
             processed_trace = gaussian_filter1d(processed_trace, sigma=self.sigma)
             self.trace_versions["smoothed"] = processed_trace.copy()
             
@@ -123,23 +123,23 @@ class SignalProcessor:
         mode = self.detrending_mode
 
         if mode == "butterworth":
-            cutoff = self.detrending_params.get("cutoff", 0.003)
-            order = self.detrending_params.get("order", 6)
-            fs = self.detrending_params.get("sampling_freq", 1.0)
+            cutoff = self.detrending_params.cutoff
+            order = self.detrending_params.order
+            fs = self.detrending_params.sampling_freq
             b, a = butter(order, cutoff, btype='highpass', fs=fs)
             return filtfilt(b, a, trace)
 
         elif mode == "fir":
-            cutoff = self.detrending_params.get("cutoff", 0.001)
-            numtaps = self.detrending_params.get("numtaps", 201)
-            fs = self.detrending_params.get("sampling_freq", 1.0)
+            cutoff = self.detrending_params.cutoff
+            numtaps = self.detrending_params.numtaps
+            fs = self.detrending_params.sampling_freq
             fir_coeff = firwin(numtaps, cutoff=cutoff, fs=fs, pass_zero=False)
             return filtfilt(fir_coeff, [1.0], trace)
 
         elif mode == "wavelet":
             import pywt
-            level = self.detrending_params.get("level")
-            wavelet = self.detrending_params.get("wavelet", "db4")
+            level = self.detrending_params.level
+            wavelet = self.detrending_params.wavelet
             coeffs = pywt.wavedec(trace, wavelet, level=level, mode="periodization")
             coeffs[0] = np.zeros_like(coeffs[0])
             return pywt.waverec(coeffs, wavelet, mode="periodization")[:len(trace)]
@@ -157,7 +157,7 @@ class SignalProcessor:
             np.ndarray: Detrended trace.
         """
         # Detect peaks and create a mask for long peaks
-        detector = PeakDetector(self.detrending_params.get("peak_detector_params"))
+        detector = PeakDetector(self.detrending_params.baseline_detection_params)
         peak_list = detector.run(trace)
 
         # Create a mask for the detected peaks
@@ -241,17 +241,17 @@ class SignalProcessor:
         """
         mode = self.detrending_mode
         if mode == "movingaverage":
-            window = self.detrending_params.get("window_size", 101)
+            window = self.detrending_params.window_size
             return np.convolve(np.pad(trace, (window//2, window//2), mode='reflect'),
                                np.ones(window)/window, mode='valid')
         elif mode == "polynomial":
-            degree = self.detrending_params.get("degree", 2)
+            degree = self.detrending_params.degree
             x = np.arange(len(trace))
             coeffs = np.polyfit(x, trace, deg=degree)
             return np.polyval(coeffs, x)
         elif mode == "robustpoly":
-            degree = self.detrending_params.get("degree", 2)
-            method = self.detrending_params.get("method", "huber")
+            degree = self.detrending_params.degree
+            method = self.detrending_params.method
             x = np.arange(len(trace)).reshape(-1, 1)
             if method == "ransac":
                 model = make_pipeline(PolynomialFeatures(degree), RANSACRegressor(residual_threshold=5.0))
@@ -269,8 +269,8 @@ class SignalProcessor:
                                 maxfev=10000)
             return exp_model(t, *popt)
         elif mode == "savgol":
-            win = self.detrending_params.get("window_length", 101)
-            poly = self.detrending_params.get("polyorder", 2)
+            win = self.detrending_params.window_length
+            poly = self.detrending_params.polyorder
             return savgol_filter(trace, win, poly)
 
     def _normalize(self, trace: np.ndarray) -> np.ndarray:
@@ -285,38 +285,35 @@ class SignalProcessor:
         Returns:
             np.ndarray: Normalized trace.
         """
-        eps = self.normalize_params.get("epsilon", 1e-8)
-        min_range = self.normalize_params.get("min_range", 1e-2)
+        eps = self.normalize_params.epsilon
         method = self.normalize_method
-
+        
         if method == "minmax":
+            min_range = self.normalize_params.min_range
             min_val, max_val = np.min(trace), np.max(trace)
             denom = max_val - min_val
             return (trace - min_val) / (denom + eps) if denom >= min_range else trace - min_val
 
         elif method == "percentile":
-            q = self.normalize_params.get("percentile_baseline", 10)
+            q = self.normalize_params.percentile_baseline
             baseline = np.percentile(trace, q)
             peak = np.max(trace)
             return (trace - baseline) / (peak - baseline + eps)
 
         elif method == "deltaf":
-            q = self.normalize_params.get("percentile_baseline", 10)
+            min_range = self.normalize_params.min_range
+            q = self.normalize_params.percentile_baseline
             F0 = max(np.percentile(trace, q), min_range)
             deltaf = (trace - F0) / (F0 + eps)
             return deltaf / (np.max(np.abs(deltaf)) + eps)
-
-        elif method == "zscore":
-            # TODO: implement a z score that takes only the std of the noise into account instead of the whole signal.
-            mean, std = np.mean(trace), np.std(trace)
-            return (trace - mean) / (std + eps) if std >= min_range else trace - mean
         
-        elif method == "zscore_residual":
-            return self._zscore_residual(
+        elif method == "zscore":
+            return self._zscore(
                 trace, 
-                sigma=self.normalize_params.get("sigma", 2.0),
-                clip_percentile=self.normalize_params.get("clip_percentile", 80.0),
-                eps=eps
+                sigma=self.normalize_params.smoothing_sigma,
+                residuals_clip_percentile=self.normalize_params.residuals_clip_percentile,
+                eps=eps,
+                residuals_min_number=self.normalize_params.residuals_min_number
             )
 
         else:
@@ -335,12 +332,13 @@ class SignalProcessor:
         return trace[nb_frames:] if len(trace) > nb_frames else np.array([], dtype=trace.dtype)
 
 
-    def _zscore_residual(
+    def _zscore(
         self,
         trace: np.ndarray,
         sigma: float = 5.0,
-        clip_percentile: float = 95.0,
-        eps: float = 1e-8
+        residuals_clip_percentile: float = 95.0,
+        eps: float = 1e-8,
+        residuals_min_number: int = 20
     ) -> np.ndarray:
         """
         Normalize the trace using noise-based z-score computed from residuals.
@@ -350,8 +348,6 @@ class SignalProcessor:
             sigma (float): Gaussian smoothing sigma.
             clip_percentile (float): Threshold to exclude outlier residuals.
             eps (float): Small value to avoid division by zero.
-            plot (bool): Whether to display diagnostic plots.
-            label (str): Trace label.
 
         Returns:
             np.ndarray: z-scored trace.
@@ -361,16 +357,15 @@ class SignalProcessor:
             residual = trace - smoothed
 
             abs_residual = np.abs(residual)
-            clip_threshold = np.percentile(abs_residual, clip_percentile)
+            clip_threshold = np.percentile(abs_residual, residuals_clip_percentile)
 
             # Keep only residuals within threshold to compute std
             valid_residuals = residual[abs_residual < clip_threshold]
 
-            if len(valid_residuals) < 20:
+            if len(valid_residuals) < residuals_min_number:
                 raise ValueError("Too few valid residuals to compute robust std.")
 
             sigma_noise = np.std(valid_residuals)
-            logger.info(f"Computed noise std: {sigma_noise:.4f} from {len(valid_residuals)} valid residuals.")
 
             self.trace_versions["zscore_residual_smoothed"] = smoothed.copy()
             self.trace_versions["zscore_residual"] = residual.copy()

@@ -12,9 +12,11 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import ast
 import logging
+from dataclasses import asdict, is_dataclass, replace
+from copy import deepcopy
+
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
-from calcium_activity_characterization.utilities.loader import get_config_with_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -75,17 +77,20 @@ class ActivityAndEventDetectionGUI(QMainWindow):
         splitter.addWidget(control_widget)
 
     def load_params(self):
-        for section in [
-            "POPULATION_TRACES_SIGNAL_PROCESSING_PARAMETERS",
-            "ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS",
-            "EVENT_EXTRACTION_PARAMETERS"
-        ]:
-            config = get_config_with_fallback(self.pipeline.config, section)
-            for key, value in config.items():
+        section_fields = {
+            "activity_trace_processing": self.pipeline.config.activity_trace_processing,
+            "activity_trace_peak_detection": self.pipeline.config.activity_trace_peak_detection,
+            "event_extraction": self.pipeline.config.event_extraction,
+        }
+
+        for section, config_obj in section_fields.items():
+            config_dict = asdict(config_obj)
+            for key, value in config_dict.items():
                 full_key = f"{section}:{key}"
                 field = QLineEdit(str(value))
                 self.param_fields[full_key] = field
                 self.form_layout.addRow(QLabel(full_key), field)
+
 
     def safe_eval(self, value: str):
         try:
@@ -94,11 +99,19 @@ class ActivityAndEventDetectionGUI(QMainWindow):
             return value
 
     def get_updated_config(self):
-        config = self.pipeline.config.copy()
+        config = deepcopy(self.pipeline.config)
+
         for full_key, field in self.param_fields.items():
             section, key = full_key.split(":")
             val = self.safe_eval(field.text())
-            config[section][key] = val
+            section_obj = getattr(config, section)
+            
+            if is_dataclass(section_obj):
+                updated_fields = asdict(section_obj)
+                updated_fields[key] = val
+                updated_section = replace(section_obj, **updated_fields)
+                setattr(config, section, updated_section)
+                
         return config
 
     def update_processing(self):

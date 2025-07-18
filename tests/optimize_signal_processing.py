@@ -58,9 +58,6 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         # Left: Controls
         control_layout = QVBoxLayout()
 
-        self.presmoothing_checkbox = QCheckBox("Apply Presmoothing")
-        control_layout.addWidget(self.presmoothing_checkbox)
-
         self.detrend_checkbox = QCheckBox("Apply Detrending")
         control_layout.addWidget(self.detrend_checkbox)
 
@@ -70,13 +67,6 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.normalize_checkbox = QCheckBox("Apply Normalization")
         control_layout.addWidget(self.normalize_checkbox)
 
-        self.cut_trace_checkbox = QCheckBox("Cut Trace to Peaks")
-        control_layout.addWidget(self.cut_trace_checkbox)
-
-        control_layout.addWidget(QLabel("Sigma (presmoothing):"))
-        self.pre_sigma_input = QLineEdit("2.0")
-        control_layout.addWidget(self.pre_sigma_input)
-
         control_layout.addWidget(QLabel("Detrending Method:"))
         self.detrending_combo = QComboBox()
         self.detrending_combo.addItems(INDIV_SIGNAL_PROCESSING_PARAMETERS["methods"].keys())
@@ -85,7 +75,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
         control_layout.addWidget(QLabel("Normalization Method:"))
         self.norm_combo = QComboBox()
-        self.norm_combo.addItems(["deltaf", "zscore", "minmax", "percentile", "none"])
+        self.norm_combo.addItems(["deltaf", "zscore", "minmax", "percentile"])
         control_layout.addWidget(self.norm_combo)
 
         control_layout.addWidget(QLabel("Sigma (smoothing):"))
@@ -163,15 +153,12 @@ class SignalProcessingBinarizedGUI(QMainWindow):
     def get_processor(self):
         params = {
             "apply": {
-                "presmoothing": self.presmoothing_checkbox.isChecked(),
                 "detrending": self.detrend_checkbox.isChecked(),
                 "smoothing": self.smooth_checkbox.isChecked(),
                 "normalization": self.normalize_checkbox.isChecked(),
-                "cut_trace": self.cut_trace_checkbox.isChecked(),
             },
             "detrending_mode": self.detrending_combo.currentText(),
             "normalizing_method": self.norm_combo.currentText(),
-            "presmoothing_sigma": float(self.pre_sigma_input.text()),
             "smoothing_sigma": float(self.sigma_input.text()),
             "cut_trace_num_points": int(self.cut_trace_num_points_input.text()),
             "methods": {}

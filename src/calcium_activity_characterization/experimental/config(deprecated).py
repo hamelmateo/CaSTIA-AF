@@ -133,8 +133,8 @@ INDIV_SIGNAL_PROCESSING_PARAMETERS = {
         "smoothing": True,
     },
     "cut_trace_num_points": 100, # Number of points to cut from the start of the trace
-    "smoothing_sigma": 3.0, # Sigma for Gaussian smoothing after detrending
-    "normalizing_method": "zscore_residual", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
+    "smoothing_sigma": 2.0, # Sigma for Gaussian smoothing after detrending
+    "normalizing_method": "zscore", # Normalization method: 'deltaf', 'zscore', 'minmax', 'percentile'
     "normalization_parameters": {
         "epsilon": 1e-8,
         "min_range": 1e-2, 
@@ -225,14 +225,13 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
     "method": "skimage",  # only 'skimage' supported for now
     "params": {
         "skimage": {
-            "prominence": 0.6, # Minimum prominence of peaks
-            "distance": 20,  # Minimum distance between peaks
-            "height": None,
-            "threshold": None,
-            "width": None,
-            "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3, # Relative height for relative duration calculation
-            "full_duration_threshold": 0.95 # Threshold for full duration of peaks
+            "height": 10.0,  # Absolute peak height threshold — a peak must reach at least this value (e.g., 10× noise σ after normalization)
+            "threshold": None,  # Minimum vertical drop to each neighbor — avoids detecting small shoulders or micro-peaks
+            "distance": 20,  # Minimum number of frames between two peaks — helps prevent double-detection of the same event
+            "prominence": None,  # Not used — Prominence-based filtering
+            "width": None,  # Optional - If set, filters peaks by their width at `rel_height`
+            "relative_height": 0.3,  # Used for measuring peak width and duration — the fraction of peak height where width is evaluated
+            "full_duration_threshold": 0.95  # Used to compute full peak duration (e.g., near base) — defines the fraction of max height to use when measuring width
         }
     },
     "peak_grouping": {
@@ -491,9 +490,9 @@ CORRELATION_PARAMETERS = {
     "window_size": 100,  # Window size for similarity calculation
     "step_percent": 0.75,  # Percentage of window size for step size calculation
     "lag_percent": 0.25,   # Percentage of window size for lag calculation
-    "method": "cross_correlation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
+    "method": "crosscorrelation",  # Similarity method: 'cross_correlation', 'jaccard', 'pearson', 'spearman'
     "params": {
-        "cross_correlation": {
+        "crosscorrelation": {
             "mode": "full",  # Mode for cross-correlation: 'full', 'valid', 'same'
             "method": "direct",  # Method for cross-correlation: 'direct', 'fft'
         },

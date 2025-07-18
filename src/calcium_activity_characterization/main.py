@@ -5,6 +5,8 @@ from PyQt5.QtWidgets import QApplication, QFileDialog
 import sys
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
+from calcium_activity_characterization.config.presets import GLOBAL_CONFIG
+"""
 from calcium_activity_characterization.config.config import (
     DEBUGGING,
     DEBUGGING_FILE_PATH,
@@ -20,10 +22,12 @@ from calcium_activity_characterization.config.config import (
     ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS,
     EVENT_EXTRACTION_PARAMETERS,
 )
+"""
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+"""
 CONFIG = {
     "HOECHST_IMAGE_PROCESSING_PARAMETERS": HOECHST_IMAGE_PROCESSING_PARAMETERS,
     "FITC_IMAGE_PROCESSING_PARAMETERS": FITC_IMAGE_PROCESSING_PARAMETERS,
@@ -36,6 +40,7 @@ CONFIG = {
     "ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS": ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS,
     "EVENT_EXTRACTION_PARAMETERS": EVENT_EXTRACTION_PARAMETERS,
 }
+"""
 
 def find_isx_folders(folder: Path) -> list[Path]:
     """
@@ -55,12 +60,12 @@ def main() -> None:
     Select one or multiple folders (date or ISX) and run the pipeline on all detected ISX folders.
     """
     app = QApplication(sys.argv)
-    if DEBUGGING:
+    if GLOBAL_CONFIG.debug.debugging:
         logger.info("[DEBUGGING MODE] Using test folder from config.")
-        selected = [Path(DEBUGGING_FILE_PATH)]
+        selected = [Path(GLOBAL_CONFIG.debug.debugging_file_path)]
     else:
         folder_dialog = QFileDialog()
-        folder_dialog.setDirectory(HARDDRIVE_PATH)
+        folder_dialog.setDirectory(GLOBAL_CONFIG.debug.harddrive_path)
         folder_dialog.setFileMode(QFileDialog.Directory)
         folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
         folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)
@@ -83,7 +88,7 @@ def main() -> None:
         logger.warning("No ISX folders found in selected path(s). Exiting.")
         return
 
-    pipeline = CalciumPipeline(CONFIG)
+    pipeline = CalciumPipeline(GLOBAL_CONFIG)
     logger.info(f"Found {len(all_isx_folders)} ISX folders.")
 
     for isx_folder in sorted(all_isx_folders):
