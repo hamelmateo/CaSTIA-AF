@@ -87,7 +87,6 @@ CELL_FILTERING_CONFIG = CellFilteringConfig(
 # INDIVIDUAL CELLS SIGNAL PROCESSING CONFIG
 # ===========================
 STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
-    # TODO maybe not rewrite all the default values?
     pipeline=SignalProcessingPipeline(
         detrending=True,
         normalization=True,
@@ -123,8 +122,8 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
             
             fitting_method="linear",
 
-            diagnostics_enabled=False,
-            diagnostics_output_dir="D:/Mateo/20250326/Output/IS1/plot-diagnostics",
+            diagnostics_enabled=True,
+            diagnostics_output_dir="D:/Mateo/20250326/Output/IS1/debugging/detrending-diagnostics",
         )
     )
 )

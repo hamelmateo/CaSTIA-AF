@@ -136,7 +136,7 @@ class Cell:
             pixel_coords = np.argwhere(mask == label)
             if pixel_coords.size > 0:
                 centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int)
-                cell = cls(label=label, centroid=centroid, pixel_coords=pixel_coords, object_size_thresholds=cell_filtering_parameters["object_size_thresholds"])
+                cell = cls(label=label, centroid=centroid, pixel_coords=pixel_coords, object_size_thresholds=cell_filtering_parameters.object_size_thresholds)
 
                 h, w = mask.shape[:2]
                 border_margin = cell_filtering_parameters.border_margin

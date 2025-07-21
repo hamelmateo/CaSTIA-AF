@@ -17,7 +17,7 @@ from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.export import NormalizedDataExporter
 from calcium_activity_characterization.utilities.loader import (
     save_tif_image,
-    load_images,
+    load_existing_img,
     save_pickle_file,
     load_pickle_file,
     plot_raster
@@ -60,7 +60,6 @@ class CalciumPipeline:
         processed_traces_path (Path): Path to save smoothed intensity traces.
         binary_traces_path (Path): Path to save binarized intensity traces.
         events_path (Path): Path to save detected events.
-        population_level_metrics_path (Path): Path to save population-level metrics report.
         spatial_neighbor_graph_path (Path): Path to save the spatial neighbor graph.
         activity_trace_path (Path): Path to save the activity trace plot.
 
@@ -94,7 +93,6 @@ class CalciumPipeline:
         self.processed_traces_path: Path = None
         self.binary_traces_path: Path = None
         self.events_path: Path = None
-        self.population_level_metrics_path: Path = None
         self.spatial_neighbor_graph_path: Path = None
         self.activity_trace_path: Path = None
 
@@ -139,20 +137,28 @@ class CalciumPipeline:
         self.hoechst_img_path = data_dir / "HOECHST"
         self.fitc_img_path = data_dir / "FITC"
 
-        # Pick paths for saving results
-        self.raw_cells_path = output_dir / "00_raw_cells.pkl"
-        self.raw_traces_path = output_dir / "01_raw_traces.pkl"
-        self.processed_traces_path = output_dir / "02_smoothed_traces.pkl"
-        self.binary_traces_path = output_dir / "03_binarized_traces.pkl"
-        self.events_path = output_dir / "04_population_events.pkl"
+        # Pick paths for saving snapshot data
+        snapshot_dir = output_dir / "population-snapshots"
+        self.raw_cells_path = snapshot_dir / "00_raw_cells.pkl"
+        self.raw_traces_path = snapshot_dir / "01_raw_traces.pkl"
+        self.processed_traces_path = snapshot_dir / "02_smoothed_traces.pkl"
+        self.binary_traces_path = snapshot_dir / "03_binarized_traces.pkl"
+        self.events_path = snapshot_dir / "04_population_events.pkl"
 
-        # Paths for saving images and plots
-        self.nuclei_mask_path = output_dir / "nuclei_mask.TIF"
-        self.overlay_path = output_dir / "overlay.TIF"
-        self.spatial_neighbor_graph_path = output_dir / "neighbors_graph.png"
-        self.intermediate_traces_path = output_dir / "intermediate_traces"
-        self.activity_trace_path = output_dir / "activity_trace.pdf"
-        self.population_level_metrics_path = output_dir / "population_metrics.pdf"
+        # Paths for spatial mapping
+        spatial_mapping_dir = output_dir / "cell-mapping"
+        self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
+        self.overlay_path = spatial_mapping_dir / "overlay.TIF"
+        self.spatial_neighbor_graph_path = spatial_mapping_dir / "neighbors_graph.png"
+
+        # Paths for intermediate results
+        processing_dir = output_dir / "signal-processing"
+        self.traces_processing_steps = processing_dir / "traces-processing-steps"
+        self.activity_trace_path = processing_dir / "activity_trace.pdf"
+        self.raster_path = processing_dir / "raster_plot.png"
+
+        # Path for extracted data
+        self.datasets_dir = output_dir / "datasets"
 
 
     def _segment_cells(self) -> None:
@@ -173,9 +179,9 @@ class CalciumPipeline:
                 )
                 save_tif_image(self.nuclei_mask, self.nuclei_mask_path)
             else:
-                self.nuclei_mask = load_images(self.nuclei_mask_path)
+                self.nuclei_mask = load_existing_img(self.nuclei_mask_path)
 
-            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, self.config.image_processing_fitc)
+            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, self.config.cell_filtering)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
@@ -223,12 +229,12 @@ class CalciumPipeline:
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
-            """
+            """"""
             # Select 25 random cells (or all if fewer than 25)
             sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
             for cell in sample_cells:
-                cell.trace.plot_all_traces(self.intermediate_traces_path / f"{cell.label}_all_traces.png")
-            """
+                cell.trace.plot_all_traces(self.traces_processing_steps / f"{cell.label}_all_traces.png")
+            
 
     def _signal_processing_pipeline_parallelized(self) -> None:
         """
@@ -241,7 +247,7 @@ class CalciumPipeline:
 
         else:
             self.output_dir.mkdir(exist_ok=True, parents=True)
-            args = [(cell, "raw", "processed", self.config.cell_trace_processing, self.intermediate_traces_path) for cell in self.population.cells]
+            args = [(cell, "raw", "processed", self.config.cell_trace_processing, self.traces_processing_steps) for cell in self.population.cells]
 
             with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
                 list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
@@ -266,7 +272,7 @@ class CalciumPipeline:
             logger.info(f"Peaks detected for {len(self.population.cells)} active cells.")
             save_pickle_file(self.population, self.binary_traces_path)
 
-        plot_raster(self.output_dir, self.population.cells)
+        plot_raster(self.raster_path, self.population.cells)
 
 
     def _initialize_activity_trace(self) -> None:
@@ -308,9 +314,9 @@ class CalciumPipeline:
             output_dir (Path): Directory where the datasets will be saved.
         """
         try:
-            exporter = NormalizedDataExporter(self.population, self.output_dir)
+            exporter = NormalizedDataExporter(self.population, self.datasets_dir)
             exporter.export_all()
-            logger.info(f"✅ Normalized datasets exported to {self.output_dir}")
+            logger.info(f"✅ Normalized datasets exported to {self.datasets_dir}")
         except Exception as e:
             logger.error(f"❌ Failed to export normalized datasets: {e}")
 

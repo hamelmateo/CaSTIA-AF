@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import tifffile
 import numpy as np
@@ -141,31 +142,43 @@ def load_image_fast(img_path: Path) -> np.ndarray:
 # ==========================
 
 
-def save_tif_image(image: np.ndarray, file_path: Path, photometric: str = 'minisblack', imagej: bool = True) -> None:
+def save_tif_image(image: np.ndarray, file_path: str, photometric: str = "minisblack", imagej: bool = True) -> None:
     """
-    Save an image as .TIF.
+    Save a 2D image as a .tif file. Automatically creates the output directory if it does not exist.
 
     Args:
-        image (np.ndarray): Image data.
-        file_path (Path): Save path.
-        photometric (str): Interpretation mode.
-        imagej (bool): Save in ImageJ-compatible format.
+        image (np.ndarray): Image array to save.
+        file_path (str): Full path (including filename) to save the image.
+        photometric (str): Photometric interpretation for TIFF. Default is "minisblack".
+        imagej (bool): Whether to save in ImageJ-compatible format. Default is True.
     """
-    tifffile.imwrite(file_path, image.astype(np.uint16), photometric=photometric, imagej=imagej)
-    logger.info(f"Saved .tif image to: {file_path}")
+    try:
+        output_dir = os.path.dirname(file_path)
+        os.makedirs(output_dir, exist_ok=True)
+        tifffile.imwrite(file_path, image.astype(np.uint16), photometric=photometric, imagej=imagej)
+        logger.info(f"Saved image to {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to save TIFF image to {file_path}: {e}")
+        raise
 
 
-def save_pickle_file(data: object, file_path: Path) -> None:
+
+def save_pickle_file(obj: any, file_path: str) -> None:
     """
-    Save a Python object using pickle.
+    Save an object to a pickle file. Creates directories if needed.
 
     Args:
-        data (object): Python object to save.
-        file_path (Path): Save path.
+        obj (Any): The Python object to serialize.
+        file_path (str): Full path to the pickle file.
     """
-    with open(file_path, "wb") as f:
-        pickle.dump(data, f)
-    logger.info(f"Pickle saved to: {file_path}")
+    try:
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, "wb") as f:
+            pickle.dump(obj, f)
+        logger.info(f"Saved pickle to {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to save pickle to {file_path}: {e}")
+        raise
 
 
 def save_image_histogram(image_path: Path, output_path: Path, title="Pixel Intensity Histogram", bins=65536) -> None:
@@ -282,11 +295,9 @@ def plot_raster(
         ax.set_xlabel("Time")
 
     plt.tight_layout()
-    filename = "clustered_raster_plot.png" if clustered else "raster_plot.png"
-    save_path = output_path / filename
-    plt.savefig(save_path, dpi=600)
+    plt.savefig(output_path, dpi=600)
     plt.close()
-    logger.info(f"Raster plot saved to {save_path}")
+    logger.info(f"Raster plot saved to {output_path}")
 
 
 def plot_impulse_raster(save_path: Path, cells: List[Cell]) -> None:

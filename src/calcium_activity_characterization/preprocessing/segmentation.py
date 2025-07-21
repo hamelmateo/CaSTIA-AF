@@ -9,6 +9,7 @@ from deepcell.applications import Mesmer
 from deepcell.utils.plot_utils import make_outline_overlay
 from pathlib import Path
 import logging
+from dataclasses import asdict
 
 from calcium_activity_characterization.utilities.loader import save_tif_image
 from calcium_activity_characterization.config.presets import SegmentationConfig
@@ -53,7 +54,7 @@ def segmented(images: np.ndarray, output_path: Path, config: SegmentationConfig)
             images_hd,
             image_mpp=config.params.image_mpp,
             compartment='nuclear',
-            postprocess_kwargs_nuclear=config.params.asdict() # TODO verify this
+            postprocess_kwargs_nuclear=asdict(config.params)
         )
         nuclei_mask = nuclei_mask[0, ..., 0]  # remove batch and channel dims
         logger.info(f"Segmentation mask generated with shape: {nuclei_mask.shape}")

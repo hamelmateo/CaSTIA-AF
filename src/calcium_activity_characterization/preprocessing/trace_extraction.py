@@ -81,7 +81,7 @@ class TraceExtractor:
         """Compute cell-wise intensity traces in parallel using multiprocessing."""
         logger.info("🔄 Computing cell traces in parallel...")
 
-        if self.processor.apply.padding:
+        if self.processor.pipeline.padding:
             self.processor.rename_with_padding(self.images_dir, self.file_pattern)
 
         image_paths = sorted(self.images_dir.glob("*.TIF"))
@@ -108,7 +108,7 @@ class TraceExtractor:
         try:
             logger.info("Starting GPU-based trace extraction...")
 
-            if self.processor.apply.padding:
+            if self.processor.pipeline.padding:
                 self.processor.rename_with_padding(self.images_dir, self.file_pattern)
 
             image_paths = sorted(self.images_dir.glob("*.TIF"))

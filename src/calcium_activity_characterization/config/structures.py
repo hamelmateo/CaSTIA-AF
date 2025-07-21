@@ -547,7 +547,7 @@ class LocalMinimaParams(DetrendingParams):
         crossing_correction_max_iterations (int): Maximum iterations for crossing correction. Default is 10.
         fitting_method (str): Method for fitting the local minima. Default is "linear".
         diagnostics_enabled (bool): Whether to enable diagnostics. Default is False.
-        diagnostics_output_dir (str): Directory for diagnostics output. Default is "D:/Mateo/20250326/Output/IS1/plot-diagnostics".
+        diagnostics_output_dir (str): Directory for diagnostics output. Default is "D:/Mateo/20250326/Output/IS1/debugging/detrending-diagnostics".
     """
     verbose: bool = False
     minima_detection_order: int = 15
@@ -565,7 +565,7 @@ class LocalMinimaParams(DetrendingParams):
     fitting_method: str = "linear"
 
     diagnostics_enabled: bool = False
-    diagnostics_output_dir: str = "D:/Mateo/20250326/Output/IS1/plot-diagnostics"
+    diagnostics_output_dir: str = "D:/Mateo/20250326/Output/IS1/debugging/detrending-diagnostics"
 
 # ===========================
 # SIGNAL PROCESSING PARAMETERS
