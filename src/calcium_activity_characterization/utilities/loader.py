@@ -248,56 +248,63 @@ def plot_raster(
         clustered (bool): Whether to plot clustered data.
         cluster_labels (Optional[np.ndarray]): Cluster labels for each cell.
     """
-    logger = logging.getLogger(__name__)
-    if not cells:
-        logger.warning("No cells provided for raster plot.")
-        return
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if clustered:
-        if cluster_labels is None or len(cluster_labels) != len(cells):
-            logger.error("Clustered plot requested but valid cluster_labels not provided.")
+        logger = logging.getLogger(__name__)
+        if not cells:
+            logger.warning("No cells provided for raster plot.")
             return
 
-        cluster_labels = np.array(cluster_labels)
-        cells_sorted = [cell for _, cell in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
-        label_order = [label for label, _ in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
-        binarized_matrix = np.array([cell.trace.binary for cell in cells_sorted])
+        if clustered:
+            if cluster_labels is None or len(cluster_labels) != len(cells):
+                logger.error("Clustered plot requested but valid cluster_labels not provided.")
+                return
 
-        n_clusters = len([l for l in set(label_order) if l != -1])
-        filtered_colors = generate_distinct_colors(n_clusters)
-        label_to_color = {}
-        for i, label in enumerate([l for l in sorted(set(label_order)) if l != -1]):
-            color = filtered_colors[i % len(filtered_colors)]
-            label_to_color[label] = color
+            cluster_labels = np.array(cluster_labels)
+            cells_sorted = [cell for _, cell in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
+            label_order = [label for label, _ in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
+            binarized_matrix = np.array([cell.trace.binary for cell in cells_sorted])
 
-        h, w = binarized_matrix.shape
-        rgb_image = np.ones((h, w, 3), dtype=np.float32)
+            n_clusters = len([l for l in set(label_order) if l != -1])
+            filtered_colors = generate_distinct_colors(n_clusters)
+            label_to_color = {}
+            for i, label in enumerate([l for l in sorted(set(label_order)) if l != -1]):
+                color = filtered_colors[i % len(filtered_colors)]
+                label_to_color[label] = color
 
-        for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, label_order)):
-            if cluster_id == -1:
-                continue
-            color = label_to_color.get(cluster_id, np.array([0.8, 0.8, 0.8]))
-            rgb_image[row_idx, row == 1] = color
+            h, w = binarized_matrix.shape
+            rgb_image = np.ones((h, w, 3), dtype=np.float32)
 
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.imshow(rgb_image, aspect='auto')
-        ax.set_title("Binarized Activity (sorted by cluster)")
-        ax.set_xlabel("Time")
-        ax.set_yticks([])
-        ax.set_yticklabels([])
+            for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, label_order)):
+                if cluster_id == -1:
+                    continue
+                color = label_to_color.get(cluster_id, np.array([0.8, 0.8, 0.8]))
+                rgb_image[row_idx, row == 1] = color
 
-    else:
-        binarized_matrix = np.array([cell.trace.binary for cell in cells])
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
-        ax.set_title("Binarized Activity Raster Plot")
-        ax.set_ylabel("Cell Index")
-        ax.set_xlabel("Time")
+            fig, ax = plt.subplots(figsize=(12, 6))
+            ax.imshow(rgb_image, aspect='auto')
+            ax.set_title("Binarized Activity (sorted by cluster)")
+            ax.set_xlabel("Time")
+            ax.set_yticks([])
+            ax.set_yticklabels([])
 
-    plt.tight_layout()
-    plt.savefig(output_path, dpi=600)
-    plt.close()
-    logger.info(f"Raster plot saved to {output_path}")
+        else:
+            binarized_matrix = np.array([cell.trace.binary for cell in cells])
+            fig, ax = plt.subplots(figsize=(12, 6))
+            ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+            ax.set_title("Binarized Activity Raster Plot")
+            ax.set_ylabel("Cell Index")
+            ax.set_xlabel("Time")
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=600)
+        plt.close()
+        logger.info(f"Raster plot saved to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate raster plot: {e}")
+        raise
 
 
 def plot_impulse_raster(save_path: Path, cells: List[Cell]) -> None:

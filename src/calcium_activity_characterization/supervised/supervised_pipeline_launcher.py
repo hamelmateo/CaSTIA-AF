@@ -2,7 +2,6 @@
 # Usage Example:
 # >>> python supervised_pipeline_launcher.py
 # GUI will walk through segmentation, signal processing, event detection, and export
-# TODO finish the implementation of the new config format
 
 import sys
 from pathlib import Path

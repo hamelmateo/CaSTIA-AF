@@ -130,7 +130,6 @@ class Trace:
         else:
             trace = self.active_trace
         self.peaks = detector.run(trace) if len(trace) > 0 else []
-        self._refine_peaks_duration(self.default_version)
 
     def binarize_trace_from_peaks(self) -> None:
         """Convert detected peaks into a binary 0/1 trace and compute metadata."""
@@ -487,21 +486,6 @@ class Trace:
 
     def __repr__(self) -> str:
         return f"<Trace default='{self.default_version}', peaks={len(self.peaks)}, active={self.metadata.get('fraction_active_time', 0):.2f}>"
-
-
-    def _refine_peaks_duration(self, version: str = "raw") -> None:
-        """
-        Refine the start and end times of all detected peaks if there is a local minima closest to peak time.    
-
-        Args:
-            version (str): The version of the trace to use for
-        """
-        for peak in self.peaks:
-            left, right = find_valley_bounds(self.versions[version], peak.rel_start_time, peak.rel_end_time)
-            peak.start_time = max(left, peak.start_time)
-            peak.end_time = min(right, peak.end_time)
-            peak.duration = peak.end_time - peak.start_time
-
 
     def get_peak_starting_at(self, frame: int) -> Optional["Peak"]:
         """

@@ -11,7 +11,7 @@ import numpy as np
 from scipy.signal import find_peaks, peak_widths, peak_prominences
 from collections import defaultdict, deque
 import logging
-from dataclasses import asdict
+from calcium_activity_characterization.utilities.peak_utils import find_valley_bounds
 
 from calcium_activity_characterization.config.presets import PeakDetectionConfig
 
@@ -147,10 +147,11 @@ class PeakDetector:
             list[Peak]: List of detected peaks.
         """
         peaks = self._detect(trace)
+        peaks = self._refine_peak_durations(peaks, np.array(trace, dtype=float))
         peaks = self._group_overlapping_peaks(peaks)
 
         if self.config.filter_overlapping_peaks:
-            peaks = self._filter_non_parent_peaks(peaks)
+            peaks = self._filter_children_peaks(peaks)
             peaks = reassign_peak_ids(peaks)
 
         return peaks
@@ -238,90 +239,89 @@ class PeakDetector:
             raise NotImplementedError(f"Peak detection method '{self.method}' is not supported yet.")
 
 
-    def _group_overlapping_peaks(self, peaks: List[Peak]) -> List[Peak]:
+    def _refine_peak_durations(self, peaks: List[Peak], trace: np.ndarray) -> List[Peak]:
         """
-        Group peaks into overlapping components using transitive overlap logic.
+        Refine start/end times of each peak using find_valley_bounds.
 
         Args:
-            peaks (List[Peak]): List of Peak objects.
+            peaks (List[Peak]): Detected peaks.
+            trace (np.ndarray): Original trace.
+        """
+        for peak in peaks:
+            start, end = find_valley_bounds(trace, peak.rel_start_time, peak.rel_end_time)
+            peak.start_time = max(start, peak.start_time)
+            peak.end_time = min(end, peak.end_time)
+            peak.duration = peak.end_time - peak.start_time
+
+        return peaks
+
+    def _group_overlapping_peaks(self, peaks: List[Peak]) -> List[Peak]:
+        """
+        Identify parent-child peak relationships based on containment and height.
+
+        A peak is a parent of another if:
+            - The child peak time is within the parent's start and end
+            - The parent height is strictly greater than the child's height
+
+        Once a peak is labeled as a child, it will never be processed again.
 
         Returns:
-            List[Peak]: Peaks with group and role metadata updated.
+            List[Peak]: Peaks with group_id, parent_peak_id, and role assigned.
         """
         if not peaks:
             return []
 
-        overlap_margin = self.grouping_params.overlap_margin
         verbose = self.grouping_params.verbose
-
-        # Build adjacency list for overlapping peaks
-        graph = defaultdict(set)
-        for i, p1 in enumerate(peaks):
-            for j, p2 in enumerate(peaks):
-                if i >= j:
-                    continue
-                if p1.rel_start_time <= p2.rel_end_time + overlap_margin and p2.rel_start_time <= p1.rel_end_time + overlap_margin:
-                    graph[i].add(j)
-                    graph[j].add(i)
-
-        # Find connected components
-        visited = set()
-        groups = []
-
-        for i in range(len(peaks)):
-            if i in visited:
-                continue
-            queue = deque([i])
-            component = []
-            while queue:
-                idx = queue.popleft()
-                if idx in visited:
-                    continue
-                visited.add(idx)
-                component.append(peaks[idx])
-                queue.extend(graph[idx])
-            groups.append(component)
-
-        # Assign roles and IDs
-        grouped_peaks = []
         group_id_counter = 0
-        for group in groups:
-            if len(group) == 1:
-                peak = group[0]
-                peak.role = "individual"
-                peak.group_id = None
-                peak.parent_peak_id = None
-                grouped_peaks.append(peak)
-            else:
-                group_id = group_id_counter
-                parent_peak = max(group, key=lambda p: p.prominence)
-                parent_peak.role = "parent"
-                parent_peak.group_id = group_id
-                parent_peak.parent_peak_id = None
-                grouped_peaks.append(parent_peak)
+        grouped_peaks = []
+        seen_as_child = set()
 
-                for peak in group:
-                    if peak is parent_peak:
-                        continue
-                    peak.role = "member"
-                    peak.group_id = group_id
-                    peak.parent_peak_id = parent_peak.id
-                    grouped_peaks.append(peak)
+        for parent in peaks:
+            if parent.id in seen_as_child:
+                continue  # already a child → skip
 
+            current_group = []
+            for child in peaks:
+                if child.id == parent.id or child.id in seen_as_child:
+                    continue
+
+                if parent.start_time <= child.peak_time <= parent.end_time and parent.height > child.height:
+                    # Valid child
+                    child.group_id = group_id_counter
+                    child.parent_peak_id = parent.id
+                    child.role = "member"
+                    seen_as_child.add(child.id)
+                    current_group.append(child)
+
+            if current_group:
+                # Mark parent
+                parent.group_id = group_id_counter
+                parent.parent_peak_id = None
+                parent.role = "parent"
+                grouped_peaks.append(parent)
+                grouped_peaks.extend(current_group)
                 group_id_counter += 1
+            else:
+                # No children found → individual
+                parent.group_id = None
+                parent.parent_peak_id = None
+                parent.role = "individual"
+                grouped_peaks.append(parent)
 
         if verbose:
-            logger.info(f"[PeakDetector] Formed {group_id_counter} overlapping groups.")
-            for gid in range(group_id_counter):
+            total_groups = len(set(p.group_id for p in grouped_peaks if p.group_id is not None))
+            logger.info(f"[PeakDetector] Formed {total_groups} containment-based groups.")
+            for gid in set(p.group_id for p in grouped_peaks if p.group_id is not None):
                 size = sum(p.group_id == gid for p in grouped_peaks)
                 logger.info(f" - Group {gid}: {size} peaks")
             num_individuals = sum(p.role == "individual" for p in grouped_peaks)
-            logger.info(f"[PeakDetector] Found {num_individuals} individual (non-overlapping) peaks.")
+            logger.info(f"[PeakDetector] Found {num_individuals} individual (non-nested) peaks.")
 
         return grouped_peaks
+
     
 
-    def _filter_non_parent_peaks(self, peaks: List[Peak]) -> List[Peak]:
+    def _filter_children_peaks(self, peaks: List[Peak]) -> List[Peak]:
         """
         Eliminate overlapping peaks, retaining only those with role='parent'.
 

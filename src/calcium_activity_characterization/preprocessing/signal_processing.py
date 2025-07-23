@@ -55,8 +55,6 @@ class SignalProcessor:
 
         Args:
             trace (Trace): Trace object to process.
-            input_version (str): Key of the initial trace version to process.
-            output_version (str): Key to assign the final processed trace.
 
         Returns:
             np.ndarray: Processed trace data.

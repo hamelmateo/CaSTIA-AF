@@ -844,7 +844,6 @@ class HdbscanParams(ClusteringParams):
 
 @dataclass
 class AgglomerativeParams(ClusteringParams):
-    #TODO - check is we can put None if we put a type hint
     n_clusters: int = None
     distance_threshold: float = 0.5
     linkage: LinkageType = LinkageType.COMPLETE

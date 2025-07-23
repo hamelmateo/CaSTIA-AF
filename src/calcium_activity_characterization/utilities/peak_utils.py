@@ -14,7 +14,7 @@ def find_valley_bounds(
     rel_start_time: int,
     rel_end_time: int,
     max_search: int = 350,
-    window: int = 5
+    window: int = 25
 ) -> Tuple[int, int]:
     """
     Find the left and right valley bounds of a peak in a 1D trace.
@@ -27,7 +27,7 @@ def find_valley_bounds(
         rel_start_time (int): Approximate relative start time of the peak.
         rel_end_time (int): Approximate relative end time of the peak.
         max_search (int, optional): Maximum number of frames to search left and right. Defaults to 350.
-        window (int, optional): Number of neighboring frames to consider when detecting a valley. Defaults to 5.
+        window (int, optional): Number of neighboring frames to consider when detecting a valley. Defaults to 25.
 
     Returns:
         Tuple[int, int]: Refined (start_time, end_time) indices of the valley bounds.

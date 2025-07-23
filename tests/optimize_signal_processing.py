@@ -1,8 +1,7 @@
-'''
-Usage example:
-    >>> python optimize_signal_processing.py
-    # GUI will prompt to load a pickle file and visualize raw/processed/bin traces
-'''
+# optimize_signal_processing.py
+# Usage example:
+#     >>> python optimize_signal_processing.py
+#     # GUI will prompt to load a pickle file and visualize raw/processed/bin traces
 
 import sys
 import random
@@ -17,7 +16,18 @@ from datetime import datetime
 from pathlib import Path
 import logging
 
-from calcium_activity_characterization.config.config import INDIV_SIGNAL_PROCESSING_PARAMETERS, INDIV_PEAK_DETECTION_PARAMETERS
+from calcium_activity_characterization.config.structures import (
+    SignalProcessingConfig, DetrendingConfig, NormalizationConfig,
+    DetrendingMethod, NormalizationMethod,
+    LocalMinimaParams, MovingAverageParams, PolynomialParams,
+    RobustPolyParams, ButterworthParams, FIRParams, SavgolParams,
+    DeltaFParams, ZScoreParams, MinMaxParams, PercentileParams,
+    DetrendingParams, NormalizationParams,
+    SignalProcessingPipeline,
+    PeakDetectionConfig, PeakDetectionMethod, SkimageParams,
+    PeakGroupingParams
+)
+from calcium_activity_characterization.config.presets import STANDARD_ZSCORE_SIGNAL_PROCESSING, CELL_PEAK_DETECTION_CONFIG
 from calcium_activity_characterization.preprocessing.signal_processing import SignalProcessor
 from calcium_activity_characterization.utilities.loader import load_pickle_file
 
@@ -34,14 +44,39 @@ def _safe_parse(text):
         return text
 
 
+def build_detrending_params(method: str, values: dict) -> DetrendingParams:
+    if method == "localminima":
+        return LocalMinimaParams(**values)
+    elif method == "movingaverage":
+        return MovingAverageParams(**values)
+    elif method == "polynomial":
+        return PolynomialParams(**values)
+    elif method == "robustpoly":
+        return RobustPolyParams(**values)
+    elif method == "butterworth":
+        return ButterworthParams(**values)
+    elif method == "fir":
+        return FIRParams(**values)
+    elif method == "savgol":
+        return SavgolParams(**values)
+    else:
+        raise ValueError(f"Unsupported detrending method: {method}")
+
+
+def build_normalization_params(method: str) -> NormalizationParams:
+    if method == "zscore":
+        return ZScoreParams()
+    elif method == "deltaf":
+        return DeltaFParams()
+    elif method == "minmax":
+        return MinMaxParams()
+    elif method == "percentile":
+        return PercentileParams()
+    else:
+        raise ValueError(f"Unsupported normalization method: {method}")
+
+
 class SignalProcessingBinarizedGUI(QMainWindow):
-    """
-    GUI to explore signal processing, peak detection, and trace binarization on random or selected cells.
-
-    Args:
-        cells (List[Cell]): Loaded cell objects with raw trace data.
-    """
-
     def __init__(self, cells):
         super().__init__()
         self.setWindowTitle("Signal Processing + Peaks + Binarized GUI")
@@ -50,32 +85,30 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         self.random_cells = random.sample(cells, min(5, len(cells)))
         self.selected_cells = []
 
-        # Layouts
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QHBoxLayout(main_widget)
 
-        # Left: Controls
         control_layout = QVBoxLayout()
 
         self.detrend_checkbox = QCheckBox("Apply Detrending")
         control_layout.addWidget(self.detrend_checkbox)
 
-        self.smooth_checkbox = QCheckBox("Apply Smoothing")
-        control_layout.addWidget(self.smooth_checkbox)
-
         self.normalize_checkbox = QCheckBox("Apply Normalization")
         control_layout.addWidget(self.normalize_checkbox)
 
+        self.smooth_checkbox = QCheckBox("Apply Smoothing")
+        control_layout.addWidget(self.smooth_checkbox)
+
         control_layout.addWidget(QLabel("Detrending Method:"))
         self.detrending_combo = QComboBox()
-        self.detrending_combo.addItems(INDIV_SIGNAL_PROCESSING_PARAMETERS["methods"].keys())
+        self.detrending_combo.addItems([m.value for m in DetrendingMethod])
         self.detrending_combo.currentTextChanged.connect(self.reset_parameter_fields)
         control_layout.addWidget(self.detrending_combo)
 
         control_layout.addWidget(QLabel("Normalization Method:"))
         self.norm_combo = QComboBox()
-        self.norm_combo.addItems(["deltaf", "zscore", "minmax", "percentile"])
+        self.norm_combo.addItems([m.value for m in NormalizationMethod])
         control_layout.addWidget(self.norm_combo)
 
         control_layout.addWidget(QLabel("Sigma (smoothing):"))
@@ -99,11 +132,12 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
         self.peak_params = {}
         control_layout.addWidget(QLabel("Peak Detection Parameters:"))
-        for key, val in INDIV_PEAK_DETECTION_PARAMETERS["params"]["skimage"].items():
+        for key, val in vars(CELL_PEAK_DETECTION_CONFIG.params).items():
             field = QLineEdit(str(val))
             control_layout.addWidget(QLabel(key))
             control_layout.addWidget(field)
             self.peak_params[key] = field
+
 
         self.refresh_button = QPushButton("Randomize Cells")
         self.refresh_button.clicked.connect(self.refresh_cells)
@@ -130,7 +164,6 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         control_layout.addWidget(QLabel("Detected Peaks Summary:"))
         control_layout.addWidget(self.peak_text)
 
-        # Right: Plot area
         self.figure, self.axs = plt.subplots(5, 3, figsize=(16, 10))
         self.canvas = FigureCanvas(self.figure)
 
@@ -144,36 +177,64 @@ class SignalProcessingBinarizedGUI(QMainWindow):
         while self.dynamic_form.rowCount() > 0:
             self.dynamic_form.removeRow(0)
         self.dynamic_fields = {}
-        defaults = INDIV_SIGNAL_PROCESSING_PARAMETERS["methods"].get(method, {})
-        for key, value in defaults.items():
-            input_field = QLineEdit(str(value))
-            self.dynamic_form.addRow(QLabel(key), input_field)
-            self.dynamic_fields[key] = input_field
+        default_class = build_detrending_params(method, {})
+        for field_name, default_val in default_class.__dict__.items():
+            field = QLineEdit(str(default_val))
+            self.dynamic_form.addRow(QLabel(field_name), field)
+            self.dynamic_fields[field_name] = field
 
-    def get_processor(self):
-        params = {
-            "apply": {
-                "detrending": self.detrend_checkbox.isChecked(),
-                "smoothing": self.smooth_checkbox.isChecked(),
-                "normalization": self.normalize_checkbox.isChecked(),
-            },
-            "detrending_mode": self.detrending_combo.currentText(),
-            "normalizing_method": self.norm_combo.currentText(),
-            "smoothing_sigma": float(self.sigma_input.text()),
-            "cut_trace_num_points": int(self.cut_trace_num_points_input.text()),
-            "methods": {}
-        }
+    def get_processor(self) -> SignalProcessor:
+        try:
+            detrend_method = self.detrending_combo.currentText()
+            norm_method = self.norm_combo.currentText()
+            detrend_values = {k: _safe_parse(f.text()) for k, f in self.dynamic_fields.items()}
 
-        method_name = self.detrending_combo.currentText()
-        method_params = {key: _safe_parse(field.text()) for key, field in self.dynamic_fields.items()}
-        params["methods"][method_name] = method_params
-        return SignalProcessor(config=params)
+            config = SignalProcessingConfig(
+                pipeline=SignalProcessingPipeline(
+                    detrending = self.detrend_checkbox.isChecked(),
+                    normalization = self.normalize_checkbox.isChecked(),
+                    smoothing = self.smooth_checkbox.isChecked()
+                ),
+                smoothing_sigma=float(self.sigma_input.text()),
+                normalization=NormalizationConfig(
+                    method=NormalizationMethod(norm_method),
+                    params=build_normalization_params(norm_method)
+                ),
+                detrending=DetrendingConfig(
+                    method=DetrendingMethod(detrend_method),
+                    params=build_detrending_params(detrend_method, detrend_values)
+                )
+            )
+            return SignalProcessor(config)
+        except Exception as e:
+            logger.error(f"Failed to construct SignalProcessor: {e}")
+            raise
 
-    def get_peak_params(self):
-        parsed = {"method": "skimage", "params": {"skimage": {}}}
-        for key, field in self.peak_params.items():
-            parsed["params"]["skimage"][key] = _safe_parse(field.text())
-        return parsed
+    def get_peak_params(self) -> PeakDetectionConfig:
+        """
+        Construct a PeakDetectionConfig from GUI inputs.
+
+        Returns:
+            PeakDetectionConfig: Configuration for peak detection.
+        """
+        try:
+            param_dict = {
+                key: _safe_parse(field.text())
+                for key, field in self.peak_params.items()
+            }
+
+            return PeakDetectionConfig(
+                method=PeakDetectionMethod.SKIMAGE,
+                params=SkimageParams(**param_dict),
+                peak_grouping=PeakGroupingParams(),  # or customize if needed
+                start_frame=None,
+                end_frame=None,
+                filter_overlapping_peaks=True,
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to construct PeakDetectionConfig: {e}")
+            raise
 
     def refresh_cells(self):
         self.selected_cells = []
@@ -182,8 +243,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
 
     def load_selected_cells(self):
         try:
-            label_text = self.selection_input.text()
-            label_ids = [int(val.strip()) for val in label_text.split(",") if val.strip().isdigit()]
+            label_ids = [int(val.strip()) for val in self.selection_input.text().split(",") if val.strip().isdigit()]
             label_set = set(label_ids)
             self.selected_cells = [cell for cell in self.cells if cell.label in label_set]
         except Exception as e:
@@ -207,38 +267,30 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             processed = processor.run(raw)
             cell.trace.versions["processed"] = processed.tolist()
             cell.trace.default_version = "processed"
-
             cell.trace.detect_peaks(peak_params)
             cell.trace.binarize_trace_from_peaks()
 
             ax_raw, ax_proc, ax_bin = self.axs[i]
             ax_raw.plot(raw, color='black')
-            ax_raw.set_title(f"Cell {cell.label} - Raw")
-            ax_raw.set_xlabel("Time")
-            ax_raw.set_ylabel("Intensity")
-            ax_raw.grid(True)
-
-            ax_proc.plot(processed, color='blue', label="Processed")
+            ax_proc.plot(processed, color='blue')
             for peak in cell.trace.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
-                ax_proc.axvspan(peak.rel_start_time, peak.rel_end_time,
+                ax_proc.axvspan(peak.start_time, peak.end_time,
                                 color=colors[peak.id % len(colors)], alpha=0.3)
-            ax_proc.set_title("Processed + Peaks")
-            ax_proc.set_xlabel("Time")
-            ax_proc.set_ylabel("Intensity")
-            ax_proc.grid(True)
-
             ax_bin.plot(cell.trace.binary, color='green')
-            ax_bin.set_title("Binarized (from peaks)")
-            ax_bin.set_xlabel("Time")
-            ax_bin.set_ylabel("0/1")
-            ax_bin.grid(True)
 
-            peak_lines = [
-                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, rise={p.rel_rise_time}, prom={p.prominence:.2f}, rel_duration={p.rel_duration:.2f}, height={p.height:.2f}, class={p.scale_class}"
+            ax_raw.set_title(f"Cell {cell.label} - Raw")
+            ax_proc.set_title("Processed + Peaks")
+            ax_bin.set_title("Binarized (from peaks)")
+            for ax in (ax_raw, ax_proc, ax_bin):
+                ax.set_xlabel("Time")
+                ax.grid(True)
+
+            lines = [
+                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, prom={p.prominence:.2f}, dur={p.rel_duration:.2f}, role={p.role}"
                 for p in cell.trace.peaks
             ]
-            self.peak_text.append("\n".join(peak_lines) + "\n")
+            self.peak_text.append("\n".join(lines) + "\n")
 
         self.figure.tight_layout()
         self.canvas.draw()
@@ -246,8 +298,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
     def save_figure(self):
         output_dir = Path("tests/signal_peaks_test/figures")
         output_dir.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = output_dir / f"result_plot_{timestamp}.png"
+        path = output_dir / f"result_plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         self.figure.savefig(str(path))
         logger.info(f"Saved plot to {path}")
 

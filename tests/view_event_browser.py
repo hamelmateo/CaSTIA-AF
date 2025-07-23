@@ -112,14 +112,25 @@ class EventViewer(QMainWindow):
             return
         folder = Path(folder)
 
-        with open(folder / "04_population_events.pkl", 'rb') as f:
+        # Load population pickle
+        pkl_path = folder / "population-snapshots" / "04_population_events.pkl"
+        if not pkl_path.exists():
+            raise FileNotFoundError(f"Population file not found: {pkl_path}")
+        with open(pkl_path, 'rb') as f:
             self.population = pickle.load(f)
             self.events = self.population.events
 
-        overlay_path = folder / "nuclei_mask.TIF"
-        if not overlay_path.exists():
-            overlay_path = folder / "nuclei_mask.tif"
-        overlay = tifffile.imread(str(overlay_path))
+        # Load nuclei mask (grayscale image)
+        mask_path_upper = folder / "cell-mapping" / "nuclei_mask.TIF"
+        mask_path_lower = folder / "cell-mapping" / "nuclei_mask.tif"
+        if mask_path_upper.exists():
+            mask_path = mask_path_upper
+        elif mask_path_lower.exists():
+            mask_path = mask_path_lower
+        else:
+            raise FileNotFoundError(f"Nuclei mask not found in: {folder / 'cell-mapping'}")
+        
+        overlay = tifffile.imread(str(mask_path))
         base = np.zeros((*overlay.shape, 3), dtype=np.uint8)
         base[overlay > 0] = [128, 128, 128]
         self.base_rgb = base

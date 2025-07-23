@@ -1,14 +1,14 @@
 # config/presets.py
 # Preset configuration instances using structures.py
 
-from config.structures import *
+from .structures import *
 
 
 # ===========================
 # FLAGS
 # ===========================
 DEBUG_CONFIG = DebugConfig(
-    debugging=True,
+    debugging=False,
     debugging_file_path="D:/Mateo/20250326/Data/IS1",
     harddrive_path="D:/Mateo"
 )
@@ -92,7 +92,7 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
         normalization=True,
         smoothing=True
     ),
-    smoothing_sigma=2.0,
+    smoothing_sigma=3.0,
     normalization=NormalizationConfig(
         method=NormalizationMethod.ZSCORE,
         params=ZScoreParams(
@@ -122,7 +122,7 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
             
             fitting_method="linear",
 
-            diagnostics_enabled=True,
+            diagnostics_enabled=False,
             diagnostics_output_dir="D:/Mateo/20250326/Output/IS1/debugging/detrending-diagnostics",
         )
     )
@@ -141,7 +141,7 @@ CELL_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
         width=None,
         scale_class_quantiles=(0.33,0.66),
         relative_height=0.3,
-        full_duration_threshold=0.95
+        full_duration_threshold=0.9
     ),
     peak_grouping=PeakGroupingParams(
         overlap_margin=0,
@@ -156,7 +156,6 @@ CELL_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
 # ACTIVITY TRACE PROCESSING & GLOBAL THRESHOLDING CONFIG
 # ===========================
 ACTIVITY_TRACE_PROCESSING_CONFIG = SignalProcessingConfig(
-    # TODO - check if default value really works or not
     pipeline=SignalProcessingPipeline(
         detrending=False,
         normalization=False,
