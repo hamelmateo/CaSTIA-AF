@@ -174,7 +174,7 @@ class Population:
                                signal_processing_params: SignalProcessingConfig = None, 
                                peak_detection_params: PeakDetectionConfig = None) -> None:
         """
-        Compute the impulse trace as the sum of rel_start_time occurrences across all cells.
+        Compute the impulse trace as the sum of fhw_start_time occurrences across all cells.
 
         This trace reflects the number of cell peaks that start at each timepoint.
 
@@ -192,15 +192,15 @@ class Population:
         impulse_traces = []
 
         max_time = max(
-            (max((p.rel_start_time for p in cell.trace.peaks), default=-1) for cell in self.cells),
+            (max((p.fhw_start_time for p in cell.trace.peaks), default=-1) for cell in self.cells),
             default=-1
         ) + 1
 
         for cell in self.cells:
             trace = np.zeros(max_time, dtype=int)
             for peak in cell.trace.peaks:
-                if 0 <= peak.rel_start_time < max_time:
-                    trace[peak.rel_start_time] = 1
+                if 0 <= peak.fhw_start_time < max_time:
+                    trace[peak.fhw_start_time] = 1
             impulse_traces.append(trace)
 
         trace_lengths = set(len(t) for t in impulse_traces)

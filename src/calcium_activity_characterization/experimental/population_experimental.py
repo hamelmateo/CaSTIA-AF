@@ -24,7 +24,7 @@ def compute_population_distributions(self) -> None:
     in_event_types = []
 
     for cell in self.cells:
-        durations.extend([p.rel_duration for p in cell.trace.peaks])
+        durations.extend([p.fhw_duration for p in cell.trace.peaks])
         prominences.extend([p.prominence for p in cell.trace.peaks])
         if "periodicity_score" in cell.trace.metadata:
             periodicity_scores.append(cell.trace.metadata["periodicity_score"])
@@ -121,7 +121,7 @@ def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, s
     self.metadata["fraction_inactive_cells"] = n_inactive / n_total if n_total else 0
 
     # 2. Duration, prominence, periodicity score, peak frequencies and number of peaks distributions
-    durations = [peak.rel_duration for cell in self.cells for peak in cell.trace.peaks]
+    durations = [peak.fhw_duration for cell in self.cells for peak in cell.trace.peaks]
     self.metadata["global_peak_duration_hist"] = compute_histogram_func(durations, bin_width=bin_width)
 
     prominences = [peak.prominence for cell in self.cells for peak in cell.trace.peaks]
@@ -149,14 +149,14 @@ def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, s
     step_size = 50
     peaks_per_cell_concatenated = [cell.trace.peaks for cell in self.cells]
     self.metadata["population_peak_frequency_evolution"] = compute_peak_frequency_over_time(
-        [[peak.rel_start_time for peak in peaks] for peaks in peaks_per_cell_concatenated],
+        [[peak.fhw_start_time for peak in peaks] for peaks in peaks_per_cell_concatenated],
         max_len,
         window_size=window_size,
         step_size=step_size
     )
 
     # 6. Synchrony between peaks
-    peak_times = [(cell_idx, p.rel_start_time) for cell_idx, cell in enumerate(self.cells) for p in cell.trace.peaks]
+    peak_times = [(cell_idx, p.fhw_start_time) for cell_idx, cell in enumerate(self.cells) for p in cell.trace.peaks]
     peak_times.sort(key=lambda x: x[1])
     total_peaks = len(peak_times)
     count_synch = 0
@@ -170,7 +170,7 @@ def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, s
     self.metadata["proportion_synchronous_peaks"] = count_synch / total_peaks if total_peaks else 0
 
     # 7. Peak start time entropy
-    start_times = [p.rel_start_time for cell in self.cells for p in cell.trace.peaks]
+    start_times = [p.fhw_start_time for cell in self.cells for p in cell.trace.peaks]
     if start_times:
         hist, _ = np.histogram(start_times, bins=np.arange(0, max(start_times) + bin_width, bin_width))
         probs = hist / np.sum(hist)
@@ -179,7 +179,7 @@ def compute_population_metrics(self, bin_counts: int = 20, bin_width: int = 1, s
     # 8. Inter-peak interval (IPI) entropy
     ipis = []
     for cell in self.cells:
-        times = sorted(p.rel_start_time for p in cell.trace.peaks)
+        times = sorted(p.fhw_start_time for p in cell.trace.peaks)
         ipis.extend(j - i for i, j in zip(times[:-1], times[1:]) if j > i)
     if ipis:
         hist, _ = np.histogram(ipis, bins=np.arange(0, max(ipis) + bin_width, bin_width))

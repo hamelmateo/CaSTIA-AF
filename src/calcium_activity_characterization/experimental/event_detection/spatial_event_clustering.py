@@ -65,7 +65,7 @@ class SpatialEventClusteringEngine:
                 window_start = global_peak.start_time
                 window_end = global_peak.end_time
                 active_entries = self._get_active_entries(population, window_start, window_end)
-                active_entries.sort(key=lambda x: x[0].trace.peaks[x[1]].rel_start_time)
+                active_entries.sort(key=lambda x: x[0].trace.peaks[x[1]].fhw_start_time)
                 clusters = self._cluster_combined(active_entries, max_comm_time, indirect_hops)
                 self.event_clusters.append(clusters)
 
@@ -85,7 +85,7 @@ class SpatialEventClusteringEngine:
         active_entries = []
         for cell in population.cells:
             for i, peak in enumerate(cell.trace.peaks):
-                if window_start <= peak.rel_start_time < window_end and not peak.in_cluster:
+                if window_start <= peak.fhw_start_time < window_end and not peak.in_cluster:
                     active_entries.append((cell, i))
         return active_entries
 
@@ -144,7 +144,7 @@ class SpatialEventClusteringEngine:
                 other_cell, other_idx = label_to_entry[other_label]
                 other_peak = other_cell.trace.peaks[other_idx]
                 if self.pipeline.get("use_sequential", False):
-                    time_diff = abs(other_peak.rel_start_time - peak.rel_start_time)
+                    time_diff = abs(other_peak.fhw_start_time - peak.fhw_start_time)
                     if time_diff > max_comm_time:
                         continue
                 cluster.add(other_cell, other_idx)

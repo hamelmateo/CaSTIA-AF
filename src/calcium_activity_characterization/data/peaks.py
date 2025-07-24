@@ -23,75 +23,82 @@ class Peak:
     Represents a calcium transient peak with timing, intensity, and hierarchical metadata.
 
     Attributes:
-        id (int): Unique peak identifier.
-        peak_time (int): Frame index of the peak maximum.
-        start_time (int): Absolute start frame of the peak in the full trace.
-        end_time (int): Absolute end frame of the peak in the full trace.
-        duration (int): Absolute duration of the peak (end_time - start_time).
-        rel_start_time (int): Relative start frame of the peak within the processing window.
-        rel_end_time (int): Relative end frame of the peak within the processing window.
-        rel_duration (int): Duration of the peak in the relative frame (rel_end_time - rel_start_time).
-        height (float): Intensity at the peak maximum.
-        prominence (float): Peak prominence from baseline.
-        rel_height (Optional[float]): Peak height relative to the baseline in the window.
-        rise_time (int): Time from absolute start to peak.
-        decay_time (int): Time from peak to absolute end.
-        rel_rise_time (int): Time from relative start to peak.
-        rel_decay_time (int): Time from peak to relative end.
-        rel_symmetry_score (float): Symmetry of the peak shape based on relative rise vs decay.
-        group_id (Optional[int]): Overlapping group ID (if any).
-        parent_peak_id (Optional[int]): ID of the parent peak if this is part of an overlapping group.
-        role (Literal): Role in overlapping group ('individual', 'child', or 'parent').
-        scale_class (Optional[str]): Prominence scale class ('minor', 'major', 'super').
-        in_cluster (bool): Whether the peak has been assigned to a cluster.
-        cluster_id (Optional[int]): ID of the assigned cluster, if any.
-        is_analyzed (bool): Whether the peak has been analyzed.
-        in_event (Literal): Type of event this peak is part of ('global' or 'sequential').
-        origin_type (Literal): Type of cause for this peak ('origin', 'caused', or 'individual').
+        id (int): Unique identifier for the peak.
+        peak_time (int): Time at which the peak reaches its maximum intensity.
+        start_time (int): Start time at baseline before the peak rises.
+        end_time (int): End time when the peak returns to baseline.
+        duration (int): Duration of the peak at baseline (end_time - start_time).
+        fhw_start_time (int): Start time at relative height threshold.
+        fhw_end_time (int): End time at relative height threshold.
+        fhw_duration (int): Duration of the peak at relative height (fhw_end_time - fhw_start_time).
+        ref_start_time (int): Reference start time used for event detection.
+        ref_end_time (int): Reference end time used for event detection.
+        ref_duration (int): Duration between reference start and end times.
+        height (float): Absolute height of the peak.
+        fhw_height (Optional[float]): Height of the peak relative to a reference value.
+        prominence (float): Prominence of the peak compared to surrounding baseline.
+        rise_time (int): Time from start_time to peak_time.
+        decay_time (int): Time from peak_time to end_time.
+        rel_rise_time (int): Time from fhw_start_time to peak_time.
+        rel_decay_time (int): Time from peak_time to fhw_end_time.
+        rel_symmetry_score (float): Symmetry score of the peak shape (1 = perfect symmetry).
+        group_id (Optional[int]): ID of the overlapping group this peak belongs to.
+        parent_peak_id (Optional[int]): ID of the parent peak if part of an overlapping group.
+        grouping_type (Optional[Literal["individual", "child", "parent"]]): Role in the overlapping group.
+        is_analyzed (bool): Flag indicating if this peak has been analyzed.
+        in_event (Literal["global", "sequential"]): Type of event this peak is part of, if any.
+        event_id (Optional[int]): ID of the event this peak is part of, if any.
+        origin_type (Literal["origin", "caused", "individual"]): Type of cause for this peak.
         origin_label (Optional[int]): Label of the origin peak if this is a caused peak.
+        in_cluster (bool): Flag indicating if this peak has been added to a cluster (deprecated).
+        cluster_id (Optional[int]): ID of the assigned cluster (deprecated).
     """
     def __init__(
         self,
         id: int,
-        rel_start_time: int,
+        fhw_start_time: int,
         peak_time: int,
         start_time: int,
         end_time: int,
-        rel_end_time: int,
+        fhw_end_time: int,
         height: float,
         prominence: float,
-        group_id: Optional[int] = None,
-        parent_peak_id: Optional[int] = None,
-        role: Literal["individual", "child", "parent"] = "individual",
-        rel_height: Optional[float] = None
+        fhw_height: Optional[float] = None
     ):
         self.id = id
+
+        # Timing metadata
         self.peak_time = peak_time
-        self.start_time = start_time
+
+        self.start_time = start_time # Start time at baseline
         self.end_time = end_time
         self.duration = end_time - start_time
-        self.rel_height = rel_height
-        self.rel_start_time = rel_start_time
-        self.rel_end_time = rel_end_time
-        self.rel_duration = rel_end_time - rel_start_time
+
+        self.fhw_start_time = fhw_start_time # Start time at relative height
+        self.fhw_end_time = fhw_end_time
+        self.fhw_duration = fhw_end_time - fhw_start_time
+
+        self.ref_start_time: int # Start time used for reference in event detection
+        self.ref_end_time: int
+        self.ref_duration: int
+
+        # Peak metadata
         self.height = height
+        self.fhw_height = fhw_height
         self.prominence = prominence
 
         self.rise_time = peak_time - start_time
         self.decay_time = end_time - peak_time
-        self.rel_rise_time = peak_time - rel_start_time
-        self.rel_decay_time = rel_end_time - peak_time
+        self.rel_rise_time = peak_time - fhw_start_time
+        self.rel_decay_time = fhw_end_time - peak_time
         self.rel_symmetry_score: float = self._compute_symmetry_score()
 
-        self.group_id = group_id
-        self.parent_peak_id = parent_peak_id
-        self.role = role
+        # Grouping metadata
+        self.group_id: Optional[int] = None  # ID of the overlapping group this peak belongs to
+        self.parent_peak_id: Optional[int] = None  # ID of the parent peak if this is part of an overlapping group
+        self.grouping_type: Optional[Literal["individual", "child", "parent"]] = None # Role in the overlapping group
 
-        self.scale_class: Optional[str] = None  # e.g., 'minor', 'major', 'super'
-
-        self.in_cluster: bool = False  # Set True once this peak is added to a cluster
-        self.cluster_id: Optional[int] = None  # ID of the assigned cluster
-
+        # Event metadata
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
         self.in_event: Literal["global", "sequential"] = None  # Type of event this peak is part of, if any
         self.event_id: Optional[int] = None  # ID of the event this peak is part of, if any
@@ -99,6 +106,9 @@ class Peak:
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
         self.origin_label: Optional[int] = None # Label of the origin peak if this is a caused peak
 
+        # Deprecated attributes for experimental methods
+        self.in_cluster: bool = False  # Set True once this peak is added to a cluster
+        self.cluster_id: Optional[int] = None  # ID of the assigned cluster
 
 
     def _compute_symmetry_score(self) -> Optional[float]:
@@ -115,9 +125,20 @@ class Peak:
 
     def __repr__(self):
         return (
-            f"Peak(id={self.id}, time={self.rel_start_time}, height={self.height:.2f}, in_event={self.in_event})"
+            f"Peak(id={self.id}, time={self.fhw_start_time}, height={self.height:.2f}, in_event={self.in_event})"
         )
+    
+    def define_ref_times(self, ref_start_time: int, ref_end_time: int):
+        """
+        Define reference start and end times for this peak.
 
+        Args:
+            ref_start_time (int): Reference start time.
+            ref_end_time (int): Reference end time.
+        """
+        self.ref_start_time = ref_start_time
+        self.ref_end_time = ref_end_time
+        self.ref_duration = ref_end_time - ref_start_time
 
 class PeakDetector:
     """
@@ -131,6 +152,7 @@ class PeakDetector:
             params (PeakDetectionConfig): Parameters for peak detection.
         """
         self.config = config
+        self.verbose = config.verbose
         self.method = config.method
         self.detection_params = config.params
         self.grouping_params = config.peak_grouping
@@ -138,7 +160,7 @@ class PeakDetector:
 
     def run(self, trace: list[float]) -> list[Peak]:
         """
-        Execute peak detection on the provided trace.
+        Execute peak detection and processing on the provided trace.
         
         Args:
             trace (list[float]): Calcium intensity trace.
@@ -147,12 +169,17 @@ class PeakDetector:
             list[Peak]: List of detected peaks.
         """
         peaks = self._detect(trace)
-        peaks = self._refine_peak_durations(peaks, np.array(trace, dtype=float))
         peaks = self._group_overlapping_peaks(peaks)
+
+        if self.config.refine_durations:
+            peaks = self._refine_peak_durations(peaks, trace)
 
         if self.config.filter_overlapping_peaks:
             peaks = self._filter_children_peaks(peaks)
             peaks = reassign_peak_ids(peaks)
+
+        for peak in peaks:
+            peak.define_ref_times(peak.fhw_start_time, peak.fhw_end_time)
 
         return peaks
 
@@ -192,46 +219,31 @@ class PeakDetector:
             prominences, _, _ = peak_prominences(subtrace, peaks)
 
             # Compute relative heights parameters
-            _, _, rel_left_ips, rel_right_ips = peak_widths(subtrace, peaks, rel_height=self.detection_params.relative_height)
+            _, _, rel_left_ips, rel_right_ips = peak_widths(subtrace, peaks, rel_height=self.detection_params.full_half_width)
 
             # Compute whole widths
             _, _, left_ips, right_ips = peak_widths(subtrace, peaks, rel_height=self.detection_params.full_duration_threshold)
 
-            # Step 2: Classify peaks by scale
-            if len(prominences) > 0:
-                quantiles = np.quantile(prominences, self.detection_params.scale_class_quantiles)
-            else:
-                quantiles = [0, 0]
-
             peak_list = []
             for i, peak_time in enumerate(peaks):
-                rel_start_time = int(np.floor(rel_left_ips[i])) + start_frame
-                rel_end_time = int(np.ceil(rel_right_ips[i])) + start_frame
+                fhw_start_time = int(np.floor(rel_left_ips[i])) + start_frame
+                fhw_end_time = int(np.ceil(rel_right_ips[i])) + start_frame
                 start_time = int(np.floor(left_ips[i])) + start_frame
                 end_time = int(np.ceil(right_ips[i])) + start_frame
                 prominence = float(prominences[i])
                 height = float(subtrace[peak_time])
 
-                # Assign scale class
-                if prominence < quantiles[0]:
-                    scale_class = "minor"
-                elif prominence < quantiles[1]:
-                    scale_class = "major"
-                else:
-                    scale_class = "super"
-
                 peak = Peak(
                     id=i,
                     start_time=start_time,
                     end_time=end_time,
-                    rel_start_time=rel_start_time,
+                    fhw_start_time=fhw_start_time,
                     peak_time=peak_time,
-                    rel_end_time=rel_end_time,
+                    fhw_end_time=fhw_end_time,
                     height=height,
                     prominence=prominence,
-                    rel_height=self.detection_params.relative_height
+                    fhw_height=self.detection_params.full_half_width
                 )
-                peak.scale_class = scale_class
                 peak_list.append(peak)
 
             return peak_list
@@ -247,8 +259,10 @@ class PeakDetector:
             peaks (List[Peak]): Detected peaks.
             trace (np.ndarray): Original trace.
         """
+        trace = np.array(trace, dtype=float)
+
         for peak in peaks:
-            start, end = find_valley_bounds(trace, peak.rel_start_time, peak.rel_end_time)
+            start, end = find_valley_bounds(trace, peak.fhw_start_time, peak.fhw_end_time)
             peak.start_time = max(start, peak.start_time)
             peak.end_time = min(end, peak.end_time)
             peak.duration = peak.end_time - peak.start_time
@@ -259,11 +273,14 @@ class PeakDetector:
         """
         Identify parent-child peak relationships based on containment and height.
 
-        A peak is a parent of another if:
-            - The child peak time is within the parent's start and end
-            - The parent height is strictly greater than the child's height
+        # There are three categories for peak grouping:
+        # - "individual": Peaks that do not overlap with any other peak and are not part of a group.
+        # - "parent": Peaks that contain one or more overlapping (child) peaks within their duration and have the highest height in their group.
+        # - "child": Peaks that are overlapped by a parent peak and are assigned to the same group as the parent.
+        # These categories help distinguish isolated events ("individual"), main events with nested sub-peaks ("parent"), and overlapping sub-events ("child").
 
-        Once a peak is labeled as a child, it will never be processed again.
+        Args:
+            peaks (List[Peak]): List of detected peaks.
 
         Returns:
             List[Peak]: Peaks with group_id, parent_peak_id, and role assigned.
@@ -271,7 +288,7 @@ class PeakDetector:
         if not peaks:
             return []
 
-        verbose = self.grouping_params.verbose
+        verbose = self.verbose
         group_id_counter = 0
         grouped_peaks = []
         seen_as_child = set()
@@ -285,11 +302,15 @@ class PeakDetector:
                 if child.id == parent.id or child.id in seen_as_child:
                     continue
 
-                if parent.start_time <= child.peak_time <= parent.end_time and parent.height > child.height:
+                fhw_overlap = max(0, min(parent.fhw_end_time, child.fhw_end_time) - max(parent.fhw_start_time, child.fhw_start_time))
+                if fhw_overlap < 2:
+                    continue
+
+                if parent.height > child.height or (parent.height == child.height and parent.peak_time < child.peak_time):
                     # Valid child
                     child.group_id = group_id_counter
                     child.parent_peak_id = parent.id
-                    child.role = "member"
+                    child.grouping_type = "child"
                     seen_as_child.add(child.id)
                     current_group.append(child)
 
@@ -297,7 +318,7 @@ class PeakDetector:
                 # Mark parent
                 parent.group_id = group_id_counter
                 parent.parent_peak_id = None
-                parent.role = "parent"
+                parent.grouping_type = "parent"
                 grouped_peaks.append(parent)
                 grouped_peaks.extend(current_group)
                 group_id_counter += 1
@@ -305,7 +326,7 @@ class PeakDetector:
                 # No children found → individual
                 parent.group_id = None
                 parent.parent_peak_id = None
-                parent.role = "individual"
+                parent.grouping_type = "individual"
                 grouped_peaks.append(parent)
 
         if verbose:
@@ -314,7 +335,7 @@ class PeakDetector:
             for gid in set(p.group_id for p in grouped_peaks if p.group_id is not None):
                 size = sum(p.group_id == gid for p in grouped_peaks)
                 logger.info(f" - Group {gid}: {size} peaks")
-            num_individuals = sum(p.role == "individual" for p in grouped_peaks)
+            num_individuals = sum(p.grouping_type == "individual" for p in grouped_peaks)
             logger.info(f"[PeakDetector] Found {num_individuals} individual (non-nested) peaks.")
 
         return grouped_peaks
@@ -331,10 +352,11 @@ class PeakDetector:
         Returns:
             List[Peak]: Filtered peaks.
         """
-        filtered = [p for p in peaks if p.role == "individual" or p.role == "parent"]
+        filtered = [p for p in peaks if p.grouping_type == "individual" or p.grouping_type == "parent"]
         n_removed = len(peaks) - len(filtered)
         if n_removed > 0:
-            logger.info(f"[PeakDetector] Eliminated {n_removed} overlapping peaks (non-parents).")
+            if self.verbose:
+                logger.info(f"[PeakDetector] Eliminated {n_removed} overlapping peaks (non-parents).")
         return filtered
 
 

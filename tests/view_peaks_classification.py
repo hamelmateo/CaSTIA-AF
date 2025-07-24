@@ -160,8 +160,8 @@ class SequentialSelectivityViewer(QMainWindow):
                 cause_peak = cause_cell.trace.peaks[c_idx]
             except IndexError:
                 continue
-            start = cause_peak.rel_start_time
-            end = min(origin_peak.rel_end_time, cause_peak.rel_end_time)
+            start = cause_peak.fhw_start_time
+            end = min(origin_peak.fhw_end_time, cause_peak.fhw_end_time)
             self.arrow_intervals.append((start, end, origin_cell.centroid, cause_cell.centroid))
 
     def update_frame(self):
@@ -176,7 +176,7 @@ class SequentialSelectivityViewer(QMainWindow):
                 continue
             active_peak = None
             for peak in cell.trace.peaks:
-                if peak.rel_start_time <= frame <= peak.rel_end_time:
+                if peak.fhw_start_time <= frame <= peak.fhw_end_time:
                     active_peak = peak
                     break
             if not active_peak:

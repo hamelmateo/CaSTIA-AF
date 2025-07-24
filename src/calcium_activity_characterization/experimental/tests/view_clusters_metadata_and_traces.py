@@ -127,7 +127,7 @@ class ClusterViewer(QMainWindow):
             peak = cell.peaks[peak_idx]
             self.cluster_info.append(
                 f"Cell {cell.label} - Peak {peak_idx}: "
-                f"t={peak.peak_time}, dur={peak.rel_duration}, prom={peak.prominence:.2f}"
+                f"t={peak.peak_time}, dur={peak.fhw_duration}, prom={peak.prominence:.2f}"
             )
 
     def _randomize_cells(self):

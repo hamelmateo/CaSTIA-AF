@@ -108,7 +108,7 @@ BASELINE_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.97, # Relative height for relative duration calculation
+            "full_half_width": 0.97, # Relative height for relative duration calculation
             "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
@@ -229,8 +229,8 @@ INDIV_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,  # Minimum vertical drop to each neighbor — avoids detecting small shoulders or micro-peaks
             "distance": 20,  # Minimum number of frames between two peaks — helps prevent double-detection of the same event
             "prominence": None,  # Not used — Prominence-based filtering
-            "width": None,  # Optional - If set, filters peaks by their width at `rel_height`
-            "relative_height": 0.3,  # Used for measuring peak width and duration — the fraction of peak height where width is evaluated
+            "width": None,  # Optional - If set, filters peaks by their width at `fhw_height`
+            "full_half_width": 0.3,  # Used for measuring peak width and duration — the fraction of peak height where width is evaluated
             "full_duration_threshold": 0.95  # Used to compute full peak duration (e.g., near base) — defines the fraction of max height to use when measuring width
         }
     },
@@ -312,7 +312,7 @@ ACTIVITY_TRACE_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_half_width": 0.3, # Relative height for relative duration calculation
             "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
@@ -365,7 +365,7 @@ GLOBAL_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_half_width": 0.3, # Relative height for relative duration calculation
             "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },
@@ -393,7 +393,7 @@ IMPULSE_PEAK_DETECTION_PARAMETERS = {
             "threshold": None,
             "width": None,
             "scale_class_quantiles": [0.33, 0.66],
-            "relative_height": 0.3, # Relative height for relative duration calculation
+            "full_half_width": 0.3, # Relative height for relative duration calculation
             "full_duration_threshold": 0.95 # Threshold for full duration of peaks
         }
     },

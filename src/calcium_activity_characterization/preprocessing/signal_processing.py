@@ -161,7 +161,7 @@ class SignalProcessor:
         # Create a mask for the detected peaks
         mask = np.zeros_like(trace, dtype=bool)
         for peak in peak_list:
-            mask[peak.rel_start_time:peak.rel_end_time + 1] = True
+            mask[peak.fhw_start_time:peak.fhw_end_time + 1] = True
         self.trace_versions["mask"] = mask.astype(np.float32)
         
         # Interpolate the trace where the mask is True

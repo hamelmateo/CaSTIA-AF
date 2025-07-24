@@ -57,11 +57,11 @@ def _get_framewise_active_labels(
     """
     framewise: Dict[int, List[int]] = {}
     for cell in cells:
-        valid_peaks = [p for p in cell.trace.peaks if start <= p.rel_start_time <= end]
+        valid_peaks = [p for p in cell.trace.peaks if start <= p.fhw_start_time <= end]
         if not valid_peaks:
             continue
-        best_peak = max(valid_peaks, key=lambda p: p.rel_start_time)
-        framewise.setdefault(best_peak.rel_start_time, []).append(cell.label)
+        best_peak = max(valid_peaks, key=lambda p: p.fhw_start_time)
+        framewise.setdefault(best_peak.fhw_start_time, []).append(cell.label)
     return framewise
 
 def _get_activated_cells(

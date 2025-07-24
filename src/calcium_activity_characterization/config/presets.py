@@ -123,7 +123,7 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
             fitting_method="linear",
 
             diagnostics_enabled=False,
-            diagnostics_output_dir="D:/Mateo/20250326/Output/IS1/debugging/detrending-diagnostics",
+            diagnostics_output_dir="D:/Mateo/20250404/Output/IS3/debugging/detrending-diagnostics",
         )
     )
 )
@@ -132,24 +132,25 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
 # INDIVIDUAL CELLS PEAK DETECTION CONFIG
 # ===========================
 CELL_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
+    verbose=False,
     method=PeakDetectionMethod.SKIMAGE,
     params=SkimageParams(
-        prominence=None,
+        prominence=15,
         distance=10,
-        height=20,
+        height=None,
         threshold=None,
         width=None,
         scale_class_quantiles=(0.33,0.66),
-        relative_height=0.3,
+        full_half_width=0.5, #FHW
         full_duration_threshold=0.9
     ),
     peak_grouping=PeakGroupingParams(
-        overlap_margin=0,
-        verbose=True
+        overlap_margin=0
     ),
     start_frame=None,
     end_frame=None,
-    filter_overlapping_peaks=True
+    filter_overlapping_peaks=True,
+    refine_durations=False
 )
 
 # ===========================
@@ -165,6 +166,7 @@ ACTIVITY_TRACE_PROCESSING_CONFIG = SignalProcessingConfig(
 )
 
 ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
+    verbose=False,
     method=PeakDetectionMethod.SKIMAGE,
     params=SkimageParams(
         prominence=10,
@@ -173,16 +175,16 @@ ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
         threshold=None,
         width=None,
         scale_class_quantiles=(0.33,0.66),
-        relative_height=0.3,
+        full_half_width=0.5,
         full_duration_threshold=0.95
     ),
     peak_grouping=PeakGroupingParams(
-        overlap_margin=0,
-        verbose=True
+        overlap_margin=0
     ),
     start_frame=50,
     end_frame=None,
-    filter_overlapping_peaks=True
+    filter_overlapping_peaks=True,
+    refine_durations=True
 )
 
 # ===========================
@@ -190,10 +192,10 @@ ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
 # ===========================
 EVENT_EXTRACTION_CONFIG = EventExtractionConfig(
     min_cell_count=2,
-    threshold_ratio=0.4,
+    threshold_ratio=0.60,
     radius=300,
-    global_max_comm_time=10,
-    seq_max_comm_time=10,
+    global_max_comm_time=30,
+    seq_max_comm_time=15,
     convex_hull=ConvexHullParams(
         min_points=3,
         min_duration=1

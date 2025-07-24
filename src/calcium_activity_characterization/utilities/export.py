@@ -46,10 +46,10 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "peak_id", "cell_id", "event_id", "start_time", "end_time", "duration",
-                "rel_start_time", "rel_end_time", "rel_duration", "peak_time",
-                "height", "prominence", "rel_height",
+                "fhw_start_time", "fhw_end_time", "fhw_duration", "peak_time",
+                "height", "prominence", "fhw_height",
                 "rise_time", "decay_time", "rel_rise_time", "rel_decay_time",
-                "rel_symmetry_score", "scale_class", "in_event", "origin_type", "origin_label"
+                "rel_symmetry_score", "in_event", "origin_type", "origin_label"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting peaks", unit="cell"):
@@ -61,19 +61,18 @@ class NormalizedDataExporter:
                         "start_time": peak.start_time,
                         "end_time": peak.end_time,
                         "duration": peak.duration,
-                        "rel_start_time": peak.rel_start_time,
-                        "rel_end_time": peak.rel_end_time,
-                        "rel_duration": peak.rel_duration,
+                        "fhw_start_time": peak.fhw_start_time,
+                        "fhw_end_time": peak.fhw_end_time,
+                        "fhw_duration": peak.fhw_duration,
                         "peak_time": peak.peak_time,
                         "height": peak.height,
                         "prominence": peak.prominence,
-                        "rel_height": peak.rel_height,
+                        "fhw_height": peak.fhw_height,
                         "rise_time": peak.rise_time,
                         "decay_time": peak.decay_time,
                         "rel_rise_time": peak.rel_rise_time,
                         "rel_decay_time": peak.rel_decay_time,
                         "rel_symmetry_score": peak.rel_symmetry_score,
-                        "scale_class": peak.scale_class,
                         "in_event": peak.in_event,
                         "origin_type": peak.origin_type,
                         "origin_label": peak.origin_label

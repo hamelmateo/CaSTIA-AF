@@ -242,7 +242,7 @@ class SkimageParams(PeakDetectorParams):
         threshold (float): Threshold for detecting a peak. Default is None.
         width (float): Minimum peak width. Default is None.
         scale_class_quantiles (Tuple[float, float]): Quantiles to assign peak scale class. Default is (0.33, 0.66).
-        relative_height (float): Height relative to max for filtering. Default is 0.3.
+        full_half_width (float): Height relative to max for filtering. Default is 0.3.
         full_duration_threshold (float): Duration relative to full trace. Default is 0.95.
     """
     prominence: float = None
@@ -251,7 +251,7 @@ class SkimageParams(PeakDetectorParams):
     threshold: float = None
     width: float = None
     scale_class_quantiles: Tuple[float, float] = (0.33, 0.66)
-    relative_height: float = 0.3
+    full_half_width: float = 0.3
     full_duration_threshold: float = 0.95
 
 
@@ -278,10 +278,8 @@ class PeakGroupingParams:
 
     Attributes:
         overlap_margin (int): Allowed frame overlap between peaks. Default is 0.
-        verbose (bool): Verbosity flag. Default is False.
     """
     overlap_margin: int = 0
-    verbose: bool = False
 
 @dataclass
 class PeakDetectionConfig:
@@ -289,15 +287,17 @@ class PeakDetectionConfig:
     Full peak detection configuration.
 
     Attributes:
+        verbose (bool): Whether to print debug information. Default is False.
         method (PeakDetectionMethod): Detection method to use. Default is SKIMAGE.
         params (PeakDetectorParams): Parameters associated with method. Default is SkimageParams.
             - If method = SKIMAGE → uses SkimageParams (default)
             - If method = CUSTOM → uses CustomParams (not implemented)
             - If method = THRESHOLD → uses ThresholdParams (not implemented)
-        peak_grouping (PeakGroupingParams): Parameters for peak grouping. Default values are overlap_margin=0, verbose=False.
+        peak_grouping (PeakGroupingParams): Parameters for peak grouping. Default values are overlap_margin=0.
         start_frame (int): Optional start frame to restrict detection. Default is None.
         end_frame (int): Optional end frame to restrict detection. Default is None.
         filter_overlapping_peaks (bool): Whether to remove overlapping peaks. Default is True.
+        refine_durations (bool): Whether to refine peak durations using local minimas. Default is False.
 
     Notes:
         - PeakDetectorParams is an abstract base class. Each method has its own subclass:
@@ -305,12 +305,14 @@ class PeakDetectionConfig:
             * CustomParams
             * ThresholdParams
     """
+    verbose: bool = False
     method: PeakDetectionMethod = PeakDetectionMethod.SKIMAGE
     params: PeakDetectorParams = field(default_factory=SkimageParams)
     peak_grouping: PeakGroupingParams = field(default_factory=PeakGroupingParams)
     start_frame: int = None
     end_frame: int = None
-    filter_overlapping_peaks: bool = True
+    filter_overlapping_peaks: bool = False
+    refine_durations: bool = False
 
 
 # ===========================

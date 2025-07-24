@@ -310,7 +310,7 @@ def plot_raster(
 def plot_impulse_raster(save_path: Path, cells: List[Cell]) -> None:
     """
     Plot a raster-like image where each row is a cell, and impulses are drawn
-    as single-frame activations at rel_start_time.
+    as single-frame activations at fhw_start_time.
 
     Args:
         cells (List[Cell]): List of Cell objects.
@@ -319,19 +319,19 @@ def plot_impulse_raster(save_path: Path, cells: List[Cell]) -> None:
     try:
         n_cells = len(cells)
         max_time = max((
-            max((p.rel_start_time for p in cell.trace.peaks), default=0)
+            max((p.fhw_start_time for p in cell.trace.peaks), default=0)
             for cell in cells
         ), default=0) + 1
 
         impulse_raster = np.zeros((n_cells, max_time), dtype=int)
         for i, cell in enumerate(cells):
             for peak in cell.trace.peaks:
-                if 0 <= peak.rel_start_time < max_time:
-                    impulse_raster[i, peak.rel_start_time] = 1
+                if 0 <= peak.fhw_start_time < max_time:
+                    impulse_raster[i, peak.fhw_start_time] = 1
 
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.imshow(impulse_raster, aspect="auto", cmap="Greys", interpolation="nearest")
-        ax.set_title("Impulse Raster Plot (rel_start_time only)")
+        ax.set_title("Impulse Raster Plot (fhw_start_time only)")
         ax.set_xlabel("Time")
         ax.set_ylabel("Cell Index")
 

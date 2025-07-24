@@ -141,8 +141,8 @@ class Trace:
         trace_length = len(trace)
         binary = np.zeros(trace_length, dtype=int)
         for peak in self.peaks:
-            start = max(0, peak.rel_start_time)
-            end = min(trace_length, peak.rel_end_time + 1)
+            start = max(0, peak.fhw_start_time)
+            end = min(trace_length, peak.fhw_end_time + 1)
             binary[start:end] = 1
 
         self.binary = binary.tolist()
@@ -192,10 +192,10 @@ class Trace:
         self.metadata["peak_frequency"] = self.metadata["num_peaks"] / len(binary) if len(binary) > 0 else 0.0
 
         # Peak feature distributions
-        durations = [p.rel_duration for p in peaks]
+        durations = [p.fhw_duration for p in peaks]
         amplitudes = [p.height for p in peaks]
         prominences = [p.prominence for p in peaks]
-        start_times = [p.rel_start_time for p in peaks]
+        start_times = [p.fhw_start_time for p in peaks]
         symmetry_scores = [p.rel_symmetry_score for p in peaks]
 
         intervals = np.diff(start_times)
@@ -292,7 +292,7 @@ class Trace:
             axs[1].set_xlabel("Amplitude")
             axs[1].set_ylabel("Count")
 
-        # Panel 3: Histogram rel_duration
+        # Panel 3: Histogram fhw_duration
         if "histogram_peak_duration" in self.metadata:
             data = self.metadata["histogram_peak_duration"]
             axs[2].bar(data["bins"][:-1], data["counts"], width=np.diff(data["bins"]), align="edge")
@@ -378,7 +378,7 @@ class Trace:
         plt.figure()
         plt.plot(trace, label=f"Trace: {self.default_version}")
         for peak in self.peaks:
-            plt.axvspan(peak.rel_start_time, peak.rel_end_time, color='red', alpha=0.3)
+            plt.axvspan(peak.fhw_start_time, peak.fhw_end_time, color='red', alpha=0.3)
         plt.title("Peaks Over Trace")
         plt.xlabel("Time")
         plt.ylabel("Intensity")
@@ -455,7 +455,7 @@ class Trace:
             active_trace = self.active_trace
             axs[idx].plot(active_trace, label="Active Trace")
             for peak in self.peaks:
-                axs[idx].axvspan(peak.rel_start_time, peak.rel_end_time, color='red', alpha=0.3)
+                axs[idx].axvspan(peak.fhw_start_time, peak.fhw_end_time, color='red', alpha=0.3)
             axs[idx].set_title("Rel Peaks Overlay")
             axs[idx].legend()
             axs[idx].set_ylabel("Intensity")
@@ -489,7 +489,7 @@ class Trace:
 
     def get_peak_starting_at(self, frame: int) -> Optional["Peak"]:
         """
-        Return the first peak whose rel_start_time matches the given frame.
+        Return the first peak whose fhw_start_time matches the given frame.
 
         Args:
             frame (int): Frame index to match.
@@ -498,6 +498,6 @@ class Trace:
             Optional[Peak]: The matching Peak object, or None if not found.
         """
         for peak in self.peaks:
-            if peak.rel_start_time == frame:
+            if peak.fhw_start_time == frame:
                 return peak
         return None

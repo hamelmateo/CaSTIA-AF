@@ -229,7 +229,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
                 peak_grouping=PeakGroupingParams(),  # or customize if needed
                 start_frame=None,
                 end_frame=None,
-                filter_overlapping_peaks=True,
+                filter_overlapping_peaks=False,
             )
 
         except Exception as e:
@@ -275,7 +275,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_proc.plot(processed, color='blue')
             for peak in cell.trace.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
-                ax_proc.axvspan(peak.start_time, peak.end_time,
+                ax_proc.axvspan(peak.ref_start_time, peak.ref_end_time,
                                 color=colors[peak.id % len(colors)], alpha=0.3)
             ax_bin.plot(cell.trace.binary, color='green')
 
@@ -287,7 +287,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
                 ax.grid(True)
 
             lines = [
-                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, prom={p.prominence:.2f}, dur={p.rel_duration:.2f}, role={p.role}"
+                f"Cell {cell.label} - Peak {p.id}: t={p.peak_time}, prom={p.prominence:.2f}, dur={p.fhw_duration:.2f}, role={p.grouping_type}"
                 for p in cell.trace.peaks
             ]
             self.peak_text.append("\n".join(lines) + "\n")
