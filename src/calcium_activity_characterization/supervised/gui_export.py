@@ -9,12 +9,13 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from pathlib import Path
-
-from calcium_activity_characterization.core.pipeline import CalciumPipeline
+from dataclasses import asdict
+import json
 import logging
 
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.core.pipeline import CalciumPipeline
 
+logger = logging.getLogger(__name__)
 
 class FinalExportGUI(QMainWindow):
     """
@@ -70,13 +71,12 @@ class FinalExportGUI(QMainWindow):
             self.pipeline.output_dir = output_dir
 
             # Save pipeline configuration as JSON
-            import json
             config_path = output_dir / "config_used.json"
             with open(config_path, 'w') as f:
-                json.dump(self.pipeline.config, f, indent=4)
+                json.dump(asdict(self.pipeline.config), f, indent=4)
             logger.info(f"✅ Saved config to {config_path}")
 
-            # Export normalized dataset traces, assuming this method is implemented
+            # Export normalized dataset traces
             if hasattr(self.pipeline, "_export_normalized_datasets"):
                 self.pipeline._export_normalized_datasets()
                 logger.info("✅ Normalized datasets exported.")

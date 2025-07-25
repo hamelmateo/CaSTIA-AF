@@ -4,137 +4,132 @@
 # >>> gui.show()
 
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QPushButton,
-    QLabel, QFormLayout, QLineEdit, QMessageBox, QSplitter
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QFormLayout, QLineEdit, QMessageBox, QScrollArea
 )
 from PyQt5.QtCore import Qt
-import matplotlib.pyplot as plt
+from PyQt5.QtGui import QImage, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import ast
+import matplotlib.pyplot as plt
 import logging
-from dataclasses import asdict, is_dataclass, replace
+from dataclasses import asdict, fields, replace
 from copy import deepcopy
 
-
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
+from calcium_activity_characterization.config.structures import EventExtractionConfig, ConvexHullParams
 
 logger = logging.getLogger(__name__)
 
-
 class ActivityAndEventDetectionGUI(QMainWindow):
     """
-    GUI to tune parameters for global activity trace and event detection.
+    GUI for tuning event detection parameters and viewing result.
 
     Args:
-        pipeline (CalciumPipeline): Pipeline instance with loaded traces.
-        on_validate (Callable): Callback triggered when user validates parameters.
+        pipeline (CalciumPipeline): CalciumPipeline instance
+        on_validate (Callable): callback when parameters are validated
     """
 
     def __init__(self, pipeline: CalciumPipeline, on_validate):
         super().__init__()
-        self.setWindowTitle("Activity Trace and Event Detection")
+        self.setWindowTitle("Event Detection Parameters")
         self.pipeline = pipeline
         self.on_validate = on_validate
-        self.param_fields = {}
+        self.fields = {}
         self.status_label = QLabel("Status: Idle")
 
         self.init_ui()
         self.load_params()
-
-        try:
-            self.pipeline._initialize_activity_trace()
-            self.pipeline._detect_events()
-            self.update_visualization()
-        except Exception as e:
-            logger.error(f"Initial activity/event loading failed: {e}")
-            self.status_label.setText("Status: Failed init")
+        self.update_visualization()
 
     def init_ui(self):
-        central = QWidget()
-        self.setCentralWidget(central)
+        main_widget = QWidget()
+        layout = QHBoxLayout(main_widget)
+        self.setCentralWidget(main_widget)
 
-        layout = QVBoxLayout(central)
-        splitter = QSplitter(Qt.Horizontal)
-        layout.addWidget(splitter)
-
+        # LEFT: plot area
         self.canvas = FigureCanvas(plt.figure(figsize=(10, 6)))
-        splitter.addWidget(self.canvas)
+        layout.addWidget(self.canvas, 2)
 
-        control_widget = QWidget()
-        control_layout = QVBoxLayout(control_widget)
-        self.form_layout = QFormLayout()
-        control_layout.addLayout(self.form_layout)
+        # RIGHT: scrollable parameter panel
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        layout.addWidget(self.scroll, 1)
 
-        self.update_btn = QPushButton("Update")
-        self.update_btn.clicked.connect(self.update_processing)
-        control_layout.addWidget(self.update_btn)
+        container = QWidget()
+        self.form_layout = QFormLayout(container)
+        self.scroll.setWidget(container)
 
-        self.validate_btn = QPushButton("Validate Parameters")
-        self.validate_btn.clicked.connect(self.validate_parameters)
-        control_layout.addWidget(self.validate_btn)
+        self.update_button = QPushButton("Update")
+        self.update_button.clicked.connect(self.apply_parameters)
+        self.validate_button = QPushButton("Validate Parameters")
+        self.validate_button.clicked.connect(self.validate_parameters)
 
-        control_layout.addWidget(self.status_label)
-        splitter.addWidget(control_widget)
+        self.form_layout.addRow(self.update_button)
+        self.form_layout.addRow(self.validate_button)
+        self.form_layout.addRow(self.status_label)
 
     def load_params(self):
-        section_fields = {
-            "activity_trace_processing": self.pipeline.config.activity_trace_processing,
-            "activity_trace_peak_detection": self.pipeline.config.activity_trace_peak_detection,
-            "event_extraction": self.pipeline.config.event_extraction,
-        }
+        config: EventExtractionConfig = self.pipeline.config.event_extraction
+        flat_config = asdict(config)
+        flat_config.update({f"convex_hull.{k}": v for k, v in asdict(config.convex_hull).items()})
 
-        for section, config_obj in section_fields.items():
-            config_dict = asdict(config_obj)
-            for key, value in config_dict.items():
-                full_key = f"{section}:{key}"
-                field = QLineEdit(str(value))
-                self.param_fields[full_key] = field
-                self.form_layout.addRow(QLabel(full_key), field)
+        for key, value in flat_config.items():
+            if key.startswith("convex_hull."):
+                continue
+            field = QLineEdit(str(value))
+            self.fields[key] = field
+            self.form_layout.addRow(QLabel(key), field)
 
+        for key, value in asdict(config.convex_hull).items():
+            field = QLineEdit(str(value))
+            self.fields[f"convex_hull.{key}"] = field
+            self.form_layout.addRow(QLabel(f"convex_hull.{key}"), field)
 
-    def safe_eval(self, value: str):
-        try:
-            return eval(value, {"__builtins__": {}})
-        except Exception:
-            return value
-
-    def get_updated_config(self):
-        config = deepcopy(self.pipeline.config)
-
-        for full_key, field in self.param_fields.items():
-            section, key = full_key.split(":")
-            val = self.safe_eval(field.text())
-            section_obj = getattr(config, section)
-            
-            if is_dataclass(section_obj):
-                updated_fields = asdict(section_obj)
-                updated_fields[key] = val
-                updated_section = replace(section_obj, **updated_fields)
-                setattr(config, section, updated_section)
-                
-        return config
-
-    def update_processing(self):
+    def apply_parameters(self):
         self.status_label.setText("Status: Computing...")
         self.repaint()
 
         try:
-            self.pipeline.config = self.get_updated_config()
+            updated_config = self.build_updated_config()
+            self.pipeline.config.event_extraction = updated_config
             self.pipeline._initialize_activity_trace()
             self.pipeline._detect_events()
             self.update_visualization()
             self.status_label.setText("Status: Updated ✓")
         except Exception as e:
-            logger.error(f"Failed to update: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to update: {e}")
+            logger.error(f"Event detection failed: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to detect events: {e}")
             self.status_label.setText("Status: Error")
+
+    def validate_parameters(self):
+        try:
+            updated_config = self.build_updated_config()
+            self.pipeline.config.event_extraction = updated_config
+            self.pipeline._initialize_activity_trace()
+            self.pipeline._detect_events()
+            self.on_validate(self.pipeline.config)
+            self.close()
+        except Exception as e:
+            logger.error(f"Validation failed: {e}")
+            QMessageBox.critical(self, "Error", f"Validation failed: {e}")
+
+    def build_updated_config(self) -> EventExtractionConfig:
+        kwargs = {}
+        hull_kwargs = {}
+        for key, field in self.fields.items():
+            value = self.safe_eval(field.text())
+            if key.startswith("convex_hull."):
+                name = key.split("convex_hull.")[1]
+                hull_kwargs[name] = value
+            else:
+                kwargs[key] = value
+        kwargs["convex_hull"] = ConvexHullParams(**hull_kwargs)
+        return EventExtractionConfig(**kwargs)
 
     def update_visualization(self):
         self.canvas.figure.clf()
-
         activity_trace = getattr(self.pipeline.population, "activity_trace", None)
-        if not activity_trace or not hasattr(activity_trace, "versions"):
-            self.status_label.setText("Status: No activity trace")
+        if not activity_trace:
             return
 
         ax1 = self.canvas.figure.add_subplot(411)
@@ -151,21 +146,16 @@ class ActivityAndEventDetectionGUI(QMainWindow):
 
         ax4 = self.canvas.figure.add_subplot(414)
         smoothed = activity_trace.versions.get("processed", [])
-        peaks = getattr(activity_trace, "peaks", []) or []
-        for peak in peaks:
+        for peak in getattr(activity_trace, "peaks", []):
             ax4.axvspan(peak.start_time, peak.end_time, color='orange', alpha=0.3)
         ax4.set_xlim([0, len(smoothed)])
-        ax4.set_title("Detected Global Events (Peak Duration)")
+        ax4.set_title("Detected Global Events")
 
         self.canvas.draw()
 
-    def validate_parameters(self):
+    @staticmethod
+    def safe_eval(value: str):
         try:
-            self.pipeline.config = self.get_updated_config()
-            self.pipeline._initialize_activity_trace()
-            self.pipeline._detect_events()
-            self.on_validate(self.pipeline.config)
-            self.close()
-        except Exception as e:
-            logger.error(f"Validation failed: {e}")
-            QMessageBox.critical(self, "Error", f"Validation failed: {e}")
+            return eval(value, {"__builtins__": {}})
+        except Exception:
+            return value

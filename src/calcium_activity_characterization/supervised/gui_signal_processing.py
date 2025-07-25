@@ -5,48 +5,64 @@
 
 import random
 import numpy as np
-from dataclasses import asdict, replace, is_dataclass
+from dataclasses import asdict
 from copy import deepcopy
 
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
-    QLabel, QFormLayout, QLineEdit, QSplitter, QMessageBox
+    QLabel, QFormLayout, QLineEdit, QSplitter, QMessageBox, QComboBox, QCheckBox
 )
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.config.structures import (
+    NormalizationMethod, DetrendingMethod,
+    SignalProcessingConfig, NormalizationConfig, DetrendingConfig,
+    ZScoreParams, DeltaFParams, PercentileParams, MinMaxParams,
+    LocalMinimaParams, PolynomialParams, MovingAverageParams, RobustPolyParams,
+    SavgolParams, ButterworthParams, FIRParams, WaveletParams, DoubleCurveFittingParams
+)
 
-import ast
 import logging
-
 logger = logging.getLogger(__name__)
 
+NORMALIZATION_PARAMS = {
+    NormalizationMethod.ZSCORE: ZScoreParams,
+    NormalizationMethod.MINMAX: MinMaxParams,
+    NormalizationMethod.PERCENTILE: PercentileParams,
+    NormalizationMethod.DELTAF: DeltaFParams
+}
+
+DETRENDING_PARAMS = {
+    DetrendingMethod.LOCALMINIMA: LocalMinimaParams,
+    DetrendingMethod.MOVINGAVERAGE: MovingAverageParams,
+    DetrendingMethod.POLYNOMIAL: PolynomialParams,
+    DetrendingMethod.ROBUSTPOLY: RobustPolyParams,
+    DetrendingMethod.SAVGOL: SavgolParams,
+    DetrendingMethod.BUTTERWORTH: ButterworthParams,
+    DetrendingMethod.FIR: FIRParams,
+    DetrendingMethod.WAVELET: WaveletParams,
+    DetrendingMethod.DOUBLECURVE: DoubleCurveFittingParams
+}
 
 class SignalProcessingAndPeaksGUI(QMainWindow):
-    """
-    GUI to tune signal processing and peak detection parameters.
-
-    Args:
-        pipeline (CalciumPipeline): Pipeline instance with cells loaded.
-        on_validate (Callable): Callback when parameters are validated.
-    """
-
     def __init__(self, pipeline: CalciumPipeline, on_validate):
         super().__init__()
         self.setWindowTitle("Signal Processing and Peak Detection")
         self.pipeline = pipeline
         self.on_validate = on_validate
 
-        self.selected_cell: Cell = None
+        self.selected_cells: list[Cell] = []
         self.status_label = QLabel("Status: Idle")
-        self.param_fields = {}
 
+        self.param_fields = {}
         self.init_ui()
         self.load_params()
-        self.select_random_cell()
+        self.select_random_cells()
 
     def init_ui(self):
         central = QWidget()
@@ -54,18 +70,37 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
 
         layout = QVBoxLayout(central)
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setSizes([1000, 300])
         layout.addWidget(splitter)
 
-        # Left side: trace plots
-        self.canvas = FigureCanvas(plt.figure(figsize=(10, 6)))
+        # Left: trace plot
+        self.canvas = FigureCanvas(plt.figure(figsize=(10, 12)))
         splitter.addWidget(self.canvas)
 
-        # Right side: parameter controls
+        # Right: config controls
         control_widget = QWidget()
         control_layout = QVBoxLayout(control_widget)
-
         self.form_layout = QFormLayout()
         control_layout.addLayout(self.form_layout)
+
+        self.detrend_checkbox = QCheckBox("Enable Detrending")
+        self.norm_checkbox = QCheckBox("Enable Normalization")
+        self.smooth_checkbox = QCheckBox("Enable Smoothing")
+        self.form_layout.addRow(self.detrend_checkbox)
+        self.form_layout.addRow(self.norm_checkbox)
+        self.form_layout.addRow(self.smooth_checkbox)
+
+        self.norm_dropdown = QComboBox()
+        for method in NormalizationMethod:
+            self.norm_dropdown.addItem(method.name, method)
+        self.norm_dropdown.currentIndexChanged.connect(self.load_normalization_params)
+        self.form_layout.addRow(QLabel("Normalization Method"), self.norm_dropdown)
+
+        self.detrend_dropdown = QComboBox()
+        for method in DetrendingMethod:
+            self.detrend_dropdown.addItem(method.name, method)
+        self.detrend_dropdown.currentIndexChanged.connect(self.load_detrending_params)
+        self.form_layout.addRow(QLabel("Detrending Method"), self.detrend_dropdown)
 
         self.update_btn = QPushButton("Update")
         self.update_btn.clicked.connect(self.update_processing)
@@ -75,29 +110,12 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
         self.validate_btn.clicked.connect(self.validate_parameters)
         control_layout.addWidget(self.validate_btn)
 
-        self.random_btn = QPushButton("Random Cell")
-        self.random_btn.clicked.connect(self.select_random_cell)
+        self.random_btn = QPushButton("Randomize Cells")
+        self.random_btn.clicked.connect(self.select_random_cells)
         control_layout.addWidget(self.random_btn)
 
         control_layout.addWidget(self.status_label)
         splitter.addWidget(control_widget)
-
-    def load_params(self):
-        self.param_fields.clear()
-
-        section_map = {
-            "cell_trace_processing": self.pipeline.config.cell_trace_processing,
-            "cell_trace_peak_detection": self.pipeline.config.cell_trace_peak_detection,
-        }
-
-        for section, obj in section_map.items():
-            config_dict = asdict(obj)
-            for key, value in config_dict.items():
-                full_key = f"{section}:{key}"
-                field = QLineEdit(str(value))
-                self.param_fields[full_key] = field
-                self.form_layout.addRow(QLabel(full_key), field)
-
 
     def safe_eval(self, value: str):
         try:
@@ -105,84 +123,145 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
         except Exception:
             return value
 
+    def load_params(self):
+        config = self.pipeline.config.cell_trace_processing
+        self.detrend_checkbox.setChecked(config.pipeline.detrending)
+        self.norm_checkbox.setChecked(config.pipeline.normalization)
+        self.smooth_checkbox.setChecked(config.pipeline.smoothing)
+
+        self.norm_dropdown.setCurrentText(config.normalization.method.name)
+        self.detrend_dropdown.setCurrentText(config.detrending.method.name)
+
+        self.load_normalization_params()
+        self.load_detrending_params()
+
+    def load_normalization_params(self):
+        for key in list(self.param_fields):
+            if key.startswith("norm:"):
+                widget = self.param_fields.pop(key)
+                self.form_layout.removeRow(widget)
+
+        method = self.norm_dropdown.currentData()
+        cls = NORMALIZATION_PARAMS[method]
+        params = asdict(cls())
+
+        for k, v in params.items():
+            field = QLineEdit(str(v))
+            key = f"norm:{k}"
+            self.param_fields[key] = field
+            self.form_layout.addRow(QLabel(key), field)
+
+    def load_detrending_params(self):
+        for key in list(self.param_fields):
+            if key.startswith("detrend:"):
+                widget = self.param_fields.pop(key)
+                self.form_layout.removeRow(widget)
+
+        method = self.detrend_dropdown.currentData()
+        cls = DETRENDING_PARAMS[method]
+        params = asdict(cls())
+
+        for k, v in params.items():
+            field = QLineEdit(str(v))
+            key = f"detrend:{k}"
+            self.param_fields[key] = field
+            self.form_layout.addRow(QLabel(key), field)
+
     def get_updated_config(self):
-        config = deepcopy(self.pipeline.config)
+        signal_config = deepcopy(self.pipeline.config.cell_trace_processing)
 
-        flat_signal = asdict(config.cell_trace_processing)
-        flat_peaks = asdict(config.cell_trace_peak_detection)
+        pipeline = signal_config.pipeline
+        pipeline.detrending = self.detrend_checkbox.isChecked()
+        pipeline.normalization = self.norm_checkbox.isChecked()
+        pipeline.smoothing = self.smooth_checkbox.isChecked()
 
-        for full_key, field in self.param_fields.items():
-            section, key = full_key.split(":")
-            val = self.safe_eval(field.text())
+        norm_method = self.norm_dropdown.currentData()
+        norm_cls = NORMALIZATION_PARAMS[norm_method]
+        norm_kwargs = {
+            k.split(":")[1]: self.safe_eval(field.text())
+            for k, field in self.param_fields.items() if k.startswith("norm:")
+        }
+        normalization = NormalizationConfig(method=norm_method, params=norm_cls(**norm_kwargs))
 
-            if section == "cell_trace_processing":
-                flat_signal[key] = val
-            elif section == "cell_trace_peak_detection":
-                flat_peaks[key] = val
+        detrend_method = self.detrend_dropdown.currentData()
+        detrend_cls = DETRENDING_PARAMS[detrend_method]
+        detrend_kwargs = {
+            k.split(":")[1]: self.safe_eval(field.text())
+            for k, field in self.param_fields.items() if k.startswith("detrend:")
+        }
+        detrending = DetrendingConfig(method=detrend_method, params=detrend_cls(**detrend_kwargs))
 
-        config.cell_trace_processing = replace(config.cell_trace_processing, **flat_signal)
-        config.cell_trace_peak_detection = replace(config.cell_trace_peak_detection, **flat_peaks)
+        return SignalProcessingConfig(
+            pipeline=pipeline,
+            smoothing_sigma=signal_config.smoothing_sigma,
+            normalization=normalization,
+            detrending=detrending
+        )
 
-        return config
-
-
-    def select_random_cell(self):
+    def select_random_cells(self):
         try:
             if not self.pipeline.population or not self.pipeline.population.cells:
                 raise ValueError("No cells available")
-            self.selected_cell = random.choice(self.pipeline.population.cells)
+            self.selected_cells = random.sample(self.pipeline.population.cells, min(5, len(self.pipeline.population.cells)))
             self.update_processing()
         except Exception as e:
-            logger.error(f"Failed to select random cell: {e}")
-            QMessageBox.critical(self, "Error", f"No cell could be selected: {e}")
+            logger.error(f"Failed to select random cells: {e}")
+            QMessageBox.critical(self, "Error", f"Failed to select cells: {e}")
 
     def update_processing(self):
         self.status_label.setText("Status: Computing...")
         self.repaint()
 
         try:
-            self.pipeline.config = self.get_updated_config()
+            self.pipeline.config.cell_trace_processing = self.get_updated_config()
             self.pipeline._signal_processing_pipeline()
             self.pipeline._binarization_pipeline()
-            self.plot_cell()
+            self.plot_cells()
             self.status_label.setText("Status: Updated ✓")
         except Exception as e:
             logger.error(f"Update failed: {e}")
             self.status_label.setText("Status: Error")
             QMessageBox.critical(self, "Error", f"Failed to update: {e}")
 
-    def plot_cell(self):
+    def plot_cells(self):
         self.canvas.figure.clf()
-        ax1 = self.canvas.figure.add_subplot(311)
-        ax2 = self.canvas.figure.add_subplot(312)
-        ax3 = self.canvas.figure.add_subplot(313)
+        axs = self.canvas.figure.subplots(len(self.selected_cells), 3, squeeze=False)
 
-        raw = self.selected_cell.trace.versions.get("raw")
-        smoothed = self.selected_cell.trace.versions.get("processed")
-        binary = self.selected_cell.trace.binary
-        peaks = self.selected_cell.trace.peaks
+        for i, cell in enumerate(self.selected_cells):
+            raw = cell.trace.versions.get("raw")
+            smoothed = cell.trace.versions.get("processed")
+            binary = cell.trace.binary
+            peaks = cell.trace.peaks
+            colors = plt.cm.tab10.colors
+            
+            ax1, ax2, ax3 = axs[i]
+            if raw is not None:
+                ax1.plot(raw, color='gray')
+                ax1.set_title(f"Cell {cell.label} - Raw")
 
-        if raw is not None:
-            ax1.plot(raw, color='gray')
-            ax1.set_title("Raw Trace")
+            if smoothed is not None:
+                ax2.plot(smoothed, color='blue')
+                if peaks:
+                    for peak in cell.trace.peaks:
+                        ax2.plot(peak.peak_time, peak.height, 'r*', markersize=8)
+                        ax2.axvspan(peak.ref_start_time, peak.ref_end_time,
+                                    color=colors[peak.id % len(colors)], alpha=0.3)
+            ax2.set_title("Processed + Peaks")
 
-        if smoothed is not None:
-            ax2.plot(smoothed, color='blue')
-            if peaks:
-                peak_times = [p.peak_time for p in peaks]
-                peak_heights = [smoothed[p.peak_time] for p in peaks]
-                ax2.plot(peak_times, peak_heights, 'ro')
-            ax2.set_title("Smoothed Trace with Peaks")
+            if binary is not None:
+                ax3.plot(binary, color='green')
+                ax3.set_title("Binarized")
 
-        if binary is not None:
-            ax3.plot(binary, color='green')
-            ax3.set_title("Binarized Trace")
+            for ax in (ax1, ax2, ax3):
+                ax.set_xlabel("Time")
+                ax.grid(True)
 
+        self.canvas.figure.tight_layout()
         self.canvas.draw()
 
     def validate_parameters(self):
         try:
-            self.pipeline.config = self.get_updated_config()
+            self.pipeline.config.cell_trace_processing = self.get_updated_config()
             self.pipeline._signal_processing_pipeline()
             self.pipeline._binarization_pipeline()
             self.on_validate(self.pipeline.config)
