@@ -41,11 +41,10 @@ def _get_framewise_active_labels(
     cells: List[Cell],
     start: int,
     end: int
-) -> Dict[int, List[int]]:
+) -> Dict[int, List[Tuple[int, int]]]:
     """
-    Build a dict mapping frame -> list of cell labels whose peak starts at that frame.
-
-    Each cell contributes only one peak within the window: the latest one.
+    Build a dict mapping frame -> list of (cell label, peak id) tuples for all cells that have a peak in the given time window.
+    This is used to determine which cells are active at each frame in the specified time window.
 
     Args:
         cells (List[Cell]): All cells to consider.
@@ -53,94 +52,112 @@ def _get_framewise_active_labels(
         end (int): End frame of time window.
 
     Returns:
-        Dict[int, List[int]]: Frame → list of cell labels whose peak starts at that frame.
+        Dict[int, List[Tuple[int, int]]]: Mapping from frame to list of (cell label, peak id) tuples.
     """
-    framewise: Dict[int, List[int]] = {}
+    framewise: Dict[int, List[Tuple[int, int]]] = {}
     for cell in cells:
         valid_peaks = [p for p in cell.trace.peaks if start <= p.fhw_start_time <= end]
         if not valid_peaks:
             continue
-        best_peak = max(valid_peaks, key=lambda p: p.fhw_start_time)
-        framewise.setdefault(best_peak.fhw_start_time, []).append(cell.label)
+        keep_only_latest_peak = False  # TODO think about how to handle this
+        if keep_only_latest_peak:
+            best_peak = max(valid_peaks, key=lambda p: p.fhw_start_time)
+            framewise.setdefault(best_peak.fhw_start_time, []).append((cell.label, best_peak.id))
+        else: # Accept all peaks in the window
+            for peak in valid_peaks:
+                framewise.setdefault(peak.fhw_start_time, []).append((cell.label, peak.id))
     return framewise
 
 def _get_activated_cells(
     framewise_active: Dict[int, List[int]],
     cells: List[Cell]
-) -> Tuple[Dict[int, Cell], Dict[int, int]]:
+) -> Tuple[Dict[int, Cell], Dict[Tuple[int, int], int]]:
     """
     Extract active cells and their activation times from framewise active labels.
 
     Args:
-        framewise_active (Dict[int, List[int]]): Framewise active labels.
+        framewise_active (Dict[int, List[Tuple[int, int]]]): Framewise active labels.
         cells (List[Cell]): List of all cells in the population.
     
     Returns:
-        Tuple[Dict[int, Cell], Dict[int, int]]:
-            - active_cells: Mapping of label to Cell object for active cells.
-            - cell_activation_time: Mapping of label to activation time.
+        Tuple[Dict[int, Cell], Dict[Tuple[int, int], int]]:
+            - active_cells: Mapping of cell labels to Cell objects that were active.
+            - activation_times: Mapping of (cell label, peak id) to activation time.
     """
     label_to_cell = {cell.label: cell for cell in cells}
-    active_cells = {
-        label: label_to_cell[label]
-        for t in framewise_active
-        for label in framewise_active[t]
-        if label in label_to_cell
-    }
-    cell_activation_time = {
-        label: t for t in framewise_active for label in framewise_active[t]
-    }
-    return active_cells, cell_activation_time
+
+    active_cells: Dict[int, Cell] = {}
+    activation_times: Dict[Tuple[int, int], int] = {}
+
+    for t, entries in framewise_active.items():
+        for label, peak_id in entries:
+            if label in label_to_cell:
+                active_cells[label] = label_to_cell[label]
+                activation_times[(label, peak_id)] = t
+
+    return active_cells, activation_times
 
 def _cluster_event_from_origin(
     label: int,
-    origin_time: int,
+    peak_id: int,
     active_cells: Dict[int, Cell],
-    cell_activation_time: Dict[int, int],
+    cell_activation_time: Dict[Tuple[int, int], int],
     radius: float,
     global_max_comm_time: int
-) -> Set[int]:
+) -> Set[Tuple[int, int]]:
     """
     Cluster cells based on spatial proximity and temporal activation from an origin cell.
 
     Args:
         label (int): Label of the origin cell.
-        origin_time (int): Activation time of the origin cell.
+        peak_id (int): Peak ID of the origin cell.
         active_cells (Dict[int, Cell]): Mapping of active cell labels to Cell objects.
         cell_activation_time (Dict[int, int]): Mapping of cell labels to their activation times.
         radius (float): Distance threshold to consider spatial spreading.
         global_max_comm_time (int): Maximum number of frames allowed between activations to consider propagation.
 
     Returns:
-        Set[int]: Set of labels in the cluster.
+        Set[Tuple[int, int]]: Set of (cell label, peak id) tuples in the cluster.
     """
-    origin_peak = active_cells[label].trace.get_peak_starting_at(origin_time)
+    origin_cell = active_cells[label]
+    origin_peak = origin_cell.trace.peaks[peak_id]
+    origin_time = origin_peak.ref_start_time
+
     if origin_peak.in_event:
         return set()
     
     # Only proceed if this origin causes any other peak
-    has_valid_neighbor = any(
-        0 < (cell_activation_time[other] - origin_time) <= global_max_comm_time and
-        np.linalg.norm(np.array(active_cells[label].centroid) - np.array(active_cells[other].centroid)) <= radius
-        for other in active_cells
-        if other != label
-    )
+    has_valid_neighbor = False
+    for (other_label, other_peak_id), other_time in cell_activation_time.items():
+        if (other_label, other_peak_id) == (label, peak_id):
+            continue
+
+        time_diff = other_time - origin_time
+        if 0 < time_diff <= global_max_comm_time:
+            dist = np.linalg.norm(np.array(origin_cell.centroid) - np.array(active_cells[other_label].centroid))
+            if dist <= radius:
+                has_valid_neighbor = True
+                break
 
     if not has_valid_neighbor:
         return set()
 
-    cluster = {label}
-    queue = [(label, origin_time)]
+    cluster = {(label, peak_id)}
+    queue = [(label, peak_id)]
     origin_peak.in_event = "global"
     origin_peak.origin_type = "origin"
 
     while queue:
-        current_label, current_time = queue.pop()
+        current_label, current_peak_id = queue.pop()
+        current_time = cell_activation_time[(current_label, current_peak_id)]
         current_cell = active_cells[current_label]
 
-        for other_label, other_cell in active_cells.items():
-            other_time = cell_activation_time[other_label]
-            other_peak = other_cell.trace.get_peak_starting_at(other_time)
+        for (other_label, other_peak_id), other_time in cell_activation_time.items():
+            if (other_label, other_peak_id) == (current_label, current_peak_id):
+                continue
+
+            other_cell = active_cells[other_label]
+            other_peak = other_cell.trace.peaks[other_peak_id]
 
             if other_label in cluster or other_peak.in_event:
                 continue
@@ -148,10 +165,10 @@ def _cluster_event_from_origin(
             if 0 < other_time - current_time <= global_max_comm_time:
                 dist = np.linalg.norm(np.array(current_cell.centroid) - np.array(other_cell.centroid))
                 if dist <= radius:
-                    cluster.add(other_label)
+                    cluster.add((other_label, other_peak_id))
                     other_peak.in_event = "global"
                     other_peak.origin_type = "caused"
-                    queue.append((other_label, other_time))
+                    queue.append((other_label, other_peak_id))
 
     return cluster
 
@@ -184,19 +201,18 @@ def extract_global_event_blocks(
 
             event_cluster = set()
 
-            for label, cell in active_cells.items():
-                if cell.trace.get_peak_starting_at(activation_times[label]).in_event:
+            for (label, peak_id), _ in activation_times.items():
+                if active_cells[label].trace.peaks[peak_id].in_event:
                     continue
 
-                origin_time = activation_times[label]
                 cluster = _cluster_event_from_origin(
-                    label, origin_time, active_cells, activation_times, radius, global_max_comm_time)
+                    label, peak_id, active_cells, activation_times, radius, global_max_comm_time)
 
                 event_cluster.update(cluster)
 
-            if len(event_cluster) >= min_cell_count:
+            if len({lbl for lbl, _ in event_cluster}) >= min_cell_count:
                 framewise = {
-                    t: [l for l in framewise_active.get(t, []) if l in event_cluster]
+                    t: [lbl for (lbl, pid) in framewise_active.get(t, []) if (lbl, pid) in event_cluster]
                     for t in range(start, end + 1)
                 }
                 global_event_blocks.append(framewise)

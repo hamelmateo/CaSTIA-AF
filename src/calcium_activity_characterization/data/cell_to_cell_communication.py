@@ -205,14 +205,14 @@ def _resolve_individual_peaks(
     communications: List[CellToCellCommunication] = []
 
     for cell in cells:
-        for i, peak in enumerate(cell.trace.peaks):
+        for peak in cell.trace.peaks:
             if peak.is_analyzed:
                 continue
 
             best_candidate = None
             best_dt = float("inf")
             for neighbor in neighbor_graph.neighbors(cell.label):
-                for _, neighbor_peak in enumerate(label_to_cell[neighbor].trace.peaks):
+                for neighbor_peak in label_to_cell[neighbor].trace.peaks:
                     dt = peak.fhw_start_time - neighbor_peak.fhw_start_time
                     if 0 < dt <= max_time_gap and dt < best_dt:
                         best_candidate = (neighbor, neighbor_peak.id, neighbor_peak.fhw_start_time)
@@ -227,7 +227,8 @@ def _resolve_individual_peaks(
                     cause_start_time=peak.fhw_start_time
                 )
                 communications.append(comm)
-                cell.trace.peaks[i].is_analyzed = True
+                peak.is_analyzed = True
+                
     return communications
 
 

@@ -27,7 +27,7 @@ class Event(ABC):
 
     Attributes:
         id (int): Unique identifier.
-        peaks_involved (Tuple[int, int]): Indices of the earliest and latest peaks involved in the event.
+        peaks_involved (List[Tuple[int, int]]): list of cell label and peaks indices involved in the event.
         label_to_centroid (Dict[int, np.ndarray]): Map of cell labels to centroids.
         n_cells_involved (int): Number of cells in the event.
         event_start_time (int): Earliest peak start time.

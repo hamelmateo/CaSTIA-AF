@@ -16,6 +16,7 @@ class CoPeakingNeighbors:
     Attributes:
         frame (int): Frame index where peaks co-occur.
         members (List[Tuple[int, int]]): List of (cell_label, peak.id) pairs.
+        labels (set): Unique set of cell labels in the group.
         subgraph (nx.Graph): Subgraph connecting spatial neighbors within the group.
     """
 
@@ -56,7 +57,7 @@ def generate_copeaking_groups(cells: List[Cell], neighbor_graph: nx.Graph) -> Li
     frame_to_peaks: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
 
     for cell in cells:
-        for _, peak in enumerate(cell.trace.peaks):
+        for peak in cell.trace.peaks:
             frame_to_peaks[peak.fhw_start_time].append((cell.label, peak.id))
 
     groups: List[CoPeakingNeighbors] = []
