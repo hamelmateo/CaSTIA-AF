@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from PyQt5.QtWidgets import QApplication, QFileDialog
+from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
 import sys
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
@@ -25,7 +25,7 @@ def find_isx_folders(folder: Path) -> list[Path]:
 
 def main() -> None:
     """
-    Select one or multiple folders (date or ISX) and run the pipeline on all detected ISX folders.
+    Select one or more folders (date folders or ISX) and run the pipeline on all detected ISX folders.
     """
     app = QApplication(sys.argv)
     if GLOBAL_CONFIG.debug.debugging:
@@ -33,16 +33,26 @@ def main() -> None:
         selected = [Path(GLOBAL_CONFIG.debug.debugging_file_path)]
     else:
         folder_dialog = QFileDialog()
-        folder_dialog.setDirectory(GLOBAL_CONFIG.debug.harddrive_path)
+        folder_dialog.setDirectory(str(GLOBAL_CONFIG.debug.harddrive_path))
         folder_dialog.setFileMode(QFileDialog.Directory)
         folder_dialog.setOption(QFileDialog.DontUseNativeDialog, True)
         folder_dialog.setOption(QFileDialog.ShowDirsOnly, True)
         folder_dialog.setWindowTitle("Select One or More Folders (Date folders or ISX)")
 
+        # Allow selecting multiple directories in non-native dialog
+        view = folder_dialog.findChild(QWidget, "listView")
+        if view:
+            view.setSelectionMode(view.ExtendedSelection)
+        f_tree_view = folder_dialog.findChild(QWidget, "treeView")
+        if f_tree_view:
+            f_tree_view.setSelectionMode(f_tree_view.ExtendedSelection)
+
         if not folder_dialog.exec_():
             logger.info("No folder selected. Exiting.")
             return
-        
+
+        selected = [Path(folder_str) for folder_str in folder_dialog.selectedFiles()]
+
         selected = [Path(folder_str) for folder_str in folder_dialog.selectedFiles()]
 
     all_isx_folders = []

@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from matplotlib.image import imread
 from pathlib import Path
 
-def plot_metric_by_dataset(
+def plot_histogram_by_dataset(
     df: pd.DataFrame,
     column: str,
     title: str,
@@ -91,7 +91,7 @@ def plot_metric_by_dataset(
 
 def plot_raster_plots_by_dataset(
     dataset_paths: Dict[str, str],
-    image_name: str = "raster_plot.png",
+    image_name: str = "signal-processing/raster_plot.png",
     title: str = "Binary Activity Raster Plots by Dataset",
     n_cols: int = 2,
     figsize_per_plot: tuple = (6, 5)
@@ -131,7 +131,7 @@ def plot_raster_plots_by_dataset(
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
-def plot_category_distribution_by_dataset(
+def plot_pie_chart_by_dataset(
     df: pd.DataFrame,
     column: str,
     category_order: List[str],
@@ -188,4 +188,37 @@ def plot_category_distribution_by_dataset(
 
     fig.suptitle(title, fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
+
+
+def plot_bar_by_dataset(
+    df: pd.DataFrame,
+    value_column: str,
+    title: str,
+    hue_column: Optional[str] = None,
+    ylabel: str = "Count",
+    xlabel: str = "Dataset",
+    rotation: int = 45,
+    palette: str = "viridis"
+) -> None:
+    """
+    Plot a bar chart of a metric aggregated per dataset.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing 'dataset' and value column.
+        value_column (str): Column with numeric values to plot.
+        title (str): Plot title.
+        hue_column (Optional[str]): Optional hue to split bars (e.g., concentration).
+        ylabel (str): Y-axis label.
+        xlabel (str): X-axis label.
+        rotation (int): Rotation of x-axis labels.
+        palette (str): Color palette.
+    """
+    plt.figure(figsize=(10, 6))
+    sns.barplot(data=df, x="dataset", y=value_column, hue=hue_column, dodge=False, palette=palette)
+    plt.title(title)
+    plt.xticks(rotation=rotation)
+    plt.ylabel(ylabel)
+    plt.xlabel(xlabel)
+    plt.tight_layout()
     plt.show()

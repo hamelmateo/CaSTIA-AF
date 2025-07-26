@@ -192,7 +192,7 @@ ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
 # ===========================
 EVENT_EXTRACTION_CONFIG = EventExtractionConfig(
     min_cell_count=2,
-    threshold_ratio=0.60,
+    threshold_ratio=0.40,
     radius=300,
     global_max_comm_time=30,
     seq_max_comm_time=15,
