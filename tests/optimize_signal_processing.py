@@ -275,7 +275,7 @@ class SignalProcessingBinarizedGUI(QMainWindow):
             ax_proc.plot(processed, color='blue')
             for peak in cell.trace.peaks:
                 ax_proc.plot(peak.peak_time, peak.height, 'r*', markersize=8)
-                ax_proc.axvspan(peak.ref_start_time, peak.ref_end_time,
+                ax_proc.axvspan(peak.activation_start_time, peak.activation_end_time,
                                 color=colors[peak.id % len(colors)], alpha=0.3)
             ax_bin.plot(cell.trace.binary, color='green')
 

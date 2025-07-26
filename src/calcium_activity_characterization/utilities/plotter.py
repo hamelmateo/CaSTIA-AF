@@ -1,9 +1,11 @@
+from os import times
 import matplotlib.pyplot as plt
 import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import List
+import networkx as nx
 
 logger = logging.getLogger(__name__)
 
@@ -219,3 +221,45 @@ def plot_umap(
     else:
         plt.show()
 
+
+def plot_event_graph(event_id: int, graph: nx.DiGraph, label_to_time: dict, save_path: Path = None):
+    """
+    Plot a DAG of cell-to-cell communications with activation times.
+
+    Args:
+        event_id (int): ID of the event (for title or filename).
+        graph (nx.DiGraph): The DAG of communications.
+        label_to_time (dict): Mapping from cell label to activation time.
+        save_path (Path, optional): If provided, saves the plot to this path.
+    """
+    try:
+        pos = nx.spring_layout(graph, seed=42)
+        node_labels = {
+            node: f"{node}\n{label_to_time.get(node, '?')}" for node in graph.nodes
+        }
+        times = [label_to_time.get(n, 0) for n in graph.nodes]
+
+        plt.figure(figsize=(8, 6))
+        nodes = nx.draw_networkx_nodes(graph, pos, node_color=times, cmap='viridis', node_size=500)
+        edges = nx.draw_networkx_edges(graph, pos, arrowstyle="->", arrowsize=15)
+        labels = nx.draw_networkx_labels(graph, pos, labels=node_labels, font_size=8)
+
+        sm = plt.cm.ScalarMappable(cmap='viridis', norm=plt.Normalize(min(times), max(times)))
+        sm.set_array([])
+        plt.colorbar(sm, ax=plt.gca(), label='Activation Time')
+
+
+        plt.title(f"[Event {event_id}] DAG with Activation Times (No Root Found)")
+        plt.axis('off')
+
+        if save_path:
+            save_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(save_path, bbox_inches='tight', dpi=150)
+            logger.info(f"🔍 Saved diagnostic plot to {save_path}")
+        else:
+            plt.show()
+
+        plt.close()
+
+    except Exception as e:
+        logger.error(f"Failed to plot event graph for Event {event_id}: {e}")

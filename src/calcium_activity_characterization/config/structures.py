@@ -670,7 +670,7 @@ class EventExtractionConfig:
     """
     min_cell_count: int = 2
     threshold_ratio: float = 0.4
-    radius: float = 300.0
+    radius: int = 300.0
     global_max_comm_time: int = 10
     seq_max_comm_time: int = 10
     convex_hull: ConvexHullParams = field(default_factory=ConvexHullParams)

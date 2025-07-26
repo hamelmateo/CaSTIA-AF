@@ -58,7 +58,8 @@ def generate_copeaking_groups(cells: List[Cell], neighbor_graph: nx.Graph) -> Li
 
     for cell in cells:
         for peak in cell.trace.peaks:
-            frame_to_peaks[peak.fhw_start_time].append((cell.label, peak.id))
+            if not peak.in_event:
+                frame_to_peaks[peak.communication_time].append((cell.label, peak.id))
 
     groups: List[CoPeakingNeighbors] = []
 

@@ -8,7 +8,7 @@ from .structures import *
 # FLAGS
 # ===========================
 DEBUG_CONFIG = DebugConfig(
-    debugging=False,
+    debugging=True,
     debugging_file_path="D:/Mateo/20250326/Data/IS1",
     harddrive_path="D:/Mateo"
 )
@@ -192,8 +192,8 @@ ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
 # ===========================
 EVENT_EXTRACTION_CONFIG = EventExtractionConfig(
     min_cell_count=2,
-    threshold_ratio=0.40,
-    radius=300,
+    threshold_ratio=0.5,
+    radius=200,
     global_max_comm_time=30,
     seq_max_comm_time=15,
     convex_hull=ConvexHullParams(

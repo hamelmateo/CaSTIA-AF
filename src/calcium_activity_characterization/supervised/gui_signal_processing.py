@@ -244,7 +244,7 @@ class SignalProcessingAndPeaksGUI(QMainWindow):
                 if peaks:
                     for peak in cell.trace.peaks:
                         ax2.plot(peak.peak_time, peak.height, 'r*', markersize=8)
-                        ax2.axvspan(peak.ref_start_time, peak.ref_end_time,
+                        ax2.axvspan(peak.activation_start_time, peak.activation_end_time,
                                     color=colors[peak.id % len(colors)], alpha=0.3)
             ax2.set_title("Processed + Peaks")
 

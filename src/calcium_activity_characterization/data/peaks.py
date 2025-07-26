@@ -31,9 +31,9 @@ class Peak:
         fhw_start_time (int): Start time at relative height threshold.
         fhw_end_time (int): End time at relative height threshold.
         fhw_duration (int): Duration of the peak at relative height (fhw_end_time - fhw_start_time).
-        ref_start_time (int): Reference start time used for event detection.
-        ref_end_time (int): Reference end time used for event detection.
-        ref_duration (int): Duration between reference start and end times.
+        activation_start_time (int): Reference start time used for event detection.
+        activation_end_time (int): Reference end time used for event detection.
+        activation_duration (int): Duration between reference start and end times.
         height (float): Absolute height of the peak.
         fhw_height (Optional[float]): Height of the peak relative to a reference value.
         prominence (float): Prominence of the peak compared to surrounding baseline.
@@ -74,13 +74,15 @@ class Peak:
         self.end_time = end_time
         self.duration = end_time - start_time
 
-        self.fhw_start_time = fhw_start_time # Start time at relative height
+        self.fhw_start_time = fhw_start_time # Full half width start time
         self.fhw_end_time = fhw_end_time
         self.fhw_duration = fhw_end_time - fhw_start_time
 
-        self.ref_start_time: int # Start time used for reference in event detection
-        self.ref_end_time: int
-        self.ref_duration: int
+        self.activation_start_time: int # Official activation start time for binarization
+        self.activation_end_time: int
+        self.activation_duration: int
+
+        self.communication_time: int # Reference time for event detection (can be same as activation_start_time)
 
         # Peak metadata
         self.height = height
@@ -128,17 +130,26 @@ class Peak:
             f"Peak(id={self.id}, time={self.fhw_start_time}, height={self.height:.2f}, in_event={self.in_event})"
         )
     
-    def define_ref_times(self, ref_start_time: int, ref_end_time: int):
+    def define_activation_times(self, activation_start_time: int, activation_end_time: int):
         """
         Define reference start and end times for this peak.
 
         Args:
-            ref_start_time (int): Reference start time.
-            ref_end_time (int): Reference end time.
+            activation_start_time (int): Reference start time.
+            activation_end_time (int): Reference end time.
         """
-        self.ref_start_time = ref_start_time
-        self.ref_end_time = ref_end_time
-        self.ref_duration = ref_end_time - ref_start_time
+        self.activation_start_time = activation_start_time
+        self.activation_end_time = activation_end_time
+        self.activation_duration = activation_end_time - activation_start_time
+
+    def define_communication_time(self, communication_time: int):
+        """
+        Define the communication time for this peak.
+
+        Args:
+            communication_time (int): Communication time.
+        """
+        self.communication_time = communication_time
 
 class PeakDetector:
     """
@@ -179,7 +190,8 @@ class PeakDetector:
             peaks = reassign_peak_ids(peaks)
 
         for peak in peaks:
-            peak.define_ref_times(peak.fhw_start_time, peak.fhw_end_time)
+            peak.define_activation_times(peak.fhw_start_time, peak.fhw_end_time)
+            peak.define_communication_time(peak.peak_time)
 
         return peaks
 

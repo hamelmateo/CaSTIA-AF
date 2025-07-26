@@ -162,8 +162,8 @@ class EventViewer(QMainWindow):
                 cell = self.label_map.get(label)
                 if cell:
                     for peak in cell.trace.peaks:
-                        if start <= peak.fhw_start_time <= end:
-                            if peak.fhw_start_time <= frame <= peak.fhw_end_time:
+                        if start <= peak.communication_time <= end:
+                            if peak.communication_time <= frame <= peak.activation_end_time:
                                 for y, x in cell.pixel_coords:
                                     mask[y, x] = color
 
@@ -251,8 +251,8 @@ class EventViewer(QMainWindow):
         for event in self.events:
             if label in list({label for label, _ in event.peaks_involved}):
                 for peak in cell.trace.peaks:
-                    if event.event_start_time <= peak.fhw_start_time <= event.event_end_time:
-                        if peak.fhw_start_time <= frame <= peak.fhw_end_time:
+                    if event.event_start_time <= peak.communication_time <= event.event_end_time:
+                        if peak.communication_time <= frame <= peak.activation_end_time:
                             active_event = event
                             break
             if active_event:

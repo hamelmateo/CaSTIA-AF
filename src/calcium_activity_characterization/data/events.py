@@ -17,6 +17,9 @@ from calcium_activity_characterization.data.cell_to_cell_communication import Ce
 from calcium_activity_characterization.utilities.metrics import Distribution
 from calcium_activity_characterization.config.presets import EventExtractionConfig, ConvexHullParams
 
+from pathlib import Path
+from calcium_activity_characterization.utilities.plotter import plot_event_graph
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -512,6 +515,7 @@ class SequentialEvent(Event):
             }
             fallback_label = min(label_to_first_time, key=label_to_first_time.get)
             logger.warning(f"[Event {self.id}] No root node found; using fallback label {fallback_label}")
+
             return fallback_label
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to find origin label: {e}")
@@ -689,15 +693,15 @@ class GlobalEvent(Event):
     @classmethod
     def from_framewise_active_labels(
         cls,
-        framewise_label_blocks: List[Dict[int, List[int]]],
+        framewise_label_blocks: List[Dict[int, List[Tuple[int, int]]]],
         cells: List[Cell],
         config: EventExtractionConfig
     ) -> List["GlobalEvent"]:
         """
-        Create multiple GlobalEvent objects from a list of framewise label dictionaries.
+        Create multiple GlobalEvent objects from a list of framewise (cell_label, peak_id) dictionaries.
 
         Args:
-            framewise_label_blocks (List[Dict[int, List[int]]]): List of frame-label mappings, one per event.
+            framewise_label_blocks (List[Dict[int, List[Tuple[int, int]]]]): List of frame -> [(cell_label, peak_id)] mappings, one per event.
             cells (List[Cell]): All available cell objects.
             config (EventExtractionConfig): Configuration object. Should contain 'min_cell_count'.
 
@@ -711,26 +715,27 @@ class GlobalEvent(Event):
         counter = 0
 
         for framewise_labels in framewise_label_blocks:
-            involved_labels = {l for labels in framewise_labels.values() for l in labels}
-            if len(involved_labels) < min_cells:
+            # Gather all unique (label, peak_id) pairs across the event
+            involved_label_ids = {label for label, _ in {p for lst in framewise_labels.values() for p in lst}}
+            if len(involved_label_ids) < min_cells:
                 continue
 
+            # Build label -> centroid mapping for involved cells
             label_to_centroid = {
                 label: label_to_cell[label].centroid
-                for label in involved_labels if label in label_to_cell
+                for label in involved_label_ids if label in label_to_cell
             }
 
-            peak_indices = [
-                (label, peak.id)
-                for t, labels in framewise_labels.items()
-                for label in labels
-                if (peak := label_to_cell[label].trace.get_peak_starting_at(t)) is not None
-            ]
+            # Collect the (label, peak_id) tuples into a list
+            peak_indices = list({(label, pid) for frame in framewise_labels.values() for (label, pid) in frame})
 
+            # Construct the GlobalEvent
             event = cls(
                 id=counter,
                 label_to_centroid=label_to_centroid,
-                framewise_active_labels=framewise_labels,
+                framewise_active_labels={
+                    t: [label for (label, _) in entries] for t, entries in framewise_labels.items()
+                },
                 peak_indices=peak_indices
             )
             events.append(event)
@@ -738,4 +743,5 @@ class GlobalEvent(Event):
 
         logger.info(f"Created {len(events)} GlobalEvents from framewise label blocks.")
         return events
+
 

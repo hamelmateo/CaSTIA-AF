@@ -141,8 +141,8 @@ class Trace:
         trace_length = len(trace)
         binary = np.zeros(trace_length, dtype=int)
         for peak in self.peaks:
-            start = max(0, peak.fhw_start_time)
-            end = min(trace_length, peak.fhw_end_time + 1)
+            start = max(0, peak.activation_start_time)
+            end = min(trace_length, peak.activation_end_time + 1)
             binary[start:end] = 1
 
         self.binary = binary.tolist()
@@ -195,7 +195,7 @@ class Trace:
         durations = [p.fhw_duration for p in peaks]
         amplitudes = [p.height for p in peaks]
         prominences = [p.prominence for p in peaks]
-        start_times = [p.fhw_start_time for p in peaks]
+        start_times = [p.activation_start_time for p in peaks]
         symmetry_scores = [p.rel_symmetry_score for p in peaks]
 
         intervals = np.diff(start_times)
@@ -378,7 +378,7 @@ class Trace:
         plt.figure()
         plt.plot(trace, label=f"Trace: {self.default_version}")
         for peak in self.peaks:
-            plt.axvspan(peak.fhw_start_time, peak.fhw_end_time, color='red', alpha=0.3)
+            plt.axvspan(peak.activation_start_time, peak.activation_end_time, color='red', alpha=0.3)
         plt.title("Peaks Over Trace")
         plt.xlabel("Time")
         plt.ylabel("Intensity")
@@ -455,7 +455,7 @@ class Trace:
             active_trace = self.active_trace
             axs[idx].plot(active_trace, label="Active Trace")
             for peak in self.peaks:
-                axs[idx].axvspan(peak.fhw_start_time, peak.fhw_end_time, color='red', alpha=0.3)
+                axs[idx].axvspan(peak.activation_start_time, peak.activation_end_time, color='red', alpha=0.3)
             axs[idx].set_title("Rel Peaks Overlay")
             axs[idx].legend()
             axs[idx].set_ylabel("Intensity")
@@ -489,7 +489,7 @@ class Trace:
 
     def get_peak_starting_at(self, frame: int) -> Optional["Peak"]:
         """
-        Return the first peak whose fhw_start_time matches the given frame.
+        Return the first peak whose activation_start_time matches the given frame.
 
         Args:
             frame (int): Frame index to match.
@@ -498,6 +498,6 @@ class Trace:
             Optional[Peak]: The matching Peak object, or None if not found.
         """
         for peak in self.peaks:
-            if peak.fhw_start_time == frame:
+            if peak.activation_start_time == frame:
                 return peak
         return None

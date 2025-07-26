@@ -111,7 +111,7 @@ class SequentialSelectivityViewer(QMainWindow):
         if not folder:
             return
         folder = Path(folder)
-        pkl_path = folder / "04_population_events.pkl"
+        pkl_path = folder / "population-snapshots/04_population_events.pkl"
         if not pkl_path.exists():
             return
         with open(pkl_path, 'rb') as f:
@@ -120,9 +120,9 @@ class SequentialSelectivityViewer(QMainWindow):
         if not self.population.cells:
             return
 
-        overlay_path = folder / "nuclei_mask.TIF"
+        overlay_path = folder / "cell-mapping/nuclei_mask.TIF"
         if not overlay_path.exists():
-            overlay_path = folder / "nuclei_mask.tif"
+            overlay_path = folder / "cell-mapping/nuclei_mask.tif"
         if overlay_path.exists():
             overlay = tifffile.imread(str(overlay_path))
             base = np.zeros((*overlay.shape, 3), dtype=np.uint8)
@@ -160,8 +160,8 @@ class SequentialSelectivityViewer(QMainWindow):
                 cause_peak = cause_cell.trace.peaks[c_idx]
             except IndexError:
                 continue
-            start = cause_peak.fhw_start_time
-            end = min(origin_peak.fhw_end_time, cause_peak.fhw_end_time)
+            start = cause_peak.communication_time
+            end = min(origin_peak.activation_end_time, cause_peak.activation_end_time)
             self.arrow_intervals.append((start, end, origin_cell.centroid, cause_cell.centroid))
 
     def update_frame(self):
@@ -176,7 +176,7 @@ class SequentialSelectivityViewer(QMainWindow):
                 continue
             active_peak = None
             for peak in cell.trace.peaks:
-                if peak.fhw_start_time <= frame <= peak.fhw_end_time:
+                if peak.communication_time <= frame <= peak.activation_end_time:
                     active_peak = peak
                     break
             if not active_peak:

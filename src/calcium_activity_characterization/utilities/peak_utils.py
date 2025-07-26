@@ -14,7 +14,7 @@ def find_valley_bounds(
     fhw_start_time: int,
     fhw_end_time: int,
     max_search: int = 350, #TODO: make this a config parameter
-    window: int = 25
+    window: int = 15
 ) -> Tuple[int, int]:
     """
     Find the left and right valley bounds of a peak in a 1D trace.

@@ -2,7 +2,7 @@
 # global_event_detection.py
 # Usage Example:
 # >>> windows = find_significant_activity_peaks(trace, len(cells), threshold_ratio=0.4)
-# >>> global_blocks = extract_global_event_blocks(cells, windows, radius=30.0, global_max_comm_time=10, min_cell_count=5)
+# >>> global_blocks = extract_global_event_blocks(cells, windows, radius=300, global_max_comm_time=10, min_cell_count=5)
 
 from typing import List, Tuple, Dict, Set
 import logging
@@ -56,17 +56,18 @@ def _get_framewise_active_labels(
     """
     framewise: Dict[int, List[Tuple[int, int]]] = {}
     for cell in cells:
-        valid_peaks = [p for p in cell.trace.peaks if start <= p.fhw_start_time <= end]
+        valid_peaks = [p for p in cell.trace.peaks if start <= p.communication_time <= end]
         if not valid_peaks:
             continue
         keep_only_latest_peak = False  # TODO think about how to handle this
         if keep_only_latest_peak:
-            best_peak = max(valid_peaks, key=lambda p: p.fhw_start_time)
-            framewise.setdefault(best_peak.fhw_start_time, []).append((cell.label, best_peak.id))
+            best_peak = max(valid_peaks, key=lambda p: p.communication_time)
+            framewise.setdefault(best_peak.communication_time, []).append((cell.label, best_peak.id))
         else: # Accept all peaks in the window
             for peak in valid_peaks:
-                framewise.setdefault(peak.fhw_start_time, []).append((cell.label, peak.id))
-    return framewise
+                framewise.setdefault(peak.communication_time, []).append((cell.label, peak.id))
+        framewise_sorted = dict(sorted(framewise.items()))
+    return framewise_sorted
 
 def _get_activated_cells(
     framewise_active: Dict[int, List[int]],
@@ -121,10 +122,7 @@ def _cluster_event_from_origin(
     """
     origin_cell = active_cells[label]
     origin_peak = origin_cell.trace.peaks[peak_id]
-    origin_time = origin_peak.ref_start_time
-
-    if origin_peak.in_event:
-        return set()
+    origin_time = origin_peak.communication_time
     
     # Only proceed if this origin causes any other peak
     has_valid_neighbor = False
@@ -155,11 +153,11 @@ def _cluster_event_from_origin(
         for (other_label, other_peak_id), other_time in cell_activation_time.items():
             if (other_label, other_peak_id) == (current_label, current_peak_id):
                 continue
-
+            
             other_cell = active_cells[other_label]
             other_peak = other_cell.trace.peaks[other_peak_id]
 
-            if other_label in cluster or other_peak.in_event:
+            if other_peak.in_event:
                 continue
 
             if 0 < other_time - current_time <= global_max_comm_time:
@@ -178,7 +176,7 @@ def extract_global_event_blocks(
     radius: float,
     global_max_comm_time: int,
     min_cell_count: int = 3
-) -> List[Dict[int, List[int]]]:
+) -> List[Dict[int, List[Tuple[int, int]]]]:
     """
     From each peak window, extract spatially propagating global events by radius/time criteria.
 
@@ -190,7 +188,7 @@ def extract_global_event_blocks(
         min_cell_count (int): Minimum size to keep the global event.
 
     Returns:
-        List[Dict[int, List[int]]]: List of framewise label dicts (one per GlobalEvent).
+        List[Dict[int, List[Tuple[int, int]]]]: List of framewise (cell label, peak id) dicts (one per GlobalEvent).
     """
     global_event_blocks = []
 
@@ -210,9 +208,10 @@ def extract_global_event_blocks(
 
                 event_cluster.update(cluster)
 
+            # Build a dict: frame -> list of (cell label, peak id) in event_cluster for that frame
             if len({lbl for lbl, _ in event_cluster}) >= min_cell_count:
                 framewise = {
-                    t: [lbl for (lbl, pid) in framewise_active.get(t, []) if (lbl, pid) in event_cluster]
+                    t: [(lbl, pid) for (lbl, pid) in framewise_active.get(t, []) if (lbl, pid) in event_cluster]
                     for t in range(start, end + 1)
                 }
                 global_event_blocks.append(framewise)

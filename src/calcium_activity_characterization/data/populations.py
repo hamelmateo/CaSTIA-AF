@@ -174,7 +174,7 @@ class Population:
                                signal_processing_params: SignalProcessingConfig = None, 
                                peak_detection_params: PeakDetectionConfig = None) -> None:
         """
-        Compute the impulse trace as the sum of fhw_start_time occurrences across all cells.
+        Compute the impulse trace as the sum of activation_start_time occurrences across all cells.
 
         This trace reflects the number of cell peaks that start at each timepoint.
 
@@ -192,15 +192,15 @@ class Population:
         impulse_traces = []
 
         max_time = max(
-            (max((p.fhw_start_time for p in cell.trace.peaks), default=-1) for cell in self.cells),
+            (max((p.activation_start_time for p in cell.trace.peaks), default=-1) for cell in self.cells),
             default=-1
         ) + 1
 
         for cell in self.cells:
             trace = np.zeros(max_time, dtype=int)
             for peak in cell.trace.peaks:
-                if 0 <= peak.fhw_start_time < max_time:
-                    trace[peak.fhw_start_time] = 1
+                if 0 <= peak.activation_start_time < max_time:
+                    trace[peak.activation_start_time] = 1
             impulse_traces.append(trace)
 
         trace_lengths = set(len(t) for t in impulse_traces)
@@ -263,21 +263,21 @@ class Population:
         Args:
             config (EventExtractionConfig): Configuration object with parameters for sequential event detection.
         """
-        clean_cells = self._create_cells_without_global_peaks()
+        #clean_cells = self._create_cells_without_global_peaks()
 
         self.copeaking_neighbors = generate_copeaking_groups(
-            cells=clean_cells,
+            cells=self.cells,
             neighbor_graph=self.neighbor_graph
         )
 
         self.cell_to_cell_communications = generate_cell_to_cell_communications(
-            clean_cells,
+            self.cells,
             neighbor_graph=self.neighbor_graph,
             copeaking_groups=self.copeaking_neighbors,
             max_time_gap=config.seq_max_comm_time
         )
 
-        del clean_cells  # Free memory
+        #del clean_cells  # Free memory
 
         assign_peak_classifications(self.cells, self.cell_to_cell_communications)
 
@@ -314,8 +314,5 @@ class Population:
                 cell = next((c for c in self.cells if c.label == cell_label), None)
                 if cell is None:
                     continue
-                for peak in cell.trace.peaks:
-                    if peak.id == peak_id:
-                        peak.event_id = event.id
-                        break
+                cell.trace.peaks[peak_id].event_id = event.id
 
