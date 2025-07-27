@@ -247,7 +247,7 @@ class Population:
             min_cell_count=config.min_cell_count
         )
 
-        self.events.extend(GlobalEvent.from_framewise_active_labels(
+        self.events.extend(GlobalEvent.from_framewise_peaking_labels(
             framewise_label_blocks=blocks,
             cells=self.cells,
             config=config

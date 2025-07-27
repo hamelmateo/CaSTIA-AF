@@ -2,7 +2,7 @@
 # Usage Example:
 # >>> event = SequentialEvent.from_communications(id=0, communications=[...], config={})
 # >>> print(event.event_duration, event.n_cells_involved)
-# >>> global_event = GlobalEvent.from_framewise_active_labels(id=1, label_to_cell=..., framewise_active_labels=..., config={})
+# >>> global_event = GlobalEvent.from_framewise_peaking_labels(id=1, label_to_cell=..., framewise_peaking_labels=..., config={})
 
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
@@ -36,8 +36,8 @@ class Event(ABC):
         event_start_time (int): Earliest peak start time.
         event_end_time (int): Latest peak start time.
         event_duration (int): Duration of the event.
-        framewise_active_labels (Dict[int, List[int]]): Active labels per frame.
-        wavefront (Dict[int, List[np.ndarray]]): Centroids of active cells per frame.
+        framewise_peaking_labels (Dict[int, List[int]]): Map of cell labels peaking at each frame.
+        wavefront (Dict[int, List[np.ndarray]]): Centroids of peaking cells per frame.
         config (Dict): Detection parameters used.
         dominant_direction_vector (Tuple[float, float]): Direction of propagation as a unit vector.
         directional_propagation_speed (float): Speed of propagation in the dominant direction.
@@ -48,7 +48,7 @@ class Event(ABC):
         id: int,
         peaks_involved: List[Tuple[int, int]],
         label_to_centroid: Dict[int, np.ndarray],
-        framewise_active_labels: Dict[int, List[int]] = None
+        framewise_peaking_labels: Dict[int, List[int]] = None
     ) -> None:
         self.id = id
 
@@ -56,14 +56,15 @@ class Event(ABC):
         self.label_to_centroid = label_to_centroid
 
         self.n_cells_involved = len(label_to_centroid)
-        self.framewise_active_labels = framewise_active_labels
+        self.framewise_peaking_labels = framewise_peaking_labels
 
         self.event_start_time, self.event_end_time = self._compute_event_bounds()
         self.event_duration = self.event_end_time - self.event_start_time + 1
         self.wavefront = self._compute_incremental_wavefront()
-        
+        self.growth_curve = self._compute_growth_curve()
+
         self.dominant_direction_vector = None # to be computed in subclasses
-        self.directional_propagation_speed = None
+        self.directional_propagation_speed = None # to be computed in subclasses
 
 
     def _compute_event_bounds(self) -> Tuple[int, int]:
@@ -73,7 +74,7 @@ class Event(ABC):
         Returns:
             Tuple[int, int]: Start and end times of the event.
         """
-        times = list(self.framewise_active_labels.keys())
+        times = list(self.framewise_peaking_labels.keys())
         return min(times), max(times)
 
     def _compute_incremental_wavefront(self) -> Dict[int, List[np.ndarray]]:
@@ -85,11 +86,26 @@ class Event(ABC):
         """
         wavefront = {}
         activated = set()
-        for t in sorted(self.framewise_active_labels.keys()):
-            activated.update(self.framewise_active_labels[t])
+        for t in sorted(self.framewise_peaking_labels.keys()):
+            activated.update(self.framewise_peaking_labels[t])
             centroids = [self.label_to_centroid[l] for l in activated if l in self.label_to_centroid]
             wavefront[t] = centroids
         return wavefront
+
+    def _compute_growth_curve(self) -> Distribution:
+        """
+        Store number of newly recruited cells per frame as a Distribution.
+        # TODO: Implement rise/fall asymmetry metrics and time to rise metrics.
+        """
+        try:
+            values = [
+                len(labels)
+                for _, labels in sorted(self.framewise_peaking_labels.items())
+            ]
+            return Distribution.from_values(values)
+        except Exception as e:
+            logger.error(f"[Event {self.id}] Failed to compute growth curve: {e}")
+            return Distribution.from_values([])
 
     @abstractmethod
     def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
@@ -132,7 +148,7 @@ class SequentialEvent(Event):
         self._build_graph()
         self.dag_metrics = self._compute_dag_metrics()
 
-        super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_active_labels())
+        super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_peaking_labels())
 
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
@@ -149,7 +165,7 @@ class SequentialEvent(Event):
         self.radiality_score: float = self._compute_radiality_score()
         self.compactness_score: float = self._compute_compactness_score(population_centroid)
 
-    def _compute_framewise_active_labels(self) -> Dict[int, List[int]]:
+    def _compute_framewise_peaking_labels(self) -> Dict[int, List[int]]:
         """
         Build raw map of which cells are active at each frame.
 
@@ -585,10 +601,10 @@ class GlobalEvent(Event):
         id: int,
         peak_indices: Tuple[int, int],
         label_to_centroid: Dict[int, np.ndarray],
-        framewise_active_labels: Dict[int, List[int]],
+        framewise_peaking_labels: Dict[int, List[int]],
         config_direction: DirectionComputationParams
     ) -> None:
-        super().__init__(id, peak_indices, label_to_centroid, framewise_active_labels)
+        super().__init__(id, peak_indices, label_to_centroid, framewise_peaking_labels)
 
         self.direction_metadata = self._compute_dominant_direction_metadata(config_direction)
 
@@ -624,7 +640,7 @@ class GlobalEvent(Event):
         for start, end in bins:
             active_labels = set()
             for t in range(start, end + 1):
-                active_labels.update(self.framewise_active_labels.get(t, []))
+                active_labels.update(self.framewise_peaking_labels.get(t, []))
 
             centroids = [self.label_to_centroid[l] for l in active_labels if l in self.label_to_centroid]
             all_centroids.extend(centroids)
@@ -757,7 +773,7 @@ class GlobalEvent(Event):
         return displacement / delta_t
 
     @classmethod
-    def from_framewise_active_labels(
+    def from_framewise_peaking_labels(
         cls,
         framewise_label_blocks: List[Dict[int, List[Tuple[int, int]]]],
         cells: List[Cell],
@@ -799,7 +815,7 @@ class GlobalEvent(Event):
             event = cls(
                 id=counter,
                 label_to_centroid=label_to_centroid,
-                framewise_active_labels={
+                framewise_peaking_labels={
                     t: [label for (label, _) in entries] for t, entries in framewise_labels.items()
                 },
                 peak_indices=peak_indices,

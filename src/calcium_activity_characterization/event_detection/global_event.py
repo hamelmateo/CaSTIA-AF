@@ -37,14 +37,14 @@ def find_significant_activity_peaks(
         logger.error(f"Error detecting significant peaks: {e}")
         return []
 
-def _get_framewise_active_labels(
+def _get_framewise_peaking_labels(
     cells: List[Cell],
     start: int,
     end: int
 ) -> Dict[int, List[Tuple[int, int]]]:
     """
     Build a dict mapping frame -> list of (cell label, peak id) tuples for all cells that have a peak in the given time window.
-    This is used to determine which cells are active at each frame in the specified time window.
+    This is used to determine which cells are peaking at each frame in the specified time window.
 
     Args:
         cells (List[Cell]): All cells to consider.
@@ -52,7 +52,7 @@ def _get_framewise_active_labels(
         end (int): End frame of time window.
 
     Returns:
-        Dict[int, List[Tuple[int, int]]]: Mapping from frame to list of (cell label, peak id) tuples.
+        Dict[int, List[Tuple[int, int]]]: Mapping from frame to list of (cell label, peak id) tuples peaking at this frame.
     """
     framewise: Dict[int, List[Tuple[int, int]]] = {}
     for cell in cells:
@@ -194,7 +194,7 @@ def extract_global_event_blocks(
 
     try:
         for start, end in peak_windows:
-            framewise_active = _get_framewise_active_labels(cells, start, end)
+            framewise_active = _get_framewise_peaking_labels(cells, start, end)
             active_cells, activation_times = _get_activated_cells(framewise_active, cells)
 
             event_cluster = set()
