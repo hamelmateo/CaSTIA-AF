@@ -196,7 +196,7 @@ class Trace:
         amplitudes = [p.height for p in peaks]
         prominences = [p.prominence for p in peaks]
         start_times = [p.activation_start_time for p in peaks]
-        symmetry_scores = [p.rel_symmetry_score for p in peaks]
+        symmetry_scores = [p.fhw_symmetry_score for p in peaks]
 
         intervals = np.diff(start_times)
 

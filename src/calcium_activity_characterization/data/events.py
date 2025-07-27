@@ -61,7 +61,9 @@ class Event(ABC):
         self.event_start_time, self.event_end_time = self._compute_event_bounds()
         self.event_duration = self.event_end_time - self.event_start_time + 1
         self.wavefront = self._compute_incremental_wavefront()
-        self.growth_curve = self._compute_growth_curve()
+        self.growth_curve_distribution = self._compute_growth_curve()
+        self.growth_curve_mean = self.growth_curve_distribution.mean
+        self.growth_curve_std = self.growth_curve_distribution.std
 
         self.dominant_direction_vector = None # to be computed in subclasses
         self.directional_propagation_speed = None # to be computed in subclasses

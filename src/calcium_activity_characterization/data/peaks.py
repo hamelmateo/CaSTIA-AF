@@ -3,7 +3,7 @@ Peak class update to include symmetry score at the individual level.
 
 Example:
     >>> peak = Peak(...)
-    >>> print(peak.rel_symmetry_score)  # Already computed during creation
+    >>> print(peak.fhw_symmetry_score)  # Already computed during creation
 """
 
 from typing import Optional, Literal, List
@@ -39,9 +39,9 @@ class Peak:
         prominence (float): Prominence of the peak compared to surrounding baseline.
         rise_time (int): Time from start_time to peak_time.
         decay_time (int): Time from peak_time to end_time.
-        rel_rise_time (int): Time from fhw_start_time to peak_time.
-        rel_decay_time (int): Time from peak_time to fhw_end_time.
-        rel_symmetry_score (float): Symmetry score of the peak shape (1 = perfect symmetry).
+        fhw_rise_time (int): Time from fhw_start_time to peak_time.
+        fhw_decay_time (int): Time from peak_time to fhw_end_time.
+        fhw_symmetry_score (float): Symmetry score of the peak shape (1 = perfect symmetry).
         group_id (Optional[int]): ID of the overlapping group this peak belongs to.
         parent_peak_id (Optional[int]): ID of the parent peak if part of an overlapping group.
         grouping_type (Optional[Literal["individual", "child", "parent"]]): Role in the overlapping group.
@@ -91,9 +91,9 @@ class Peak:
 
         self.rise_time = peak_time - start_time
         self.decay_time = end_time - peak_time
-        self.rel_rise_time = peak_time - fhw_start_time
-        self.rel_decay_time = fhw_end_time - peak_time
-        self.rel_symmetry_score: float = self._compute_symmetry_score()
+        self.fhw_rise_time = peak_time - fhw_start_time
+        self.fhw_decay_time = fhw_end_time - peak_time
+        self.fhw_symmetry_score: float = self._compute_symmetry_score()
 
         # Grouping metadata
         self.group_id: Optional[int] = None  # ID of the overlapping group this peak belongs to
@@ -120,9 +120,9 @@ class Peak:
         Returns:
             Optional[float]: Symmetry score (1 = perfect symmetry), or None if invalid.
         """
-        total_time = self.rel_rise_time + self.rel_decay_time
+        total_time = self.fhw_rise_time + self.fhw_decay_time
         if total_time > 0:
-            return 1 - abs(self.rel_rise_time - self.rel_decay_time) / total_time
+            return 1 - abs(self.fhw_rise_time - self.fhw_decay_time) / total_time
         return None
 
     def __repr__(self):

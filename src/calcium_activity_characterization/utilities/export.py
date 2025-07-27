@@ -46,10 +46,11 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "peak_id", "cell_id", "event_id", "start_time", "end_time", "duration",
-                "fhw_start_time", "fhw_end_time", "fhw_duration", "peak_time",
+                "fhw_start_time", "fhw_end_time", "fhw_duration", "peak_time", 
+                "activation_start_time", "activation_end_time", "activation_duration", "communication_time",
                 "height", "prominence", "fhw_height",
-                "rise_time", "decay_time", "rel_rise_time", "rel_decay_time",
-                "rel_symmetry_score", "in_event", "origin_type", "origin_label"
+                "rise_time", "decay_time", "fhw_rise_time", "fhw_decay_time",
+                "fhw_symmetry_score", "in_event", "origin_type", "origin_label"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting peaks", unit="cell"):
@@ -65,14 +66,18 @@ class NormalizedDataExporter:
                         "fhw_end_time": peak.fhw_end_time,
                         "fhw_duration": peak.fhw_duration,
                         "peak_time": peak.peak_time,
+                        "activation_start_time": peak.activation_start_time,
+                        "activation_end_time": peak.activation_end_time,
+                        "activation_duration": peak.activation_duration,
+                        "communication_time": peak.communication_time,
                         "height": peak.height,
                         "prominence": peak.prominence,
                         "fhw_height": peak.fhw_height,
                         "rise_time": peak.rise_time,
                         "decay_time": peak.decay_time,
-                        "rel_rise_time": peak.rel_rise_time,
-                        "rel_decay_time": peak.rel_decay_time,
-                        "rel_symmetry_score": peak.rel_symmetry_score,
+                        "fhw_rise_time": peak.fhw_rise_time,
+                        "fhw_decay_time": peak.fhw_decay_time,
+                        "fhw_symmetry_score": peak.fhw_symmetry_score,
                         "in_event": peak.in_event,
                         "origin_type": peak.origin_type,
                         "origin_label": peak.origin_label
@@ -82,8 +87,8 @@ class NormalizedDataExporter:
         path = self.output_dir / "cells.csv"
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
-                "cell_id", "centroid_x", "centroid_y", "is_valid",
-                "num_peaks", "peak_frequency", "periodicity_score", "fraction_active_time"
+                "cell_id", "centroid_x", "centroid_y",
+                "num_peaks", "peak_frequency", "periodicity_score"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
@@ -96,11 +101,9 @@ class NormalizedDataExporter:
                     "cell_id": cell.label,
                     "centroid_x": int(cell.centroid[1]),
                     "centroid_y": int(cell.centroid[0]),
-                    "is_valid": cell.is_valid,
                     "num_peaks": len(cell.trace.peaks),
                     "peak_frequency": cell.trace.metadata.get("peak_frequency", 0),
                     "periodicity_score": cell.trace.metadata.get("periodicity_score", 0),
-                    "fraction_active_time": cell.trace.metadata.get("fraction_active_time", 0)
                 })
 
     def export_events(self) -> None:
@@ -109,6 +112,7 @@ class NormalizedDataExporter:
             writer = csv.DictWriter(f, fieldnames=[
                 "event_id", "event_type", "event_start_time", "event_end_time", "event_duration",
                 "n_cells_involved", "dominant_direction_vector", "directional_propagation_speed",
+                "growth_curve_mean", "growth_curve_std",
                 "dag_n_nodes", "dag_n_edges", "dag_n_roots", "dag_depth", "dag_width",
                 "dag_avg_out_degree", "dag_avg_path_length",
                 "communication_speed_mean", "communication_speed_std",
@@ -136,26 +140,22 @@ class NormalizedDataExporter:
                     "n_cells_involved": event.n_cells_involved,
                     "dominant_direction_vector": str(event.dominant_direction_vector),
                     "directional_propagation_speed": event.directional_propagation_speed,
-                    "dag_n_nodes": event.dag_metrics.get("n_nodes", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_n_edges": event.dag_metrics.get("n_edges", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_n_roots": event.dag_metrics.get("n_roots", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_depth": event.dag_metrics.get("depth", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_width": event.dag_metrics.get("width", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_avg_out_degree": event.dag_metrics.get("avg_out_degree", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_avg_path_length": event.dag_metrics.get("avg_path_length", None) if hasattr(event, "dag_metrics") else None,
-                    "dag_n_edges": getattr(event, "dag_n_edges", None),
-                    "dag_n_roots": getattr(event, "dag_n_roots", None),
-                    "dag_depth": getattr(event, "dag_depth", None),
-                    "dag_width": getattr(event, "dag_width", None),
-                    "dag_avg_out_degree": getattr(event, "dag_avg_out_degree", None),
-                    "dag_avg_path_length": getattr(event, "dag_avg_path_length", None),
-                    "communication_speed_mean": getattr(event, "communication_speed_mean", None),
-                    "communication_speed_std": getattr(event, "communication_speed_std", None),
-                    "communication_time_mean": getattr(event, "communication_time_mean", None),
-                    "communication_time_std": getattr(event, "communication_time_std", None),
-                    "elongation_score": getattr(event, "elongation_score", None),
-                    "radiality_score": getattr(event, "radiality_score", None),
-                    "compactness_score": getattr(event, "compactness_score", None)
+                    "growth_curve_mean": event.growth_curve_mean,
+                    "growth_curve_std": event.growth_curve_std,
+                    "dag_n_nodes": event.dag_metrics["n_nodes"] if is_seq else None,
+                    "dag_n_edges": event.dag_metrics["n_edges"] if is_seq else None,
+                    "dag_n_roots": event.dag_metrics["n_roots"] if is_seq else None,
+                    "dag_depth": event.dag_metrics["depth"] if is_seq else None,
+                    "dag_width": event.dag_metrics["width"] if is_seq else None,
+                    "dag_avg_out_degree": event.dag_metrics["avg_out_degree"] if is_seq else None,
+                    "dag_avg_path_length": event.dag_metrics["avg_path_length"] if is_seq else None,
+                    "communication_speed_mean": event.communication_speed_mean if is_seq else None,
+                    "communication_speed_std": event.communication_speed_std if is_seq else None,
+                    "communication_time_mean": event.communication_time_mean if is_seq else None,
+                    "communication_time_std": event.communication_time_std if is_seq else None,
+                    "elongation_score": event.elongation_score if is_seq else None,
+                    "radiality_score": event.radiality_score if is_seq else None,
+                    "compactness_score": event.compactness_score if is_seq else None
                 })
 
     def export_population_metrics(self) -> None:
