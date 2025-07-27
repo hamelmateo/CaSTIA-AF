@@ -182,19 +182,15 @@ def _bfs_propagate_within_group(
         current = queue.pop(0)
         for neighbor in group.subgraph.neighbors(current):
             for (cand_label, cand_id) in group.members: # For-loop over neighbor's peaks
-                #if cand_label == neighbor and not label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].is_analyzed:
                 if cand_label == neighbor and not label_to_cell[cand_label].trace.peaks[cand_id].is_analyzed:
                     current_peak_id = next(i for l, i in start_labels if l == current) # Get the index of the peak in the current cell
                     comm = CellToCellCommunication(
                         origin=(current, current_peak_id),  
                         cause=(cand_label, cand_id),
-                        #origin_start_time=label_to_cell[current].trace.peaks[peak_id_to_index[current][current_peak_id]].communication_time,
-                        #cause_start_time=label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].communication_time
                         origin_start_time=label_to_cell[current].trace.peaks[current_peak_id].communication_time,
                         cause_start_time=label_to_cell[cand_label].trace.peaks[cand_id].communication_time
                     )
                     communications.append(comm)
-                    #label_to_cell[cand_label].trace.peaks[peak_id_to_index[cand_label][cand_id]].is_analyzed = True
                     label_to_cell[cand_label].trace.peaks[cand_id].is_analyzed = True
                     visited.add(cand_label) 
                     queue.append(cand_label) # Add neighbor to queue for further spatial propagation
@@ -222,6 +218,8 @@ def _resolve_individual_peaks(
             best_dt = float("inf")
             for neighbor in neighbor_graph.neighbors(cell.label):
                 for neighbor_peak in label_to_cell[neighbor].trace.peaks:
+                    if neighbor_peak.in_event:
+                        continue
                     dt = peak.communication_time - neighbor_peak.communication_time
                     if 0 < dt <= max_time_gap and dt < best_dt:
                         best_candidate = (neighbor, neighbor_peak.id, neighbor_peak.communication_time)

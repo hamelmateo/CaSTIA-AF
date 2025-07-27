@@ -307,8 +307,6 @@ class Population:
         """
         for event in self.events:
             for cell_label, peak_id in event.peaks_involved:
-                cell = next((c for c in self.cells if c.label == cell_label), None)
-                if cell is None:
-                    continue
+                cell = next(c for c in self.cells if c.label == cell_label)
                 cell.trace.peaks[peak_id].event_id = event.id
 
