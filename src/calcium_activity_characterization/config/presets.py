@@ -199,7 +199,12 @@ EVENT_EXTRACTION_CONFIG = EventExtractionConfig(
     convex_hull=ConvexHullParams(
         min_points=3,
         min_duration=1
-    )
+    ),
+    global_direction_computation=DirectionComputationParams(
+        num_time_bins=6,
+        mad_filtering_multiplier=1.0,
+        min_net_displacement_ratio=0.25
+    ),
 )
 
 # ===========================

@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication
 from calcium_activity_characterization.utilities.metrics import Distribution
-from calcium_activity_characterization.config.presets import EventExtractionConfig, ConvexHullParams
+from calcium_activity_characterization.config.presets import EventExtractionConfig, ConvexHullParams, DirectionComputationParams
 
 from pathlib import Path
 from calcium_activity_characterization.utilities.plotter import plot_event_graph
@@ -62,8 +62,8 @@ class Event(ABC):
         self.event_duration = self.event_end_time - self.event_start_time + 1
         self.wavefront = self._compute_incremental_wavefront()
         
-        self.dominant_direction_vector = self._compute_dominant_direction_vector()
-        self.directional_propagation_speed = self._compute_directional_propagation_speed()
+        self.dominant_direction_vector = None # to be computed in subclasses
+        self.directional_propagation_speed = None
 
 
     def _compute_event_bounds(self) -> Tuple[int, int]:
@@ -133,6 +133,9 @@ class SequentialEvent(Event):
         self.dag_metrics = self._compute_dag_metrics()
 
         super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_active_labels())
+
+        self.dominant_direction_vector = self._compute_dominant_direction_vector()
+        self.directional_propagation_speed = self._compute_directional_propagation_speed()
 
         self.communication_time_distribution: Distribution = self._communication_time_distribution()
         self.communication_time_mean: float = self.communication_time_distribution.mean
@@ -582,12 +585,130 @@ class GlobalEvent(Event):
         id: int,
         peak_indices: Tuple[int, int],
         label_to_centroid: Dict[int, np.ndarray],
-        framewise_active_labels: Dict[int, List[int]]
+        framewise_active_labels: Dict[int, List[int]],
+        config_direction: DirectionComputationParams
     ) -> None:
         super().__init__(id, peak_indices, label_to_centroid, framewise_active_labels)
 
+        self.direction_metadata = self._compute_dominant_direction_metadata(config_direction)
+
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
+
+    def _compute_dominant_direction_metadata(self, config: DirectionComputationParams) -> Dict[str, Any]:
+        """
+        Compute dominant direction and supporting metadata using trimmed CoM over time bins.
+
+        Returns:
+            dict: Includes:
+                - direction_vector (tuple)
+                - bin_centroids (list[np.ndarray])
+                - net_displacement (float)
+                - max_event_extent (float)
+                - is_directional (bool)
+                - bins (list[dict]): per-bin metadata for GUI
+        """
+        duration = self.event_end_time - self.event_start_time + 1
+
+        bins = [
+            (self.event_start_time + i * duration // config.num_time_bins,
+            self.event_start_time + (i + 1) * duration // config.num_time_bins - 1)
+            for i in range(config.num_time_bins)
+        ]
+        bins[-1] = (bins[-1][0], self.event_end_time)
+
+        bin_centroids = []
+        all_centroids = []
+        bin_metadata = []
+
+        for start, end in bins:
+            active_labels = set()
+            for t in range(start, end + 1):
+                active_labels.update(self.framewise_active_labels.get(t, []))
+
+            centroids = [self.label_to_centroid[l] for l in active_labels if l in self.label_to_centroid]
+            all_centroids.extend(centroids)
+
+            if not centroids:
+                centroid = np.array([0.0, 0.0])
+                bin_metadata.append({
+                    "start": start,
+                    "end": end,
+                    "centroid": centroid,
+                    "raw_centroids": [],
+                    "filtered_centroids": [],
+                    "radius": 0.0,
+                    "label_ids": [],
+                    "peak_times": []
+                })
+                bin_centroids.append(centroid)
+                continue
+
+            arr = np.array(centroids)
+            med = np.median(arr, axis=0)
+            dists = np.linalg.norm(arr - med, axis=1)
+            mad = np.median(np.abs(dists - np.median(dists)))
+            threshold = np.median(dists) + config.mad_filtering_multiplier * mad
+            filtered = arr[dists <= threshold]
+
+            centroid = np.mean(filtered, axis=0) if len(filtered) > 0 else med
+            bin_centroids.append(centroid)
+            bin_metadata.append({
+                "start": start,
+                "end": end,
+                "centroid": centroid,
+                "raw_centroids": arr,
+                "filtered_centroids": filtered,
+                "radius": threshold,
+                "label_ids": list(active_labels),
+                "peak_times": list(range(start, end + 1))
+            })
+
+        # Exclude first and last bins from directional analysis
+        if len(bin_centroids) < 3:
+            return {
+                "direction_vector": (0.0, 0.0),
+                "bin_centroids": bin_centroids,
+                "net_displacement": 0.0,
+                "max_event_extent": 0.0,
+                "is_directional": False,
+                "bins": bin_metadata
+            }
+
+        inner_centroids = bin_centroids[1:-1]
+        centered = np.array(inner_centroids) - np.mean(inner_centroids, axis=0)
+
+        try:
+            _, _, Vt = np.linalg.svd(centered)
+            vec = Vt[0]
+            unit_vec = tuple(vec)
+            net_disp = float(np.linalg.norm(inner_centroids[-1] - inner_centroids[0]))
+        except Exception:
+            logger.warning(f"[Event {self.id}] SVD failed.")
+            return {
+                "direction_vector": (0.0, 0.0),
+                "bin_centroids": bin_centroids,
+                "net_displacement": 0.0,
+                "max_event_extent": 0.0,
+                "is_directional": False,
+                "bins": bin_metadata
+            }
+
+        all_centroids = np.array(all_centroids)
+        max_extent = float(np.max(pdist(all_centroids))) if len(all_centroids) >= 2 else 0.0
+
+        is_directional = net_disp >= config.min_net_displacement_ratio * max_extent if max_extent > 0 else False
+        if not is_directional:
+            unit_vec = (0.0, 0.0)
+
+        return {
+            "direction_vector": unit_vec,
+            "bin_centroids": bin_centroids,
+            "net_displacement": net_disp,
+            "max_event_extent": max_extent,
+            "is_directional": is_directional,
+            "bins": bin_metadata
+        }
 
     def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
         """
@@ -596,99 +717,44 @@ class GlobalEvent(Event):
         Returns:
             tuple[float, float]: Unit vector (dy, dx) or (0.0, 0.0) if isotropic.
         """
-        metadata = self._compute_dominant_direction_metadata()
-
-        return metadata["direction_vector"]
-
-
-    def _compute_dominant_direction_metadata(self) -> Dict[str, Any]:
-        """
-        Compute dominant direction and supporting metadata using trimmed CoM over quartiles.
-        TODO: make it configurable to change X quartiles, MAD threshold and alpha.
-
-        Returns:
-            dict: Includes:
-                - direction_vector (tuple)
-                - quartile_coms (list[np.ndarray])
-                - net_displacement (float)
-                - max_event_extent (float)
-                - is_directional (bool)
-        """
-        duration = self.event_end_time - self.event_start_time + 1
-        if duration < 4:
-            return {"direction_vector": (0.0, 0.0), "quartile_coms": []}
-
-        # Divide event into 4 quartiles
-        quartiles = [
-            (self.event_start_time + i * duration // 4, self.event_start_time + (i + 1) * duration // 4 - 1)
-            for i in range(4)
-        ]
-        quartiles[-1] = (quartiles[-1][0], self.event_end_time)  # ensure last ends exactly at end
-
-        quartile_coms = []
-        all_centroids = []
-
-        # Compute CoM for each quartile
-        for q_start, q_end in quartiles:
-            frame_labels = set()
-            for t in range(q_start, q_end + 1):
-                frame_labels.update(self.framewise_active_labels.get(t, []))
-
-            centroids = [self.label_to_centroid[l] for l in frame_labels if l in self.label_to_centroid]
-            all_centroids.extend(centroids)
-
-            if len(centroids) == 0:
-                quartile_coms.append(np.array([0.0, 0.0]))
-                continue
-
-            centroid_array = np.array(centroids)
-            med = np.median(centroid_array, axis=0)
-            dists = np.linalg.norm(centroid_array - med, axis=1)
-            mad = np.median(np.abs(dists - np.median(dists)))
-            threshold = np.median(dists) + 2.0 * mad
-            filtered = centroid_array[dists <= threshold] # Filter out outliers
-            com = np.mean(filtered, axis=0) if len(filtered) > 0 else np.mean(centroid_array, axis=0)
-            quartile_coms.append(com)
-
-        # Compute the principal component of the quartile CoMs
-        coms_array = np.array(quartile_coms)
-        centered = coms_array - coms_array.mean(axis=0)
-
-        try:
-            _, _, Vt = np.linalg.svd(centered)
-            vec = Vt[0]  # First principal component (unit vector)
-            net_disp = float(np.linalg.norm(coms_array[-1] - coms_array[0]))
-            unit_vec = tuple(vec)
-        except Exception:
-            logger.info(f"[Event {self.id}] Failed to compute SVD for direction vector.")
-            unit_vec = (0.0, 0.0)
-            net_disp = 0.0
-
-        # Compute max extent of event
-        all_centroids = np.array(all_centroids)
-        max_extent = float(np.max(pdist(all_centroids))) if len(all_centroids) >= 2 else 0.0
-
-        is_directional = net_disp >= 0.1 * max_extent if max_extent > 0 else False
-        if not is_directional:
-            unit_vec = (0.0, 0.0)
-
-        return {
-            "direction_vector": unit_vec,
-            "quartile_coms": quartile_coms,
-            "net_displacement": net_disp,
-            "max_event_extent": max_extent,
-            "is_directional": is_directional
-        }
+        return self.direction_metadata["direction_vector"]
 
 
     def _compute_directional_propagation_speed(self) -> float:
         """
-        TODO: Compute propagation speed across projected direction.
+        Compute propagation speed across dominant direction based on bin centroids and mean peak times.
 
         Returns:
-            float: Speed in dominant direction (pixels/frame).
+            float: Speed in pixels/frame, or 0.0 if not directional or insufficient data.
         """
-        return 0.0
+        metadata = self.direction_metadata
+        if not metadata["is_directional"]:
+            return 0.0
+
+        bins = metadata["bins"]
+        if len(bins) < 3:
+            return 0.0
+
+        first_bin = bins[1]
+        last_bin = bins[-2]
+
+        centroid_start = np.array(first_bin["centroid"])
+        centroid_end = np.array(last_bin["centroid"])
+
+        peak_times_start = first_bin["peak_times"]
+        peak_times_end = last_bin["peak_times"]
+
+        if not peak_times_start or not peak_times_end:
+            return None
+
+        t_start = np.mean(peak_times_start)
+        t_end = np.mean(peak_times_end)
+        delta_t = t_end - t_start
+        if delta_t <= 0:
+            return 0.0
+
+        displacement = np.linalg.norm(centroid_end - centroid_start)
+        return displacement / delta_t
 
     @classmethod
     def from_framewise_active_labels(
@@ -736,7 +802,8 @@ class GlobalEvent(Event):
                 framewise_active_labels={
                     t: [label for (label, _) in entries] for t, entries in framewise_labels.items()
                 },
-                peak_indices=peak_indices
+                peak_indices=peak_indices,
+                config_direction=config.global_direction_computation
             )
             events.append(event)
             counter += 1

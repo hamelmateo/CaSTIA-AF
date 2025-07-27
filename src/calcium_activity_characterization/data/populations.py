@@ -263,8 +263,6 @@ class Population:
         Args:
             config (EventExtractionConfig): Configuration object with parameters for sequential event detection.
         """
-        #clean_cells = self._create_cells_without_global_peaks()
-
         self.copeaking_neighbors = generate_copeaking_groups(
             cells=self.cells,
             neighbor_graph=self.neighbor_graph
@@ -276,8 +274,6 @@ class Population:
             copeaking_groups=self.copeaking_neighbors,
             max_time_gap=config.seq_max_comm_time
         )
-
-        #del clean_cells  # Free memory
 
         assign_peak_classifications(self.cells, self.cell_to_cell_communications)
 

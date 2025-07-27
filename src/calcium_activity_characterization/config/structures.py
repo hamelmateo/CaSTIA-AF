@@ -656,6 +656,23 @@ class ConvexHullParams:
     min_duration: int = 1
 
 @dataclass
+class DirectionComputationParams:
+    """
+    Configuration for computing the dominant direction vector in global events.
+
+    Attributes:
+        num_time_bins (int): Number of bins to divide the event duration into.
+            Default is 6 (quartiles). Min is 4.
+        mad_filtering_multiplier (float): Multiplier applied to MAD for outlier filtering
+            around the median centroid in each bin. Default is 1.0.
+        min_net_displacement_ratio (float): Minimum ratio of net displacement to max extent
+            required to consider the direction meaningful. If lower, direction is set to (0, 0).
+            Default is 0.25 (i.e., 25%).
+    """
+    num_time_bins: int = 6
+    mad_filtering_multiplier: float = 1.0
+    min_net_displacement_ratio: float = 0.25
+@dataclass
 class EventExtractionConfig:
     """
     Configuration for event extraction from activity traces.
@@ -667,6 +684,7 @@ class EventExtractionConfig:
         global_max_comm_time (int): Maximum communication time for global events. Default is 10.
         seq_max_comm_time (int): Maximum communication time for sequential events. Default is 10.
         convex_hull (ConvexHullParams): Parameters for convex hull-based event detection. Default is ConvexHullParams().
+        global_direction_computation (DirectionComputationParams): Configuration for computing dominant direction in global events. Default is DirectionComputationParams().
     """
     min_cell_count: int = 2
     threshold_ratio: float = 0.4
@@ -674,6 +692,7 @@ class EventExtractionConfig:
     global_max_comm_time: int = 10
     seq_max_comm_time: int = 10
     convex_hull: ConvexHullParams = field(default_factory=ConvexHullParams)
+    global_direction_computation: DirectionComputationParams = field(default_factory=DirectionComputationParams)
 
 
 # ===========================
