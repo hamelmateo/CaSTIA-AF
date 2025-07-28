@@ -222,3 +222,84 @@ def plot_bar_by_dataset(
     plt.xlabel(xlabel)
     plt.tight_layout()
     plt.show()
+
+
+def plot_histogram_by_group(
+    df: pd.DataFrame,
+    value_column: str,
+    group_column: str,
+    title: str,
+    bin_width: float = None,
+    bin_count: int = None,
+    n_cols: int = 2,
+    log_scale_datasets: list[str] = [],
+    horizontal_layout: bool = False,
+    palette: str = "tab20"
+) -> None:
+    """
+    Plot histograms of a numeric column per dataset, colored by group.
+
+    Args:
+        df (pd.DataFrame): The dataset (must include 'dataset', value_column, and group_column).
+        value_column (str): Column name with numeric values (e.g., 'fwy_duration').
+        group_column (str): Column name for grouping/coloring (e.g., 'cluster_label').
+        title (str): Global plot title.
+        bin_width (float, optional): Bin width for histograms.
+        bin_count (int, optional): Number of bins (ignored if bin_width is provided).
+        n_cols (int, optional): Number of subplot columns.
+        log_scale_datasets (list[str], optional): Datasets to use log scale for y-axis.
+        horizontal_layout (bool, optional): Layout mode.
+        palette (str): Seaborn color palette name.
+    """
+    datasets = sorted(df["dataset"].unique())
+    n = len(datasets)
+
+    if horizontal_layout:
+        rows = min(2, math.ceil(n / n_cols))
+        n_cols = math.ceil(n / rows)
+    else:
+        rows = math.ceil(n / n_cols)
+
+    fig, axs = plt.subplots(rows, n_cols, figsize=(6 * n_cols, 5 * rows))
+    axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
+
+    for i, dataset in enumerate(datasets):
+        subset = df[df["dataset"] == dataset]
+        clean = subset[[value_column, group_column]].dropna()
+
+        if clean.empty:
+            axs[i].set_title(f"{dataset} (No Data)")
+            axs[i].axis("off")
+            continue
+
+        if bin_width is not None:
+            min_val, max_val = clean[value_column].min(), clean[value_column].max()
+            bins = int((max_val - min_val) / bin_width) + 1
+        else:
+            bins = bin_count
+
+        sns.histplot(
+            data=clean,
+            x=value_column,
+            hue=group_column,
+            bins=bins,
+            multiple="stack",  # Alternatives: 'layer', 'dodge', 'fill', 'stack'
+            kde=False,
+            ax=axs[i],
+            palette=palette,
+            edgecolor=None
+        )
+
+        axs[i].set_title(dataset)
+        axs[i].set_xlabel(value_column)
+        axs[i].set_ylabel("Frequency")
+
+        if dataset in log_scale_datasets:
+            axs[i].set_yscale("log")
+
+    for j in range(len(datasets), len(axs)):
+        axs[j].axis("off")
+
+    fig.suptitle(title, fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.show()
