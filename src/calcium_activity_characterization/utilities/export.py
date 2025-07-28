@@ -27,12 +27,13 @@ class NormalizedDataExporter:
         output_dir (Path): Directory to save exported files.
     """
 
-    def __init__(self, population: Population, output_dir: Path) -> None:
+    def __init__(self, population: Population, output_dir: Path, cut_trace_num_points: int) -> None:
         self.population = population
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.cell_trace_dir = self.output_dir / "cell_traces"
         self.event_detail_dir = self.output_dir / "event_details"
+        self.cut_trace_num_points = cut_trace_num_points
         self.cell_trace_dir.mkdir(exist_ok=True)
         self.event_detail_dir.mkdir(exist_ok=True)
 
@@ -48,7 +49,7 @@ class NormalizedDataExporter:
                 "peak_id", "cell_id", "event_id", "start_time", "end_time", "duration",
                 "fhw_start_time", "fhw_end_time", "fhw_duration", "peak_time", 
                 "activation_start_time", "activation_end_time", "activation_duration", "communication_time",
-                "height", "prominence",
+                "height", "prominence", "fhw_height",
                 "rise_time", "decay_time", "fhw_rise_time", "fhw_decay_time",
                 "fhw_symmetry_score", "in_event", "origin_type"
             ])
@@ -59,17 +60,17 @@ class NormalizedDataExporter:
                         "peak_id": peak.id,
                         "cell_id": cell.label,
                         "event_id": peak.event_id,
-                        "start_time": peak.start_time,
-                        "end_time": peak.end_time,
+                        "start_time": peak.start_time + self.cut_trace_num_points,
+                        "end_time": peak.end_time + self.cut_trace_num_points,
                         "duration": peak.duration,
-                        "fhw_start_time": peak.fhw_start_time,
-                        "fhw_end_time": peak.fhw_end_time,
+                        "fhw_start_time": peak.fhw_start_time + self.cut_trace_num_points,
+                        "fhw_end_time": peak.fhw_end_time + self.cut_trace_num_points,
                         "fhw_duration": peak.fhw_duration,
-                        "peak_time": peak.peak_time,
-                        "activation_start_time": peak.activation_start_time,
-                        "activation_end_time": peak.activation_end_time,
+                        "peak_time": peak.peak_time + self.cut_trace_num_points,
+                        "activation_start_time": peak.activation_start_time + self.cut_trace_num_points,
+                        "activation_end_time": peak.activation_end_time + self.cut_trace_num_points,
                         "activation_duration": peak.activation_duration,
-                        "communication_time": peak.communication_time,
+                        "communication_time": peak.communication_time + self.cut_trace_num_points,
                         "height": peak.height,
                         "prominence": peak.prominence,
                         "fhw_height": peak.fhw_height,
@@ -135,8 +136,8 @@ class NormalizedDataExporter:
                 writer.writerow({
                     "event_id": event.id,
                     "event_type": event.__class__.__name__,
-                    "event_start_time": event.event_start_time,
-                    "event_end_time": event.event_end_time,
+                    "event_start_time": event.event_start_time + self.cut_trace_num_points,
+                    "event_end_time": event.event_end_time + self.cut_trace_num_points,
                     "event_duration": event.event_duration,
                     "n_cells_involved": event.n_cells_involved,
                     "dominant_direction_vector": str(event.dominant_direction_vector),

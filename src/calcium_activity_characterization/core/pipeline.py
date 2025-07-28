@@ -20,6 +20,7 @@ from calcium_activity_characterization.utilities.loader import (
     load_existing_img,
     save_pickle_file,
     load_pickle_file,
+    plot_raster_heatmap,
     plot_raster
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
@@ -155,6 +156,7 @@ class CalciumPipeline:
         processing_dir = output_dir / "signal-processing"
         self.traces_processing_steps = processing_dir / "traces-processing-steps"
         self.activity_trace_path = processing_dir / "activity_trace.pdf"
+        self.heatmap_raster_path = processing_dir / "heatmap_raster.png"
         self.raster_path = processing_dir / "raster_plot.png"
 
         # Path for extracted data
@@ -230,6 +232,8 @@ class CalciumPipeline:
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
+            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells)
+
             """
             # Select 25 random cells (or all if fewer than 25)
             sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
@@ -256,6 +260,7 @@ class CalciumPipeline:
 
             save_pickle_file(self.population, self.processed_traces_path)
 
+            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells)
 
     def _binarization_pipeline(self) -> None: 
         """
@@ -318,7 +323,7 @@ class CalciumPipeline:
             output_dir (Path): Directory where the datasets will be saved.
         """
         try:
-            exporter = NormalizedDataExporter(self.population, self.datasets_dir)
+            exporter = NormalizedDataExporter(self.population, self.datasets_dir, self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
             exporter.export_all()
             logger.info(f"✅ Normalized datasets exported to {self.datasets_dir}")
         except Exception as e:
