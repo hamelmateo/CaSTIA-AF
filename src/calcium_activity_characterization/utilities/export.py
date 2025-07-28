@@ -48,9 +48,9 @@ class NormalizedDataExporter:
                 "peak_id", "cell_id", "event_id", "start_time", "end_time", "duration",
                 "fhw_start_time", "fhw_end_time", "fhw_duration", "peak_time", 
                 "activation_start_time", "activation_end_time", "activation_duration", "communication_time",
-                "height", "prominence", "fhw_height",
+                "height", "prominence",
                 "rise_time", "decay_time", "fhw_rise_time", "fhw_decay_time",
-                "fhw_symmetry_score", "in_event", "origin_type", "origin_label"
+                "fhw_symmetry_score", "in_event", "origin_type"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting peaks", unit="cell"):
@@ -79,8 +79,7 @@ class NormalizedDataExporter:
                         "fhw_decay_time": peak.fhw_decay_time,
                         "fhw_symmetry_score": peak.fhw_symmetry_score,
                         "in_event": peak.in_event,
-                        "origin_type": peak.origin_type,
-                        "origin_label": peak.origin_label
+                        "origin_type": peak.origin_type
                     })
 
     def export_cells(self) -> None:
@@ -93,9 +92,9 @@ class NormalizedDataExporter:
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
                 # Save trace arrays externally
-                np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_raw.npy", cell.trace.versions["raw"])
-                np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_smoothed.npy", cell.trace.versions["processed"])
-                np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_binary.npy", cell.trace.binary)
+                #np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_raw.npy", cell.trace.versions["raw"])
+                #np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_smoothed.npy", cell.trace.versions["processed"])
+                #np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_binary.npy", cell.trace.binary)
 
                 writer.writerow({
                     "cell_id": cell.label,
@@ -123,6 +122,7 @@ class NormalizedDataExporter:
             for event in tqdm(self.population.events, desc="Exporting events", unit="event"):
                 is_seq = event.__class__.__name__ == "SequentialEvent"
                 # Save graph and comms externally
+                """
                 if is_seq:
                     if hasattr(event, "graph"):
                         with open(self.event_detail_dir / f"event_{event.id:04d}_graph.pkl", "wb") as g:
@@ -130,7 +130,8 @@ class NormalizedDataExporter:
                     if hasattr(event, "communications"):
                         with open(self.event_detail_dir / f"event_{event.id:04d}_communications.pkl", "wb") as c:
                             pickle.dump(event.communications, c)
-
+                """
+                
                 writer.writerow({
                     "event_id": event.id,
                     "event_type": event.__class__.__name__,

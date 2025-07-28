@@ -250,8 +250,6 @@ def assign_peak_classifications(
     - Else if it appears at least once as `origin` and never as `caused` → "origin"
     - Else → "individual"
 
-    The peak.origin_label is always set to the root upstream origin.
-
     Args:
         cells (List[Cell]): List of cell objects containing peaks.
         communications (List[CellToCellCommunication]): Communication links.

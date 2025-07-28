@@ -49,7 +49,6 @@ class Peak:
         in_event (Literal["global", "sequential"]): Type of event this peak is part of, if any.
         event_id (Optional[int]): ID of the event this peak is part of, if any.
         origin_type (Literal["origin", "caused", "individual"]): Type of cause for this peak.
-        origin_label (Optional[int]): Label of the origin peak if this is a caused peak.
         in_cluster (bool): Flag indicating if this peak has been added to a cluster (deprecated).
         cluster_id (Optional[int]): ID of the assigned cluster (deprecated).
     """
@@ -106,7 +105,6 @@ class Peak:
         self.event_id: Optional[int] = None  # ID of the event this peak is part of, if any
 
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
-        self.origin_label: Optional[int] = None # Label of the origin peak if this is a caused peak
 
         # Deprecated attributes for experimental methods
         self.in_cluster: bool = False  # Set True once this peak is added to a cluster

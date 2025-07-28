@@ -234,7 +234,8 @@ def plot_histogram_by_group(
     n_cols: int = 2,
     log_scale_datasets: list[str] = [],
     horizontal_layout: bool = False,
-    palette: str = "tab20"
+    palette: str = "tab20",
+    multiple: str = "dodge"
 ) -> None:
     """
     Plot histograms of a numeric column per dataset, colored by group.
@@ -283,7 +284,7 @@ def plot_histogram_by_group(
             x=value_column,
             hue=group_column,
             bins=bins,
-            multiple="stack",  # Alternatives: 'layer', 'dodge', 'fill', 'stack'
+            multiple=multiple,  # Alternatives: 'layer', 'dodge', 'fill', 'stack'
             kde=False,
             ax=axs[i],
             palette=palette,
