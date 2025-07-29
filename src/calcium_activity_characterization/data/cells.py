@@ -6,6 +6,7 @@ import pandas as pd
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.config.presets import CellFilteringConfig, ObjectSizeThresholds
 
+from calcium_activity_characterization.config.presets import PeakDetectionConfig
 
 
 
@@ -34,7 +35,7 @@ class Cell:
         self.centroid = centroid if centroid is not None else np.array([0, 0], dtype=int)
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.is_valid: bool = len(self.pixel_coords) >= object_size_thresholds.min and len(self.pixel_coords) <= object_size_thresholds.max
-        self.exclude_from_umap = False
+        self.is_active: bool = False
 
         self.trace: Trace = Trace()
 
@@ -51,6 +52,12 @@ class Cell:
             self.trace.versions["raw"].append(mean_intensity)
         except Exception as e:
             logger.error(f"Failed to compute mean intensity for cell {self.label}: {e}")
+
+    def define_activity(self) -> None:
+        """
+        Define whether the cell is active based on the presence of detected peaks.
+        """
+        self.is_active = len(self.trace.peaks) > 0
 
     def plot_raw_intensity_profile(self) -> None:
         """

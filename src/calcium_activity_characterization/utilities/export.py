@@ -88,7 +88,7 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "cell_id", "centroid_x", "centroid_y",
-                "num_peaks", "peak_frequency", "periodicity_score"
+                "num_peaks", "is_active", "peak_frequency", "periodicity_score"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
@@ -102,6 +102,7 @@ class NormalizedDataExporter:
                     "centroid_x": int(cell.centroid[1]),
                     "centroid_y": int(cell.centroid[0]),
                     "num_peaks": len(cell.trace.peaks),
+                    "is_active": cell.is_active,
                     "peak_frequency": cell.trace.metadata.get("peak_frequency", 0),
                     "periodicity_score": cell.trace.metadata.get("periodicity_score", 0),
                 })
@@ -113,6 +114,7 @@ class NormalizedDataExporter:
                 "event_id", "event_type", "event_start_time", "event_end_time", "event_duration",
                 "n_cells_involved", "dominant_direction_vector", "directional_propagation_speed",
                 "growth_curve_mean", "growth_curve_std",
+                "time_to_50", "peak_rate_at_50",
                 "dag_n_nodes", "dag_n_edges", "dag_n_roots", "dag_depth", "dag_width",
                 "dag_avg_out_degree", "dag_avg_path_length",
                 "communication_speed_mean", "communication_speed_std",
@@ -122,6 +124,7 @@ class NormalizedDataExporter:
             writer.writeheader()
             for event in tqdm(self.population.events, desc="Exporting events", unit="event"):
                 is_seq = event.__class__.__name__ == "SequentialEvent"
+                is_global = event.__class__.__name__ == "GlobalEvent"
                 # Save graph and comms externally
                 """
                 if is_seq:
@@ -144,6 +147,8 @@ class NormalizedDataExporter:
                     "directional_propagation_speed": event.directional_propagation_speed,
                     "growth_curve_mean": event.growth_curve_mean,
                     "growth_curve_std": event.growth_curve_std,
+                    "time_to_50": event.time_to_50 if is_global else None,
+                    "peak_rate_at_50": event.peak_rate_at_50 if is_global else None,
                     "dag_n_nodes": event.dag_metrics["n_nodes"] if is_seq else None,
                     "dag_n_edges": event.dag_metrics["n_edges"] if is_seq else None,
                     "dag_n_roots": event.dag_metrics["n_roots"] if is_seq else None,

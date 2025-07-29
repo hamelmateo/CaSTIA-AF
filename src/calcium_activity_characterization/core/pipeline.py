@@ -274,6 +274,7 @@ class CalciumPipeline:
         else:
             for cell in self.population.cells:
                 cell.trace.detect_peaks(self.config.cell_trace_peak_detection)
+                cell.define_activity()
                 cell.trace.binarize_trace_from_peaks()
 
             
