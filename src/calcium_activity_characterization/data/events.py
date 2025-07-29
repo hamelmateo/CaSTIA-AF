@@ -600,12 +600,15 @@ class GlobalEvent(Event):
     def __init__(
         self,
         id: int,
+        event_peak_time: int,
         peak_indices: Tuple[int, int],
         label_to_centroid: Dict[int, np.ndarray],
         framewise_peaking_labels: Dict[int, List[int]],
         config_direction: DirectionComputationParams
     ) -> None:
         super().__init__(id, peak_indices, label_to_centroid, framewise_peaking_labels)
+
+        self.event_peak_time = event_peak_time
 
         self.direction_metadata = self._compute_dominant_direction_metadata(config_direction)
 
@@ -818,6 +821,7 @@ class GlobalEvent(Event):
     @classmethod
     def from_framewise_peaking_labels(
         cls,
+        events_peak_times: List[int],
         framewise_label_blocks: List[Dict[int, List[Tuple[int, int]]]],
         cells: List[Cell],
         config: EventExtractionConfig
@@ -837,9 +841,8 @@ class GlobalEvent(Event):
         label_to_cell = {cell.label: cell for cell in cells}
 
         events = []
-        counter = 0
 
-        for framewise_labels in framewise_label_blocks:
+        for i, framewise_labels in enumerate(framewise_label_blocks):
             # Gather all unique (label, peak_id) pairs across the event
             involved_label_ids = {label for label, _ in {p for lst in framewise_labels.values() for p in lst}}
             if len(involved_label_ids) < min_cells:
@@ -856,7 +859,8 @@ class GlobalEvent(Event):
 
             # Construct the GlobalEvent
             event = cls(
-                id=counter,
+                id=i,
+                event_peak_time=events_peak_times[i],
                 label_to_centroid=label_to_centroid,
                 framewise_peaking_labels={
                     t: [label for (label, _) in entries] for t, entries in framewise_labels.items()
@@ -865,7 +869,6 @@ class GlobalEvent(Event):
                 config_direction=config.global_direction_computation
             )
             events.append(event)
-            counter += 1
 
         logger.info(f"Created {len(events)} GlobalEvents from framewise label blocks.")
         return events

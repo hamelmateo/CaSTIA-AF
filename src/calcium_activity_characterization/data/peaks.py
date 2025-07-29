@@ -106,6 +106,8 @@ class Peak:
 
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
 
+        self.is_global_event: bool = False  # Flag indicating if this peak is part of a global event (for activity trace)
+
         # Deprecated attributes for experimental methods
         self.in_cluster: bool = False  # Set True once this peak is added to a cluster
         self.cluster_id: Optional[int] = None  # ID of the assigned cluster

@@ -32,6 +32,7 @@ def find_significant_activity_peaks(
         for peak in trace.peaks:
             if peak.height >= threshold_ratio * total_cells:
                 peak_windows.append((peak.start_time, peak.end_time))
+                peak.is_global_event = True
         return peak_windows
     except Exception as e:
         logger.error(f"Error detecting significant peaks: {e}")

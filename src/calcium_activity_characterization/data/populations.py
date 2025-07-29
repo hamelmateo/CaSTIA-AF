@@ -247,7 +247,13 @@ class Population:
             min_cell_count=config.min_cell_count
         )
 
+        # Extract and sort the peak_time of all peaks in the activity trace
+        global_event_peak_times = sorted(
+            peak.peak_time
+            for peak in self.activity_trace.peaks if peak.is_global_event
+        )
         self.events.extend(GlobalEvent.from_framewise_peaking_labels(
+            events_peak_times=global_event_peak_times,
             framewise_label_blocks=blocks,
             cells=self.cells,
             config=config

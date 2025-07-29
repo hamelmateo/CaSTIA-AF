@@ -111,7 +111,8 @@ class NormalizedDataExporter:
         path = self.output_dir / "events.csv"
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
-                "event_id", "event_type", "event_start_time", "event_end_time", "event_duration",
+                "event_id", "event_type", "event_start_time", "event_end_time", 
+                "event_duration", "event_peak_time",
                 "n_cells_involved", "dominant_direction_vector", "directional_propagation_speed",
                 "growth_curve_mean", "growth_curve_std",
                 "time_to_50", "peak_rate_at_50",
@@ -142,6 +143,7 @@ class NormalizedDataExporter:
                     "event_start_time": event.event_start_time + self.cut_trace_num_points,
                     "event_end_time": event.event_end_time + self.cut_trace_num_points,
                     "event_duration": event.event_duration,
+                    "event_peak_time": event.event_peak_time + self.cut_trace_num_points if is_global else None,
                     "n_cells_involved": event.n_cells_involved,
                     "dominant_direction_vector": str(event.dominant_direction_vector),
                     "directional_propagation_speed": event.directional_propagation_speed,
