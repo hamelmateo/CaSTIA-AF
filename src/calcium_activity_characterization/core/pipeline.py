@@ -232,7 +232,7 @@ class CalciumPipeline:
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
-            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells)
+            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells, cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
 
             """
             # Select 25 random cells (or all if fewer than 25)
@@ -260,7 +260,7 @@ class CalciumPipeline:
 
             save_pickle_file(self.population, self.processed_traces_path)
 
-            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells)
+            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells, cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
 
     def _binarization_pipeline(self) -> None: 
         """
@@ -280,7 +280,7 @@ class CalciumPipeline:
             logger.info(f"Peaks detected for {len(self.population.cells)} active cells.")
             save_pickle_file(self.population, self.binary_traces_path)
 
-        plot_raster(self.raster_path, self.population.cells)
+        plot_raster(self.raster_path, self.population.cells, self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
 
 
     def _initialize_activity_trace(self) -> None:

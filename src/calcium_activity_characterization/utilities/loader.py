@@ -236,66 +236,34 @@ def generate_distinct_colors(n_colors=60, min_s=0.6, max_v=0.9):
 def plot_raster(
     output_path: Path,
     cells: List[Cell],
-    clustered: bool = False,
-    cluster_labels: Optional[np.ndarray] = None
+    cut_trace: int = 0
 ) -> None:
     """
-    Plot a raster plot of binary traces for cells.
+    Plot a raster plot of binary traces for cells, with optional time shift (cut_trace).
 
     Args:
         output_path (Path): Directory to save the plot.
         cells (List[Cell]): List of Cell objects.
-        clustered (bool): Whether to plot clustered data.
-        cluster_labels (Optional[np.ndarray]): Cluster labels for each cell.
+        cut_trace (int): Offset to add to the time axis (x-axis) for synchronization.
     """
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        logger = logging.getLogger(__name__)
         if not cells:
             logger.warning("No cells provided for raster plot.")
             return
 
-        if clustered:
-            if cluster_labels is None or len(cluster_labels) != len(cells):
-                logger.error("Clustered plot requested but valid cluster_labels not provided.")
-                return
+        binarized_matrix = np.array([cell.trace.binary for cell in cells])
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+        ax.set_title("Binarized Activity Raster Plot")
+        ax.set_ylabel("Cell Index")
+        ax.set_xlabel("Time")
 
-            cluster_labels = np.array(cluster_labels)
-            cells_sorted = [cell for _, cell in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
-            label_order = [label for label, _ in sorted(zip(cluster_labels, cells), key=lambda x: x[0])]
-            binarized_matrix = np.array([cell.trace.binary for cell in cells_sorted])
-
-            n_clusters = len([l for l in set(label_order) if l != -1])
-            filtered_colors = generate_distinct_colors(n_clusters)
-            label_to_color = {}
-            for i, label in enumerate([l for l in sorted(set(label_order)) if l != -1]):
-                color = filtered_colors[i % len(filtered_colors)]
-                label_to_color[label] = color
-
-            h, w = binarized_matrix.shape
-            rgb_image = np.ones((h, w, 3), dtype=np.float32)
-
-            for row_idx, (row, cluster_id) in enumerate(zip(binarized_matrix, label_order)):
-                if cluster_id == -1:
-                    continue
-                color = label_to_color.get(cluster_id, np.array([0.8, 0.8, 0.8]))
-                rgb_image[row_idx, row == 1] = color
-
-            fig, ax = plt.subplots(figsize=(12, 6))
-            ax.imshow(rgb_image, aspect='auto')
-            ax.set_title("Binarized Activity (sorted by cluster)")
-            ax.set_xlabel("Time")
-            ax.set_yticks([])
-            ax.set_yticklabels([])
-
-        else:
-            binarized_matrix = np.array([cell.trace.binary for cell in cells])
-            fig, ax = plt.subplots(figsize=(12, 6))
-            ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
-            ax.set_title("Binarized Activity Raster Plot")
-            ax.set_ylabel("Cell Index")
-            ax.set_xlabel("Time")
+        # Add offset to x-axis if cut_trace > 0
+        n_time = binarized_matrix.shape[1]
+        ax.set_xticks(np.arange(0, n_time, max(1, n_time // 17)))
+        ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
 
         plt.tight_layout()
         plt.savefig(output_path, dpi=600)
@@ -304,6 +272,76 @@ def plot_raster(
 
     except Exception as e:
         logger.error(f"Failed to generate raster plot: {e}")
+        raise
+
+
+def plot_raster_heatmap(
+    output_path: Path,
+    cells: List[Cell],
+    clip_percentile: float = 98.0,
+    cut_trace: int = 0
+) -> None:
+    """
+    Plot a raster of processed traces for a list of cells with a continuous colormap.
+    Optionally adds an offset (cut_trace) to the time axis for synchronization.
+
+    Args:
+        output_path (Path): Path to save the output figure.
+        cells (List): List of Cell objects, each with 'processed_intensity_trace' (np.ndarray).
+        clip_percentile (float): Percentile for upper clipping of intensities.
+        cut_trace (int): Offset to add to the time axis (x-axis) for synchronization.
+    
+    Raises:
+        ValueError: If no valid cells with processed traces are found.
+    """
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not cells:
+            logger.warning("No cells provided for raster plot.")
+            return
+
+        trace_matrix = []
+        for idx, cell in enumerate(cells):
+            trace = cell.trace.versions["processed"]
+            if trace is None:
+                logger.warning(f"Cell {idx} has no 'processed_intensity_trace'. Skipping.")
+                continue
+            trace_matrix.append(trace)
+
+        if not trace_matrix:
+            raise ValueError("No valid processed traces found in cells.")
+
+        trace_array = np.array(trace_matrix.copy())
+
+        # Clip upper percentile to enhance contrast
+        upper_clip = np.percentile(trace_array, clip_percentile)
+        trace_array_clipped = np.clip(trace_array, a_min=None, a_max=upper_clip)
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        cmap = plt.get_cmap("viridis") 
+        im = ax.imshow(trace_array_clipped, aspect='auto', cmap=cmap, interpolation='nearest')
+
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label("Processed Trace Intensity")
+
+        ax.set_title("Processed Trace Raster Heatmap")
+        ax.set_ylabel("Cell Index")
+        ax.set_xlabel("Time")
+
+        # Add offset to x-axis if cut_trace > 0
+        if cut_trace > 0:
+            n_time = trace_array_clipped.shape[1]
+            ax.set_xticks(np.arange(0, n_time, max(1, n_time // 17)))
+            ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=600)
+        plt.close()
+        logger.info(f"Processed trace raster plot saved to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate processed trace raster plot: {e}")
         raise
 
 
