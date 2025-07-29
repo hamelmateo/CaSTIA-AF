@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 from matplotlib.image import imread
 from pathlib import Path
+from matplotlib import cm
 
 def plot_histogram_by_dataset(
     df: pd.DataFrame,
@@ -89,7 +90,13 @@ def plot_histogram_by_dataset(
     plt.show()
 
 
-def plot_raster_plots_by_dataset(
+from typing import Dict
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.image import imread
+from pathlib import Path
+
+def plot_raster(
     dataset_paths: Dict[str, str],
     image_name: str = "signal-processing/raster_plot.png",
     title: str = "Binary Activity Raster Plots by Dataset",
@@ -103,15 +110,24 @@ def plot_raster_plots_by_dataset(
         dataset_paths (Dict[str, str]): Dict mapping dataset labels to folder paths.
         image_name (str): Raster image file name (default: 'raster_plot.png').
         title (str): Global title.
-        n_cols (int): Number of subplot columns (default: 3).
+        n_cols (int): Number of subplot columns (default: 2).
         figsize_per_plot (tuple): Size of each subplot (width, height).
     """
     datasets = sorted(dataset_paths.items())
     n = len(datasets)
     n_rows = int(np.ceil(n / n_cols))
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows))
-    axs = axs.flatten()
+    fig, axs = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(figsize_per_plot[0] * n_cols, figsize_per_plot[1] * n_rows)
+    )
+
+    # Always convert axs into a 1D list for consistent indexing
+    if isinstance(axs, np.ndarray):
+        axs = axs.flatten()
+    else:
+        axs = [axs]
 
     for i, (label, path) in enumerate(datasets):
         raster_path = Path(path) / image_name
@@ -124,6 +140,7 @@ def plot_raster_plots_by_dataset(
             axs[i].set_title(f"{label} (Not Found)")
             axs[i].axis("off")
 
+    # Hide any unused axes
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
@@ -131,39 +148,43 @@ def plot_raster_plots_by_dataset(
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
+
 def plot_pie_chart_by_dataset(
     df: pd.DataFrame,
     column: str,
-    category_order: List[str],
-    colors: Dict[str, str],
     title: str = "Category Distribution",
     n_cols: int = 2,
     value_label_formatter: Optional[callable] = None,
-    label_prefix: Optional[str] = None
+    label_prefix: Optional[str] = None,
+    palette: str = "tab10"
 ) -> None:
     """
     Plot pie charts showing distribution of a categorical column per dataset.
 
     Args:
-        df (pd.DataFrame): DataFrame with a 'dataset' column and category column.
-        column (str): Categorical column to summarize (e.g., 'in_event' or 'is_active').
-        category_order (List[str]): Order of categories to display.
-        colors (Dict[str, str]): Mapping of category names to colors.
+        df (pd.DataFrame): DataFrame with 'dataset' and a categorical column.
+        column (str): Categorical column to summarize (e.g., 'in_event', 'is_active').
         title (str): Global plot title.
         n_cols (int): Number of subplot columns.
-        value_label_formatter (callable, optional): Function to customize pie label values.
-        label_prefix (str, optional): Optional prefix for category labels (e.g., 'Active', 'Inactive').
+        value_label_formatter (callable, optional): Custom formatter for pie slice labels.
+        label_prefix (str, optional): Optional prefix for category labels.
+        palette (str): Name of matplotlib colormap (default: 'tab10').
     """
     datasets = sorted(df["dataset"].unique())
     n = len(datasets)
-    n_rows = int(np.ceil(n / n_cols))
+    n_rows = math.ceil(n / n_cols)
 
     fig, axs = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
-    axs = axs.flatten()
+    axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
+
+    # Compute all unique categories once and assign consistent colors
+    all_categories = sorted(df[column].dropna().unique())
+    cmap = cm.get_cmap(palette)
+    colors = {cat: cmap(i / max(len(all_categories)-1, 1)) for i, cat in enumerate(all_categories)}
 
     for i, dataset in enumerate(datasets):
         subset = df[df["dataset"] == dataset]
-        counts = subset[column].value_counts().reindex(category_order).fillna(0).astype(int)
+        counts = subset[column].value_counts().reindex(all_categories).fillna(0).astype(int)
         total = counts.sum()
 
         if total == 0:
@@ -171,7 +192,10 @@ def plot_pie_chart_by_dataset(
             axs[i].axis("off")
             continue
 
-        labels = [f"{label_prefix + ' ' if label_prefix else ''}{k.capitalize()} ({v})" for k, v in counts.items()]
+        labels = [
+            f"{label_prefix + ' ' if label_prefix else ''}{k} ({v})"
+            for k, v in counts.items()
+        ]
         pie_labels = labels if value_label_formatter is None else None
 
         axs[i].pie(
@@ -179,7 +203,7 @@ def plot_pie_chart_by_dataset(
             labels=pie_labels,
             autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
             startangle=90,
-            colors=[colors.get(k, "#cccccc") for k in counts.index]
+            colors=[colors[k] for k in counts.index]
         )
         axs[i].set_title(dataset)
 

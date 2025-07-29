@@ -50,7 +50,7 @@ class Event(ABC):
         label_to_centroid: Dict[int, np.ndarray],
         framewise_peaking_labels: Dict[int, List[int]] = None
     ) -> None:
-        self.id = id
+        self.id = int(id)
 
         self.peaks_involved = peaks_involved
         self.label_to_centroid = label_to_centroid
@@ -97,17 +97,17 @@ class Event(ABC):
     def _compute_growth_curve(self) -> Distribution:
         """
         Store number of newly recruited cells per frame as a Distribution.
-        # TODO: Implement rise/fall asymmetry metrics and time to rise metrics.
         """
         try:
             values = [
                 len(labels)
                 for _, labels in sorted(self.framewise_peaking_labels.items())
             ]
-            return Distribution.from_values(values)
+            growth_curve = Distribution.from_values(values)
+            return growth_curve
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute growth curve: {e}")
-            return Distribution.from_values([])
+            return Distribution.from_values([])    
 
     @abstractmethod
     def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
@@ -118,7 +118,6 @@ class Event(ABC):
     def _compute_directional_propagation_speed(self) -> float:
         """Compute speed in dominant direction."""
         pass
-
 
 class SequentialEvent(Event):
     """
@@ -613,6 +612,8 @@ class GlobalEvent(Event):
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
 
+        self.time_to_50, self.peak_rate_at_50 = self._compute_time_and_peak_rate_at_50()
+
     def _compute_dominant_direction_metadata(self, config: DirectionComputationParams) -> Dict[str, Any]:
         """
         Compute dominant direction and supporting metadata using trimmed CoM over time bins.
@@ -773,6 +774,46 @@ class GlobalEvent(Event):
 
         displacement = np.linalg.norm(centroid_end - centroid_start)
         return displacement / delta_t
+
+
+    def _compute_time_and_peak_rate_at_50(self, window_size: int = 5) -> Tuple[int, float]:
+        """
+        Compute the number of frames from event start until cumulative recruited peaks
+        reach at least 50% of the total.
+
+        Uses cumulative sum of growth curve to find the earliest frame reaching the threshold.
+
+        Returns:
+            float: Frame offset from event start (e.g., 0 means 50% was reached in first frame).
+        """
+        try:
+            growth = self.growth_curve_distribution.values
+            if not growth or sum(growth) == 0:
+                return 0, 0.0
+
+            cumulative = np.cumsum(growth)
+            half = len(cumulative) / 2.0
+
+            # Find the time to reach 50% of total activation
+            idx_50 = next((i for i, val in enumerate(cumulative) if val >= half), 0)
+
+            # Compute peak rate at 50% of total activation
+
+            half_window = window_size // 2
+            start = max(0, idx_50 - half_window)
+            end = min(len(cumulative), idx_50 + half_window + 1)
+
+            x = np.arange(start, end)
+            y = cumulative[start:end]
+
+            x_mean, y_mean = np.mean(x), np.mean(y)
+            peak_rate_50 = np.sum((x - x_mean) * (y - y_mean)) / np.sum((x - x_mean) ** 2)
+
+
+            return idx_50, peak_rate_50
+        except Exception as e:
+            logger.error(f"[Event {self.id}] Failed to compute cumulative growth info: {e}")
+            return 0, 0.0
 
     @classmethod
     def from_framewise_peaking_labels(
