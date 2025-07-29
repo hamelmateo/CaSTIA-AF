@@ -792,7 +792,7 @@ class GlobalEvent(Event):
                 return 0, 0.0
 
             cumulative = np.cumsum(growth)
-            half = len(cumulative) / 2.0
+            half = cumulative[-1] / 2.0
 
             # Find the time to reach 50% of total activation
             idx_50 = next((i for i, val in enumerate(cumulative) if val >= half), 0)
