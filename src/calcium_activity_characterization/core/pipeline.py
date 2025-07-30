@@ -313,6 +313,8 @@ class CalciumPipeline:
 
         self.population.assign_peak_event_ids()
 
+        self.population.compute_cell_interaction_clusters()
+
         save_pickle_file(self.population, self.events_path)
 
 
