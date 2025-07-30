@@ -8,7 +8,7 @@ from .structures import *
 # FLAGS
 # ===========================
 DEBUG_CONFIG = DebugConfig(
-    debugging=False,
+    debugging=True,
     debugging_file_path="D:/Mateo/20250326/Data/IS1",
     harddrive_path="D:/Mateo"
 )
