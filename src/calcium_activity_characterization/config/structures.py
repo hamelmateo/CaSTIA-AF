@@ -24,6 +24,21 @@ class DebugConfig:
     debugging_file_path: str = "D:/Mateo/20250326/Data/IS1"
     harddrive_path: str = "D:/Mateo"
 
+# ===========================
+# SPATIAL CALIBRATION PARAMETERS
+# ===========================
+@dataclass
+class SpatialCalibrationParams:
+    """
+    Spatial calibration parameters for image data.
+
+    Attributes:
+        spatial_calibration_x (float): Microns per pixel in the x direction. Default is 0.325.
+        spatial_calibration_y (float): Microns per pixel in the y direction. Default is 0.325.
+    """
+    spatial_calibration_x: float = 0.325  # microns per pixel in x direction
+    spatial_calibration_y: float = 0.325  # microns per pixel in y direction
+
 
 # ===========================
 # SEGMENTATION PARAMETERS

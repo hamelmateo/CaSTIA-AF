@@ -14,6 +14,14 @@ DEBUG_CONFIG = DebugConfig(
 )
 
 # ===========================
+# SPATIAL CALIBRATION CONFIG
+# ===========================
+SPATIAL_CALIBRATION_PARAMS = SpatialCalibrationParams(
+    spatial_calibration_x=0.325,
+    spatial_calibration_y=0.325
+)
+
+# ===========================
 # SEGMENTATION CONFIG
 # ===========================
 SEGMENTATION_CONFIG = SegmentationConfig(
