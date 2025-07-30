@@ -217,6 +217,7 @@ def plot_pie_chart_by_dataset(
 
 def plot_bar_by_dataset(
     df: pd.DataFrame,
+    axis_column: str,
     value_column: str,
     title: str,
     hue_column: Optional[str] = None,
@@ -239,7 +240,7 @@ def plot_bar_by_dataset(
         palette (str): Color palette.
     """
     plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x="dataset", y=value_column, hue=hue_column, dodge=False, palette=palette)
+    sns.barplot(data=df, x=axis_column, y=value_column, hue=hue_column, dodge=False, palette=palette, legend=False)
     plt.title(title)
     plt.xticks(rotation=rotation)
     plt.ylabel(ylabel)

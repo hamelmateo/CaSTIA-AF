@@ -608,7 +608,7 @@ class GlobalEvent(Event):
     ) -> None:
         super().__init__(id, peak_indices, label_to_centroid, framewise_peaking_labels)
 
-        self.event_peak_time = event_peak_time
+        self.event_peak_time = int(event_peak_time)
 
         self.direction_metadata = self._compute_dominant_direction_metadata(config_direction)
 
