@@ -8,6 +8,7 @@ import random
 import logging
 from typing import List, Optional
 import colorsys
+from PIL import Image
 
 from calcium_activity_characterization.data.cells import Cell
 
@@ -161,6 +162,40 @@ def save_tif_image(image: np.ndarray, file_path: str, photometric: str = "minisb
         logger.error(f"Failed to save TIFF image to {file_path}: {e}")
         raise
 
+def save_rgb_image(
+    image: np.ndarray,
+    filepath: Path | str
+) -> None:
+    """
+    Save an RGB uint8 image as a PNG file.
+
+    Args:
+        image (np.ndarray): H×W×3 uint8 RGB array.
+        filepath (Path | str): Path to the output PNG file.
+
+    Raises:
+        ValueError: If the image is not H×W×3 uint8.
+        IOError: If saving the file fails.
+    """
+    try:
+        # Validate image
+        if image.ndim != 3 or image.shape[2] != 3 or image.dtype != np.uint8:
+            raise ValueError(
+                f"Expected uint8 RGB image of shape H×W×3, got shape {image.shape} and dtype {image.dtype}"
+            )
+
+        # Ensure output directory exists
+        out_path = Path(filepath)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Save using PIL
+        img_pil = Image.fromarray(image, mode='RGB')
+        img_pil.save(out_path, format='PNG')
+        logger.info(f"Saved PNG image to {out_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to save RGB PNG: {e}")
+        raise
 
 
 def save_pickle_file(obj: any, file_path: str) -> None:

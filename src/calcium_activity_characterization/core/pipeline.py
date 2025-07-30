@@ -75,7 +75,6 @@ class CalciumPipeline:
         
         # data
         self.population: Population = None
-        self.nuclei_mask: np.ndarray = None
 
         # folder paths
         self.data_dir: Path = None
@@ -169,9 +168,11 @@ class CalciumPipeline:
         Reloads from file if available and permitted.
         """
         if not self.raw_cells_path.exists():
+            nuclei_mask = None
+            hoechst_img = None
             if not self.nuclei_mask_path.exists():
                 processor = ImageProcessor(config=self.config.image_processing_hoechst)
-                self.nuclei_mask = segmented(
+                nuclei_mask, hoechst_img = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
@@ -179,15 +180,17 @@ class CalciumPipeline:
                     self.overlay_path,
                     self.config.segmentation
                 )
-                save_tif_image(self.nuclei_mask, self.nuclei_mask_path)
+                save_tif_image(nuclei_mask, self.nuclei_mask_path)
             else:
-                self.nuclei_mask = load_existing_img(self.nuclei_mask_path)
+                nuclei_mask = load_existing_img(self.nuclei_mask_path)
 
-            unfiltered_cells = Cell.from_segmentation_mask(self.nuclei_mask, self.config.cell_filtering)
+            unfiltered_cells = Cell.from_segmentation_mask(nuclei_mask, self.config.cell_filtering)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
-            self.population = Population(cells=cells, mask=self.nuclei_mask, output_path=self.spatial_neighbor_graph_path)
+            self.population = Population(cells=cells, hoechst_img=hoechst_img, output_path=self.spatial_neighbor_graph_path)
+            self.population.save_cell_outline_overlay(self.overlay_path)
+
             save_pickle_file(self.population, self.raw_cells_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
