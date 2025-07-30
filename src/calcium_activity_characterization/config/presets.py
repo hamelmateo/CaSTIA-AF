@@ -14,14 +14,6 @@ DEBUG_CONFIG = DebugConfig(
 )
 
 # ===========================
-# SPATIAL CALIBRATION CONFIG
-# ===========================
-SPATIAL_CALIBRATION_PARAMS = SpatialCalibrationParams(
-    spatial_calibration_x=0.325,
-    spatial_calibration_y=0.325
-)
-
-# ===========================
 # SEGMENTATION CONFIG
 # ===========================
 SEGMENTATION_CONFIG = SegmentationConfig(
@@ -216,6 +208,17 @@ EVENT_EXTRACTION_CONFIG = EventExtractionConfig(
 )
 
 # ===========================
+# EXPORT CONFIG
+# ===========================
+EXPORT_CONFIG = ExportConfig(
+    spatial_calibration_params=SpatialCalibrationParams(
+        pixel_to_micron_x=0.325,
+        pixel_to_micron_y=0.325
+    ),
+    frame_rate=1.0  # frames per second
+)
+
+# ===========================
 # GLOBAL CONFIG
 # ===========================
 GLOBAL_CONFIG = GlobalConfig(
@@ -229,5 +232,6 @@ GLOBAL_CONFIG = GlobalConfig(
     cell_trace_peak_detection=CELL_PEAK_DETECTION_CONFIG,
     activity_trace_processing=ACTIVITY_TRACE_PROCESSING_CONFIG,
     activity_trace_peak_detection=ACTIVITY_TRACE_PEAK_DETECTION_CONFIG,
-    event_extraction=EVENT_EXTRACTION_CONFIG
+    event_extraction=EVENT_EXTRACTION_CONFIG,
+    export=EXPORT_CONFIG
 )

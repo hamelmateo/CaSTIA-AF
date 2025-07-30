@@ -326,7 +326,7 @@ class CalciumPipeline:
             output_dir (Path): Directory where the datasets will be saved.
         """
         try:
-            exporter = NormalizedDataExporter(self.population, self.datasets_dir, self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
+            exporter = NormalizedDataExporter(self.population, self.datasets_dir, self.config.export, self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
             exporter.export_all()
             logger.info(f"✅ Normalized datasets exported to {self.datasets_dir}")
         except Exception as e:

@@ -12,6 +12,7 @@ def plot_histogram_by_dataset(
     df: pd.DataFrame,
     column: str,
     title: str,
+    ylabel: str = "Count",
     bin_width: float = None,
     bin_count: int = None,
     n_cols: int = 2,
@@ -61,7 +62,7 @@ def plot_histogram_by_dataset(
         sns.histplot(clean, bins=bins, kde=False, ax=axs[i])
         axs[i].set_title(dataset)
         axs[i].set_xlabel(column)
-        axs[i].set_ylabel("Frequency")
+        axs[i].set_ylabel(ylabel)
 
         if dataset in log_scale_datasets:
             axs[i].set_yscale("log")
@@ -254,6 +255,7 @@ def plot_histogram_by_group(
     value_column: str,
     group_column: str,
     title: str,
+    ylabel: str = "Count",
     bin_width: float = None,
     bin_count: int = None,
     n_cols: int = 2,
@@ -318,7 +320,7 @@ def plot_histogram_by_group(
 
         axs[i].set_title(dataset)
         axs[i].set_xlabel(value_column)
-        axs[i].set_ylabel("Frequency")
+        axs[i].set_ylabel(ylabel)
 
         if dataset in log_scale_datasets:
             axs[i].set_yscale("log")

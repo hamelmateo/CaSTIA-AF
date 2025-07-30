@@ -25,22 +25,6 @@ class DebugConfig:
     harddrive_path: str = "D:/Mateo"
 
 # ===========================
-# SPATIAL CALIBRATION PARAMETERS
-# ===========================
-@dataclass
-class SpatialCalibrationParams:
-    """
-    Spatial calibration parameters for image data.
-
-    Attributes:
-        spatial_calibration_x (float): Microns per pixel in the x direction. Default is 0.325.
-        spatial_calibration_y (float): Microns per pixel in the y direction. Default is 0.325.
-    """
-    spatial_calibration_x: float = 0.325  # microns per pixel in x direction
-    spatial_calibration_y: float = 0.325  # microns per pixel in y direction
-
-
-# ===========================
 # SEGMENTATION PARAMETERS
 # ===========================
 class SegmentationMethod(str, Enum):
@@ -711,6 +695,37 @@ class EventExtractionConfig:
 
 
 # ===========================
+# EXPORT CONFIG
+# ===========================
+
+@dataclass
+class SpatialCalibrationParams:
+    """
+    Spatial calibration parameters for image data.
+
+    Attributes:
+        pixel_to_micron_x (float): Microns per pixel in the x direction. Default is 0.325.
+        pixel_to_micron_y (float): Microns per pixel in the y direction. Default is 0.325.
+    """
+    pixel_to_micron_x: float = 0.325  # microns per pixel in x direction
+    pixel_to_micron_y: float = 0.325  # microns per pixel in y direction
+
+@dataclass
+class ExportConfig:
+    """
+    Configuration for exporting results.
+
+    Attributes:
+        spatial_calibration_params (SpatialCalibrationParams): Spatial calibration parameters. Default is SpatialCalibrationParams().
+        frame_rate (float): Frame rate of the image sequence in frames per second. Default is 1.0.
+    """
+    spatial_calibration_params: SpatialCalibrationParams = field(default_factory=SpatialCalibrationParams)
+    frame_rate: float = 1.0  # frames per second
+
+
+
+
+# ===========================
 # GLOBAL CONFIG
 # ===========================
 @dataclass
@@ -742,6 +757,7 @@ class GlobalConfig:
     activity_trace_processing: SignalProcessingConfig
     activity_trace_peak_detection: PeakDetectionConfig
     event_extraction: EventExtractionConfig
+    export: ExportConfig
 
 
 # ==================================================================
