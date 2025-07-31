@@ -42,14 +42,16 @@ HOTPIXEL_CONFIG = HotPixelParameters(
     window_size=3
 )
 
+ROI_SCALE = 0.75
+
 HOECHST_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
     pipeline=ImageProcessingPipeline(
         padding=True,
-        cropping=True,
+        cropping=False,
         hot_pixel_cleaning=False
     ),
     padding_digits=5,
-    roi_scale=0.75,
+    roi_scale=ROI_SCALE,
     hot_pixel_cleaning=HOTPIXEL_CONFIG
 )
 
@@ -60,7 +62,7 @@ FITC_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
         hot_pixel_cleaning=True
     ),
     padding_digits=5,
-    roi_scale=0.75,
+    roi_scale=ROI_SCALE,
     hot_pixel_cleaning=HOTPIXEL_CONFIG
 )
 
@@ -76,7 +78,7 @@ TRACE_EXTRACTION_CONFIG = TraceExtractionConfig(
 # CELL DETECTION PARAMETERS
 # ===========================
 CELL_FILTERING_CONFIG = CellFilteringConfig(
-    border_margin=20,
+    border_margin=1,
     object_size_thresholds=ObjectSizeThresholds(
         min=500,
         max=10000

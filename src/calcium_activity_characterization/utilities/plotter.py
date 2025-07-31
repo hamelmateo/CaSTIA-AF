@@ -1,11 +1,11 @@
-from os import times
 import matplotlib.pyplot as plt
 import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 import networkx as nx
+
 
 logger = logging.getLogger(__name__)
 
@@ -344,3 +344,38 @@ def plot_event_graph(event_id: int, graph: nx.DiGraph, label_to_time: dict, save
 
     except Exception as e:
         logger.error(f"Failed to plot event graph for Event {event_id}: {e}")
+
+
+def plot_spatial_neighbor_graph(
+    graph: nx.Graph,
+    mask: Optional[np.ndarray] = None,
+    output_path: Optional[Path] = None
+) -> None:
+    """
+    Plot or save a spatial neighbor graph from the population.
+
+    Args:
+        graph (nx.Graph): Graph with nodes that contain 'pos' (y, x) coordinates.
+        mask (Optional[np.ndarray]): Optional grayscale image to show underneath the graph.
+        output_path (Optional[Path]): If provided, saves the figure to this path. Else, shows interactively.
+    """
+    if not graph.nodes:
+        raise ValueError("Graph has no nodes to plot.")
+
+    pos = {node: (xy[1], xy[0]) for node, xy in nx.get_node_attributes(graph, "pos").items()}  # x=col, y=row
+
+    plt.figure(figsize=(8, 8))
+    if mask is not None:
+        plt.imshow(mask, cmap="gray")
+
+    nx.draw(graph, pos, node_size=30, node_color='red', edge_color='blue', with_labels=False)
+    plt.axis("equal")
+    plt.title("Spatial Neighbor Graph")
+
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_path, dpi=300)
+        plt.close()
+    else:
+        plt.tight_layout()
+        plt.show()

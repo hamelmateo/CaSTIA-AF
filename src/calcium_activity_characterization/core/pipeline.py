@@ -11,6 +11,9 @@ import logging
 import os
 from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
+from skimage.segmentation import find_boundaries
+
+
 from calcium_activity_characterization.config.presets import GlobalConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
@@ -21,10 +24,17 @@ from calcium_activity_characterization.utilities.loader import (
     save_pickle_file,
     load_pickle_file,
     plot_raster_heatmap,
-    plot_raster
+    plot_raster,
+    save_rgb_image
+)
+from calcium_activity_characterization.utilities.plotter import (
+    plot_spatial_neighbor_graph, 
+    render_cell_outline_overlay
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
+from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph
+from calcium_activity_characterization.utilities.roi import filter_cells_and_graph
 from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
 from tqdm import tqdm
 import random
@@ -88,12 +98,14 @@ class CalciumPipeline:
         self.fitc_img_path: Path = None
         self.nuclei_mask_path: Path = None
         self.overlay_path: Path = None
+        self.filtered_overlay_path: Path = None
         self.raw_cells_path: Path = None
         self.raw_traces_path: Path = None
         self.processed_traces_path: Path = None
         self.binary_traces_path: Path = None
         self.events_path: Path = None
         self.spatial_neighbor_graph_path: Path = None
+        self.filtered_spatial_neighbor_graph_path: Path = None
         self.activity_trace_path: Path = None
 
     def run(self, data_dir: Path, output_dir: Path) -> None:
@@ -149,7 +161,9 @@ class CalciumPipeline:
         spatial_mapping_dir = output_dir / "cell-mapping"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
         self.overlay_path = spatial_mapping_dir / "overlay.TIF"
+        self.filtered_overlay_path = spatial_mapping_dir / "filtered_overlay.TIF"
         self.spatial_neighbor_graph_path = spatial_mapping_dir / "neighbors_graph.png"
+        self.filtered_spatial_neighbor_graph_path = spatial_mapping_dir / "filtered_neighbors_graph.png"
 
         # Paths for intermediate results
         processing_dir = output_dir / "signal-processing"
@@ -187,14 +201,74 @@ class CalciumPipeline:
             unfiltered_cells = Cell.from_segmentation_mask(nuclei_mask, self.config.cell_filtering)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
+            # TODO: reorganize and clean up code
+            neighbor_graph = build_spatial_neighbor_graph(cells)
+            #plot_spatial_neighbor_graph(neighbor_graph, hoechst_img, self.spatial_neighbor_graph_path)
+            #self.save_cell_outline_overlay(self.overlay_path, cells, hoechst_img)
+            filtered_cells, filtered_graph = filter_cells_and_graph(
+                graph=neighbor_graph,
+                cells=cells,
+                roi_scale=self.config.image_processing_hoechst.roi_scale,
+                img_shape=hoechst_img.shape,
+                border_margin=self.config.cell_filtering.border_margin
+            )
+            processor.config.pipeline.cropping = True
+            cropped_hoechst = processor.process_all(self.hoechst_img_path, self.hoechst_file_pattern)[0]
+            plot_spatial_neighbor_graph(filtered_graph, cropped_hoechst, self.filtered_spatial_neighbor_graph_path)
+            self.save_cell_outline_overlay(self.filtered_overlay_path, filtered_cells, cropped_hoechst)
 
-            self.population = Population(cells=cells, hoechst_img=hoechst_img, output_path=self.spatial_neighbor_graph_path)
-            self.population.save_cell_outline_overlay(self.overlay_path)
-
+            self.population = Population(cells=filtered_cells, hoechst_img=cropped_hoechst, neighbor_graph=filtered_graph)
             save_pickle_file(self.population, self.raw_cells_path)
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
             self.population = load_pickle_file(self.raw_cells_path)
+
+
+    def save_cell_outline_overlay(self, output_path: Path, cells: list[Cell], hoechst_img: np.ndarray) -> None:
+        """
+        Save an overlay image of cell outlines on the Hoechst image.
+
+        Args:
+            output_path (Path): Path to save the overlay image. If None, does not save.
+        """
+        try:
+            outline = self.compute_outline_mask(cells, hoechst_img.shape)
+            overlay_img = render_cell_outline_overlay(hoechst_img, outline)
+            save_rgb_image(overlay_img, output_path)
+
+        except Exception as e:
+            logger.error(f"Failed to save cell outline overlay: {e}")
+
+
+    def compute_outline_mask(self, cells: list[Cell], hoechst_img_shape: tuple) -> np.ndarray:
+        """
+        Compute a binary mask where True represents the outline of all valid cells in the population.
+
+        Returns:
+            np.ndarray: 2D boolean array with shape (H, W) where True marks cell contours.
+
+        Raises:
+            ValueError: If population has no cells or overlay_image is not defined.
+        """
+        try:
+            mask_shape = hoechst_img_shape
+            if len(mask_shape) != 2:
+                raise ValueError(f"Expected 2D grayscale image, got shape {mask_shape}")
+
+            outline = np.zeros(mask_shape, dtype=bool)
+
+            for cell in cells:
+                cell_mask = np.zeros(mask_shape, dtype=bool)
+                for y, x in cell.pixel_coords:
+                    if 0 <= y < mask_shape[0] and 0 <= x < mask_shape[1]:
+                        cell_mask[y, x] = True
+                outline |= find_boundaries(cell_mask, mode="inner")
+
+            return outline
+
+        except Exception as e:
+            logger.error(f"❌ Failed to compute outline mask: {e}")
+            raise
 
 
     def _compute_intensity(self) -> None:

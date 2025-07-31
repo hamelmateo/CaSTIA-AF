@@ -13,7 +13,6 @@ import copy
 from pathlib import Path
 import numpy as np
 import networkx as nx
-from skimage.segmentation import find_boundaries
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
@@ -24,15 +23,12 @@ from calcium_activity_characterization.event_detection.global_event import (
     find_significant_activity_peaks,
     extract_global_event_blocks
 )
-from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph, filter_graph_by_edge_length_mad, plot_spatial_neighbor_graph
 from calcium_activity_characterization.utilities.metrics import Distribution
 from calcium_activity_characterization.config.presets import (
     SignalProcessingConfig, 
     PeakDetectionConfig,
     EventExtractionConfig
 )
-from calcium_activity_characterization.utilities.loader import save_rgb_image
-from calcium_activity_characterization.utilities.plotter import render_cell_outline_overlay
 
 import logging
 logger = logging.getLogger(__name__)
@@ -53,10 +49,10 @@ class Population:
         embedding (Any): UMAP or PCA embedding of cells.
     """
 
-    def __init__(self, cells: List[Cell], hoechst_img: np.ndarray, output_path: Optional[Path]) -> None:
+    def __init__(self, cells: List[Cell], hoechst_img: np.ndarray, neighbor_graph: nx.Graph) -> None:
         self.cells: List[Cell] = cells
         self.hoechst_img: np.ndarray = hoechst_img
-        self.neighbor_graph: nx.Graph = None
+        self.neighbor_graph: nx.Graph = neighbor_graph
         self.copeaking_neighbors: List[CoPeakingNeighbors] = None
         self.cell_to_cell_communication: List[CellToCellCommunication] = None
         self.events: List[Event] = []
@@ -66,70 +62,6 @@ class Population:
         self.cell_metrics_distributions: Dict[str, Distribution] = {}
         self.seq_event_metrics_distributions: Dict[str, Distribution] = {}
         self.glob_event_metrics_distributions: Dict[str, Distribution] = {}
-
-        try:
-            self.neighbor_graph = build_spatial_neighbor_graph(cells)
-            self.neighbor_graph = filter_graph_by_edge_length_mad(self.neighbor_graph, scale=2.0)
-            plot_spatial_neighbor_graph(self.neighbor_graph, self.hoechst_img, output_path)
-
-        except ValueError as e:
-            logger.warning(f"Failed to build spatial neighbor graph: {e}")
-            self.neighbor_graph = None
-
-
-    def save_cell_outline_overlay(self, output_path: Path = None) -> None:
-        """
-        Save an overlay image of cell outlines on the Hoechst image.
-
-        Args:
-            output_path (Path): Path to save the overlay image. If None, does not save.
-        """
-        if self.hoechst_img is None:
-            logger.warning("Hoechst image not available; cannot create overlay.")
-            return
-
-        try:
-            outline = self.compute_outline_mask()
-            overlay_img = render_cell_outline_overlay(self.hoechst_img, outline)
-            save_rgb_image(overlay_img, output_path)
-
-        except Exception as e:
-            logger.error(f"Failed to save cell outline overlay: {e}")
-
-
-    def compute_outline_mask(self) -> np.ndarray:
-        """
-        Compute a binary mask where True represents the outline of all valid cells in the population.
-
-        Returns:
-            np.ndarray: 2D boolean array with shape (H, W) where True marks cell contours.
-
-        Raises:
-            ValueError: If population has no cells or overlay_image is not defined.
-        """
-        try:
-            if self.hoechst_img is None:
-                raise ValueError("Population must have 'hoechst_img' set before computing outlines.")
-
-            mask_shape = self.hoechst_img.shape
-            if len(mask_shape) != 2:
-                raise ValueError(f"Expected 2D grayscale image, got shape {mask_shape}")
-
-            outline = np.zeros(mask_shape, dtype=bool)
-
-            for cell in self.cells:
-                cell_mask = np.zeros(mask_shape, dtype=bool)
-                for y, x in cell.pixel_coords:
-                    if 0 <= y < mask_shape[0] and 0 <= x < mask_shape[1]:
-                        cell_mask[y, x] = True
-                outline |= find_boundaries(cell_mask, mode="inner")
-
-            return outline
-
-        except Exception as e:
-            logger.error(f"❌ Failed to compute outline mask: {e}")
-            raise
-
 
     def _create_trace_object(self, trace: np.ndarray, default_version: str, 
                              signal_processing_params: SignalProcessingConfig = None, 
