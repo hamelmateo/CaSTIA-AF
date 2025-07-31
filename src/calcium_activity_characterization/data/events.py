@@ -616,7 +616,7 @@ class GlobalEvent(Event):
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
 
-        self.time_to_50, self.peak_rate_at_50 = self._compute_time_and_peak_rate_at_50()
+        self.time_to_50, self.normalized_peak_rate_at_50 = self._compute_time_and_peak_rate_at_50()
 
     def _compute_dominant_direction_metadata(self, config: DirectionComputationParams) -> Dict[str, Any]:
         """
@@ -792,7 +792,8 @@ class GlobalEvent(Event):
         """
         try:
             cumulative = self.growth_curve_distribution.values
-            half = cumulative[-1] / 2.0
+            total = cumulative[-1]
+            half = total / 2.0
 
             # Find the time to reach 50% of total activation
             idx_50 = next((i for i, val in enumerate(cumulative) if val >= half), 0)
@@ -809,8 +810,9 @@ class GlobalEvent(Event):
             x_mean, y_mean = np.mean(x), np.mean(y)
             peak_rate_50 = np.sum((x - x_mean) * (y - y_mean)) / np.sum((x - x_mean) ** 2)
 
+            normalized_peak_rate_50 = (peak_rate_50 / total)*100
 
-            return idx_50, peak_rate_50
+            return idx_50, normalized_peak_rate_50
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute cumulative growth info: {e}")
             return 0, 0.0
