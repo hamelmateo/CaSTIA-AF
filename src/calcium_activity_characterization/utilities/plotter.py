@@ -5,6 +5,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Optional
 import networkx as nx
+from scipy.optimize import curve_fit
 
 
 logger = logging.getLogger(__name__)
@@ -379,3 +380,60 @@ def plot_spatial_neighbor_graph(
     else:
         plt.tight_layout()
         plt.show()
+
+
+
+def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, title: str, save_path: Path) -> None:
+
+    # framewise_peaking_labels covers every frame from start to end
+    frames = list(range(start, start + len(values)))
+
+    # --- start the plot ---------------------------------------
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(frames, values, alpha=0.6)
+
+    # --- fit a logistic (sigmoid) -----------------------------
+    def logistic(x, L, k, x0):
+        return L / (1 + np.exp(-k * (x - x0)))
+
+    try:
+        # initial guesses: L≈max, k=1, midpoint≈middle frame
+        p0 = [max(values), 1.0, start + len(values) / 2]
+        popt, _ = curve_fit(logistic, frames, values, p0=p0, maxfev=10_000)
+        L, _, _ = popt
+
+        xs = np.linspace(frames[0], frames[-1], 200)
+        ys = logistic(xs, *popt)
+        ax.plot(xs, ys, color="orange", lw=2, label="Sigmoid fit")
+
+        # draw the asymptote
+        ax.hlines(L, frames[0], frames[-1],
+                    colors="red", linestyles="--",
+                    label=f"Asymptote = {L:.1f}")
+
+    except Exception as e:
+        logger.warning(f"Plot {title}: sigmoid fit failed: {e}")
+
+    # --- mark time‐to‐50% -------------------------------------
+    # _compute_time_and_peak_rate_at_50 returns (idx_offset, rate)
+    t50 = time_to_50 + start
+    if 0 <= time_to_50 < len(values):
+        y50 = values[time_to_50]
+        ax.scatter([t50], [y50],
+                    color="green", marker="*", s=150,
+                    label=f"50% @ t={time_to_50} (fr={t50})")
+        ax.text(t50, y50,
+                f"  t₅₀={time_to_50}",
+                va="bottom", ha="left",
+                color="green", fontsize=10)
+
+    # --- finalize & save --------------------------------------
+    ax.set_title(title)
+    ax.set_xlabel("Frame")
+    ax.set_ylabel("Cumulative number of cells peaking")
+    ax.grid(True)
+    ax.legend(loc="best")
+
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(save_path, dpi=300)
+    plt.close(fig)

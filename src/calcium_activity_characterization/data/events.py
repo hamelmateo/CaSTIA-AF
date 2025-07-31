@@ -96,14 +96,15 @@ class Event(ABC):
 
     def _compute_growth_curve(self) -> Distribution:
         """
-        Store number of newly recruited cells per frame as a Distribution.
+        Store cumulative number of newly recruited cells per frame as a Distribution.
         """
         try:
             values = [
                 len(labels)
                 for _, labels in sorted(self.framewise_peaking_labels.items())
             ]
-            growth_curve = Distribution.from_values(values)
+            cumulative = np.cumsum(values).tolist()
+            growth_curve = Distribution.from_values(cumulative)
             return growth_curve
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute growth curve: {e}")
@@ -790,11 +791,7 @@ class GlobalEvent(Event):
             float: Frame offset from event start (e.g., 0 means 50% was reached in first frame).
         """
         try:
-            growth = self.growth_curve_distribution.values
-            if not growth or sum(growth) == 0:
-                return 0, 0.0
-
-            cumulative = np.cumsum(growth)
+            cumulative = self.growth_curve_distribution.values
             half = cumulative[-1] / 2.0
 
             # Find the time to reach 50% of total activation

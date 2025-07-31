@@ -91,13 +91,7 @@ def plot_histogram_by_dataset(
     plt.show()
 
 
-from typing import Dict
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.image import imread
-from pathlib import Path
-
-def plot_raster(
+def visualize_image(
     dataset_paths: Dict[str, str],
     image_name: str = "signal-processing/raster_plot.png",
     title: str = "Binary Activity Raster Plots by Dataset",

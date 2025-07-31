@@ -25,11 +25,13 @@ from calcium_activity_characterization.utilities.loader import (
     load_pickle_file,
     plot_raster_heatmap,
     plot_raster,
-    save_rgb_image
+    save_rgb_png_image,
+    save_rgb_tif_image
 )
 from calcium_activity_characterization.utilities.plotter import (
     plot_spatial_neighbor_graph, 
-    render_cell_outline_overlay
+    render_cell_outline_overlay,
+    plot_event_growth_curve
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
@@ -227,7 +229,7 @@ class CalciumPipeline:
         try:
             outline = self.compute_outline_mask(cells, hoechst_img.shape)
             overlay_img = render_cell_outline_overlay(hoechst_img, outline)
-            save_rgb_image(overlay_img, output_path)
+            save_rgb_tif_image(overlay_img, output_path)
 
         except Exception as e:
             logger.error(f"Failed to save cell outline overlay: {e}")
@@ -383,7 +385,15 @@ class CalciumPipeline:
 
         self.population.assign_peak_event_ids()
 
-        self.population.events
+        for event in self.population.events:
+            if event.__class__.__name__ == "GlobalEvent":
+                plot_event_growth_curve(
+                    values=event.growth_curve_distribution.values,
+                    start=event.event_start_time,
+                    time_to_50=event.time_to_50,
+                    title=f"Event {event.id} cumulative growth curve",
+                    save_path=self.output_dir / "events" / f"event-growth-curve-{event.id}.png"
+                )
 
         self.population.compute_cell_interaction_clusters()
 

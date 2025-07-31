@@ -162,7 +162,7 @@ def save_tif_image(image: np.ndarray, file_path: str, photometric: str = "minisb
         logger.error(f"Failed to save TIFF image to {file_path}: {e}")
         raise
 
-def save_rgb_image(
+def save_rgb_png_image(
     image: np.ndarray,
     filepath: Path | str
 ) -> None:
@@ -197,6 +197,47 @@ def save_rgb_image(
         logger.error(f"Failed to save RGB PNG: {e}")
         raise
 
+def save_rgb_tif_image(
+    image: np.ndarray,
+    filepath: Path | str,
+    photometric: str = "rgb",
+    imagej: bool = True
+) -> None:
+    """
+    Save an RGB uint8 image as a TIFF file.
+
+    Args:
+        image (np.ndarray): H×W×3 uint8 RGB array.
+        filepath (Path | str): Path to the output TIFF file (should end in .tif or .tiff).
+        photometric (str): TIFF photometric interpretation (default: "rgb").
+        imagej (bool): Whether to write in ImageJ-compatible TIFF format (default: True).
+
+    Raises:
+        ValueError: If the image is not H×W×3 uint8.
+        IOError: If saving the file fails.
+    """
+    # Validate image
+    if image.ndim != 3 or image.shape[2] != 3 or image.dtype != np.uint8:
+        raise ValueError(
+            f"Expected uint8 RGB image of shape H×W×3, got shape {image.shape} and dtype {image.dtype}"
+        )
+
+    # Ensure output directory exists
+    out_path = Path(filepath)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Write as TIFF
+        tifffile.imwrite(
+            str(out_path),
+            image,
+            photometric=photometric,
+            imagej=imagej
+        )
+        logger.info(f"Saved TIFF image to {out_path}")
+    except Exception as e:
+        logger.error(f"Failed to save RGB TIFF: {e}")
+        raise
 
 def save_pickle_file(obj: any, file_path: str) -> None:
     """
