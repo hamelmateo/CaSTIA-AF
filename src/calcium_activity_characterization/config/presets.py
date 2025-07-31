@@ -42,8 +42,6 @@ HOTPIXEL_CONFIG = HotPixelParameters(
     window_size=3
 )
 
-ROI_SCALE = 0.75
-
 HOECHST_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
     pipeline=ImageProcessingPipeline(
         padding=True,
@@ -51,7 +49,7 @@ HOECHST_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
         hot_pixel_cleaning=False
     ),
     padding_digits=5,
-    roi_scale=ROI_SCALE,
+    roi_scale=0.75,
     hot_pixel_cleaning=HOTPIXEL_CONFIG
 )
 
@@ -62,7 +60,7 @@ FITC_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
         hot_pixel_cleaning=True
     ),
     padding_digits=5,
-    roi_scale=ROI_SCALE,
+    roi_scale=0.75,
     hot_pixel_cleaning=HOTPIXEL_CONFIG
 )
 

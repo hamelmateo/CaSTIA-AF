@@ -16,13 +16,12 @@ from calcium_activity_characterization.config.presets import SegmentationConfig
 
 logger = logging.getLogger(__name__)
 
-def segmented(images: np.ndarray, output_path: Path, config: SegmentationConfig) -> tuple[np.ndarray, np.ndarray]:
+def segmented(images: np.ndarray, config: SegmentationConfig) -> np.ndarray:
     """
     Perform nuclear segmentation on 16-bit grayscale Hoechst images using the Mesmer model.
 
     Args:
         images (np.ndarray): 3D NumPy array of shape (T, H, W) representing grayscale images.
-        output_path (Path): Path to save the overlay image.
         config (SegmentationConfig): Segmentation configuration parameters.
 
     Returns:
@@ -59,11 +58,7 @@ def segmented(images: np.ndarray, output_path: Path, config: SegmentationConfig)
         nuclei_mask = nuclei_mask[0, ..., 0]  # remove batch and channel dims
         logger.info(f"Segmentation mask generated with shape: {nuclei_mask.shape}")
 
-        if config.save_overlay:
-            overlay_image = make_outline_overlay(images_hd, nuclei_mask[np.newaxis, ..., np.newaxis])
-            save_tif_image(overlay_image[0, ..., 0], output_path)
-
-        return nuclei_mask, images_hd[0, :, :, 0]  # return first image with shape [1536, 1536]
+        return nuclei_mask
 
     except Exception as e:
         logger.error(f"Segmentation failed: {e}")

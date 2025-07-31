@@ -33,8 +33,6 @@ from calcium_activity_characterization.utilities.plotter import (
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
-from calcium_activity_characterization.utilities.spatial import build_spatial_neighbor_graph
-from calcium_activity_characterization.utilities.roi import filter_cells_and_graph
 from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
 from tqdm import tqdm
 import random
@@ -98,14 +96,12 @@ class CalciumPipeline:
         self.fitc_img_path: Path = None
         self.nuclei_mask_path: Path = None
         self.overlay_path: Path = None
-        self.filtered_overlay_path: Path = None
         self.raw_cells_path: Path = None
         self.raw_traces_path: Path = None
         self.processed_traces_path: Path = None
         self.binary_traces_path: Path = None
         self.events_path: Path = None
         self.spatial_neighbor_graph_path: Path = None
-        self.filtered_spatial_neighbor_graph_path: Path = None
         self.activity_trace_path: Path = None
 
     def run(self, data_dir: Path, output_dir: Path) -> None:
@@ -161,9 +157,7 @@ class CalciumPipeline:
         spatial_mapping_dir = output_dir / "cell-mapping"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
         self.overlay_path = spatial_mapping_dir / "overlay.TIF"
-        self.filtered_overlay_path = spatial_mapping_dir / "filtered_overlay.TIF"
         self.spatial_neighbor_graph_path = spatial_mapping_dir / "neighbors_graph.png"
-        self.filtered_spatial_neighbor_graph_path = spatial_mapping_dir / "filtered_neighbors_graph.png"
 
         # Paths for intermediate results
         processing_dir = output_dir / "signal-processing"
@@ -183,15 +177,13 @@ class CalciumPipeline:
         """
         if not self.raw_cells_path.exists():
             nuclei_mask = None
-            hoechst_img = None
             if not self.nuclei_mask_path.exists():
                 processor = ImageProcessor(config=self.config.image_processing_hoechst)
-                nuclei_mask, hoechst_img = segmented(
+                nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
                     ),
-                    self.overlay_path,
                     self.config.segmentation
                 )
                 save_tif_image(nuclei_mask, self.nuclei_mask_path)
@@ -201,24 +193,25 @@ class CalciumPipeline:
             unfiltered_cells = Cell.from_segmentation_mask(nuclei_mask, self.config.cell_filtering)
 
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
-            # TODO: reorganize and clean up code
-            neighbor_graph = build_spatial_neighbor_graph(cells)
-            #plot_spatial_neighbor_graph(neighbor_graph, hoechst_img, self.spatial_neighbor_graph_path)
-            #self.save_cell_outline_overlay(self.overlay_path, cells, hoechst_img)
-            filtered_cells, filtered_graph = filter_cells_and_graph(
-                graph=neighbor_graph,
+
+            graph = Population.build_spatial_neighbor_graph(cells)
+
+            self.population = Population.from_roi_filtered(
+                graph=graph,
                 cells=cells,
                 roi_scale=self.config.image_processing_hoechst.roi_scale,
-                img_shape=hoechst_img.shape,
+                img_shape=nuclei_mask.shape,
                 border_margin=self.config.cell_filtering.border_margin
             )
+
             processor.config.pipeline.cropping = True
             cropped_hoechst = processor.process_all(self.hoechst_img_path, self.hoechst_file_pattern)[0]
-            plot_spatial_neighbor_graph(filtered_graph, cropped_hoechst, self.filtered_spatial_neighbor_graph_path)
-            self.save_cell_outline_overlay(self.filtered_overlay_path, filtered_cells, cropped_hoechst)
 
-            self.population = Population(cells=filtered_cells, hoechst_img=cropped_hoechst, neighbor_graph=filtered_graph)
+            self.save_cell_outline_overlay(self.overlay_path, self.population.cells, cropped_hoechst)
+            plot_spatial_neighbor_graph(self.population.neighbor_graph, cropped_hoechst, self.spatial_neighbor_graph_path)
+
             save_pickle_file(self.population, self.raw_cells_path)
+
             logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
         else:
             self.population = load_pickle_file(self.raw_cells_path)
@@ -389,6 +382,8 @@ class CalciumPipeline:
         self.population.detect_sequential_events(self.config.event_extraction)
 
         self.population.assign_peak_event_ids()
+
+        self.population.events
 
         self.population.compute_cell_interaction_clusters()
 

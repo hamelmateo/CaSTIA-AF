@@ -59,6 +59,19 @@ class Cell:
         """
         self.is_active = len(self.trace.peaks) > 0
 
+    def adjust_to_roi(self, start_h: int, start_w: int) -> None:
+        """
+        Adjust the cell's coordinates and centroid relative to a cropped ROI.
+
+        Args:
+            start_h (int): Row offset (start of ROI).
+            start_w (int): Column offset (start of ROI).
+        """
+        self.pixel_coords[:, 0] -= start_h
+        self.pixel_coords[:, 1] -= start_w
+        cy, cx = self.centroid
+        self.centroid = (cy - start_h, cx - start_w)
+
     def plot_raw_intensity_profile(self) -> None:
         """
         Plot the mean intensity profile of the cell over time.
@@ -142,7 +155,7 @@ class Cell:
         while np.any(mask == label):
             pixel_coords = np.argwhere(mask == label)
             if pixel_coords.size > 0:
-                centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int)
+                centroid = np.array(np.mean(pixel_coords, axis=0), dtype=int) # TODO tuple for the centroid?
                 cell = cls(label=label, centroid=centroid, pixel_coords=pixel_coords, object_size_thresholds=cell_filtering_parameters.object_size_thresholds)
 
                 h, w = mask.shape[:2]
