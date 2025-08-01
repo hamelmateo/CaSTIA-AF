@@ -259,4 +259,5 @@ def assign_peak_classifications(
                     peak.origin_type = "origin"
                     peak.in_event = "sequential"
                 else:
+                    peak.in_event = "individual"
                     peak.origin_type = "individual"

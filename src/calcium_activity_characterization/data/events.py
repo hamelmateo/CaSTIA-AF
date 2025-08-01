@@ -281,6 +281,8 @@ class SequentialEvent(Event):
     def _communication_speed_distribution(self) -> Distribution:
         """
         Compute the distribution of communication speeds (centroid distance / delta_t).
+        If delta_t == 0, it means that we don't have the temporal resolution to measure speed, 
+        so we use the maximum possible resolution (1 frame).
 
         Returns:
             Distribution: Distribution of communication speeds.
@@ -288,12 +290,16 @@ class SequentialEvent(Event):
         speeds = []
         try:
             for comm in self.communications:
-                if comm.delta_t <= 0:
+                if comm.delta_t < 0:
                     continue
+                elif comm.delta_t == 0:
+                    time = 1
+                else:
+                    time = comm.delta_t
 
                 dist = euclidean(self.label_to_centroid[comm.origin[0]],
                                  self.label_to_centroid[comm.cause[0]])
-                speed = dist / comm.delta_t
+                speed = dist / time
                 speeds.append(speed)
 
             return Distribution.from_values(speeds)
