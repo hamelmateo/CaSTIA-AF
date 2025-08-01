@@ -492,8 +492,8 @@ def plot_interaction_graph(
         if not graph.nodes:
             raise ValueError("Graph has no nodes to plot.")
 
-        # Filter edges with weight > 1
-        filtered_edges = [(u, v) for u, v in graph.edges() if graph[u][v]['weight'] > 3]
+        # Filter edges with weight > 0
+        filtered_edges = [(u, v) for u, v in graph.edges() if graph[u][v]['weight'] > 0]
         weights = [graph[u][v]['weight'] for u, v in filtered_edges]
         max_weight = max(weights) if weights else 1
         norm_weights = [w / max_weight for w in weights]
