@@ -8,8 +8,22 @@ from scipy.stats import entropy
 from matplotlib.backends.backend_pdf import PdfPages
 from calcium_activity_characterization.utilities.metrics import Distribution, compute_histogram_func, compute_peak_frequency_over_time
 from calcium_activity_characterization.data.events import SequentialEvent, GlobalEvent
+from calcium_activity_characterization.data.cells import Cell
+import copy
 
 
+
+def create_cells_without_global_peaks(self) -> list[Cell]:
+    """
+    Returns a deep copy of cells with peaks marked as in_global_event removed.
+    Original cells are not affected.
+    """
+    clean_cells = copy.deepcopy(self.cells)
+    for cell in clean_cells:
+        cell.trace.peaks = [p for p in cell.trace.peaks if getattr(p, 'in_event', None) != "global"]
+        #reassign_peak_ids(cell.trace.peaks)
+
+    return clean_cells
 
 def compute_population_distributions(self) -> None:
     """

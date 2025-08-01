@@ -1,12 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import logging
-import pandas as pd
 
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.config.presets import CellFilteringConfig, ObjectSizeThresholds
-
-from calcium_activity_characterization.config.presets import PeakDetectionConfig
 
 
 
@@ -72,70 +68,18 @@ class Cell:
         cy, cx = self.centroid
         self.centroid = (cy - start_h, cx - start_w)
 
-    def plot_raw_intensity_profile(self) -> None:
+    def count_origin_sequential_peaks(self) -> int:
         """
-        Plot the mean intensity profile of the cell over time.
-        """
-        if len(self.trace.versions["raw"]) == 0:
-            logger.info(f"Cell {self.label} has no intensity data to plot.")
-            return
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(self.trace.versions["raw"], label=f"Cell {self.label}")
-        plt.title(f"Raw Intensity Profile for Cell {self.label}")
-        plt.xlabel("Timepoint")
-        plt.ylabel("Mean Intensity")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-    def plot_processed_intensity_profile(self) -> None:
-        """
-        Plot the mean intensity profile of the cell over time.
-        """
-        active = self.trace.active_trace
-        if len(active) == 0:
-            logger.info(f"Cell {self.label} has no processed intensity data to plot.")
-            return
-
-        plt.figure(figsize=(10, 6))
-        plt.plot(active, label=f"Cell {self.label}")
-        plt.title(f"Processed Intensity Profile for Cell {self.label}")
-        plt.xlabel("Timepoint")
-        plt.ylabel("Mean Intensity")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-    def get_arcos_dataframe(self) -> pd.DataFrame:
-        """
-        Return a DataFrame formatted for arcos4py binarization and event tracking.
-
-        The DataFrame contains the following columns:
-            - frame: Timepoint index.
-            - trackID: Unique cell identifier.
-            - x: X-coordinate of centroid.
-            - y: Y-coordinate of centroid.
-            - intensity: Raw intensity trace.
+        Count the number of peaks in this cell that are origins of sequential events.
 
         Returns:
-            pd.DataFrame: DataFrame with cell information formatted for arcos4py.
+            int: Number of origin peaks involved in sequential events.
         """
-        if not self.trace.binary:
-            logger.warning(f"Cell {self.label} has no binary trace.")
-            return pd.DataFrame()
+        return sum(
+            1 for p in self.trace.peaks
+            if p.origin_type == "origin" and p.in_event == "sequential"
+        )
 
-        data = {
-            'frame': range(len(self.trace.binary)),
-            'trackID': [self.label] * len(self.trace.binary),
-            'x': [self.centroid[1]] * len(self.trace.binary),
-            'y': [self.centroid[0]] * len(self.trace.binary),
-            'intensity': self.trace.versions["raw"],
-            'intensity.bin': self.trace.binary
-        }
-
-        return pd.DataFrame(data)
-    
     @classmethod
     def from_segmentation_mask(cls, mask: np.ndarray, cell_filtering_parameters: CellFilteringConfig) -> list["Cell"]:
         """

@@ -8,9 +8,7 @@ Example:
 
 import numpy as np
 import logging
-import os
 from pathlib import Path
-from concurrent.futures import ProcessPoolExecutor
 from skimage.segmentation import find_boundaries
 
 
@@ -23,20 +21,21 @@ from calcium_activity_characterization.utilities.loader import (
     load_existing_img,
     save_pickle_file,
     load_pickle_file,
-    plot_raster_heatmap,
-    plot_raster,
     save_rgb_png_image,
     save_rgb_tif_image
 )
 from calcium_activity_characterization.utilities.plotter import (
     plot_spatial_neighbor_graph, 
     render_cell_outline_overlay,
-    plot_event_growth_curve
+    plot_event_growth_curve,
+    plot_interaction_graph,
+    plot_raster_heatmap,
+    plot_raster,
+    plot_origin_overlay
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
 from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
-from tqdm import tqdm
 import random
 
 # Configure logging
@@ -97,6 +96,7 @@ class CalciumPipeline:
         self.hoechst_img_path: Path = None
         self.fitc_img_path: Path = None
         self.nuclei_mask_path: Path = None
+        self.full_nuclei_mask_path: Path = None
         self.overlay_path: Path = None
         self.raw_cells_path: Path = None
         self.raw_traces_path: Path = None
@@ -124,6 +124,8 @@ class CalciumPipeline:
         
         self._initialize_activity_trace()
         self._detect_events()
+
+        self._analyze_population()
 
         self._export_normalized_datasets()
 
@@ -158,6 +160,7 @@ class CalciumPipeline:
         # Paths for spatial mapping
         spatial_mapping_dir = output_dir / "cell-mapping"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
+        self.full_nuclei_mask_path = spatial_mapping_dir / "full_nuclei_mask.TIF"
         self.overlay_path = spatial_mapping_dir / "overlay.TIF"
         self.spatial_neighbor_graph_path = spatial_mapping_dir / "neighbors_graph.png"
 
@@ -179,30 +182,33 @@ class CalciumPipeline:
         """
         if not self.raw_cells_path.exists():
             nuclei_mask = None
+            processor = ImageProcessor(config=self.config.image_processing_hoechst)
             if not self.nuclei_mask_path.exists():
-                processor = ImageProcessor(config=self.config.image_processing_hoechst)
-                nuclei_mask = segmented(
+                full_nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
                     ),
                     self.config.segmentation
                 )
-                save_tif_image(nuclei_mask, self.nuclei_mask_path)
+                save_tif_image(full_nuclei_mask, self.full_nuclei_mask_path)
             else:
-                nuclei_mask = load_existing_img(self.nuclei_mask_path)
+                full_nuclei_mask = load_existing_img(self.full_nuclei_mask_path)
 
-            unfiltered_cells = Cell.from_segmentation_mask(nuclei_mask, self.config.cell_filtering)
-
+            unfiltered_cells = Cell.from_segmentation_mask(full_nuclei_mask, self.config.cell_filtering)
             cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
             graph = Population.build_spatial_neighbor_graph(cells)
+            
+            nuclei_mask = processor._crop_image(full_nuclei_mask)
+            save_tif_image(nuclei_mask, self.nuclei_mask_path)
 
             self.population = Population.from_roi_filtered(
-                graph=graph,
+                nuclei_mask=nuclei_mask,
                 cells=cells,
+                graph=graph,
                 roi_scale=self.config.image_processing_hoechst.roi_scale,
-                img_shape=nuclei_mask.shape,
+                img_shape=full_nuclei_mask.shape,
                 border_margin=self.config.cell_filtering.border_margin
             )
 
@@ -304,7 +310,10 @@ class CalciumPipeline:
                 )
             save_pickle_file(self.population, self.processed_traces_path)
 
-            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells, cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
+            plot_raster_heatmap(self.heatmap_raster_path, 
+                                [cell.trace.versions["processed"] for cell in self.population.cells], 
+                                cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points
+                                )
 
             """
             # Select 25 random cells (or all if fewer than 25)
@@ -312,27 +321,6 @@ class CalciumPipeline:
             for cell in sample_cells:
                 cell.trace.plot_all_traces(self.traces_processing_steps / f"{cell.label}_all_traces.png")
             """
-
-    def _signal_processing_pipeline_parallelized(self) -> None:
-        """
-        Run signal processing pipeline on all active cells.
-        Reloads from file if permitted.
-        """
-        #if self.processed_traces_path.exists():
-        if False:  # Disable reloading for debugging purposes
-            self.population = load_pickle_file(self.processed_traces_path)
-            return
-
-        else:
-            self.output_dir.mkdir(exist_ok=True, parents=True)
-            args = [(cell, "raw", "processed", self.config.cell_trace_processing, self.traces_processing_steps) for cell in self.population.cells]
-
-            with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-                list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
-
-            save_pickle_file(self.population, self.processed_traces_path)
-
-            plot_raster_heatmap(self.heatmap_raster_path, self.population.cells, cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
 
     def _binarization_pipeline(self) -> None: 
         """
@@ -353,7 +341,10 @@ class CalciumPipeline:
             logger.info(f"Peaks detected for {len(self.population.cells)} active cells.")
             save_pickle_file(self.population, self.binary_traces_path)
 
-        plot_raster(self.raster_path, self.population.cells, self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
+        plot_raster(self.raster_path, 
+                    [cell.trace.binary for cell in self.population.cells], 
+                    self.config.cell_trace_processing.detrending.params.cut_trace_num_points
+                    )
 
 
     def _initialize_activity_trace(self) -> None:
@@ -385,6 +376,15 @@ class CalciumPipeline:
 
         self.population.assign_peak_event_ids()
 
+        save_pickle_file(self.population, self.events_path)
+
+
+    def _analyze_population(self) -> None:
+        """
+        Analyze the population-level metrics and save them.
+        This method is a placeholder for future analysis logic.
+        """
+        # Plot and save growth curves for each global event
         for event in self.population.events:
             if event.__class__.__name__ == "GlobalEvent":
                 plot_event_growth_curve(
@@ -395,9 +395,14 @@ class CalciumPipeline:
                     save_path=self.output_dir / "events" / f"event-growth-curve-{event.id}.png"
                 )
 
-        self.population.compute_cell_interaction_clusters()
+        # Analyze sequential events
+        origin_counts = self.population.count_origin_peaks_in_sequential_events()
+        cell_pixel_coords = {cell.label: cell.pixel_coords for cell in self.population.cells}
+        plot_origin_overlay(self.population.nuclei_mask, cell_pixel_coords, origin_counts, self.output_dir / "cell-mapping" / "origin_overlay.png")
 
-        save_pickle_file(self.population, self.events_path)
+
+        interaction_graph = self.population.compute_cell_interaction_clusters()
+        plot_interaction_graph(interaction_graph, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "interaction_graph.png")
 
 
     def _export_normalized_datasets(self) -> None:
@@ -413,21 +418,3 @@ class CalciumPipeline:
             logger.info(f"✅ Normalized datasets exported to {self.datasets_dir}")
         except Exception as e:
             logger.error(f"❌ Failed to export normalized datasets: {e}")
-
-
-
-def process_and_plot_worker(args: tuple[Cell, str, str, dict, Path]) -> Cell:
-    """
-    Function to process and plot a single trace in a subprocess.
-
-    Args:
-        args (tuple): (cell, input_version, output_version, config, output_path)
-
-    Returns:
-        Cell: The processed cell object.
-    """
-    cell, input_version, output_version, config, output_path = args
-    try:
-        cell.trace.process_and_plot_trace(input_version, output_version, config, output_path / f"{cell.label}.png")
-    except Exception as e:
-        logger.error(f"Worker error on processing trace of cell {cell.label}: {e}")

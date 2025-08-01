@@ -3,6 +3,10 @@
 
 from collections import Counter
 import networkx as nx
+import os
+from pathlib import Path
+from concurrent.futures import ProcessPoolExecutor
+from tqdm import tqdm
 
 from calcium_activity_characterization.experimental.event_detection.arcos_event_detection import ArcosEventDetector
 from calcium_activity_characterization.experimental.analysis.metric_exporter import MetricExporter
@@ -19,11 +23,51 @@ from calcium_activity_characterization.utilities.loader import (
     save_clusters_on_overlay, 
     plot_similarity_matrices, 
     get_config_with_fallback,
-    plot_raster
+    plot_raster,
+    plot_raster_heatmap
 )
+from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.data.populations import Population
 
 import logging
 logger = logging.getLogger(__name__)
+
+def signal_processing_pipeline_parallelized(self) -> None:
+    """
+    Run signal processing pipeline on all active cells.
+    Reloads froms file if permitted.
+    """
+    #if self.processed_traces_path.exists():
+    if False:  # Disable reloading for debugging purposes
+        self.population = load_pickle_file(self.processed_traces_path)
+        return
+
+    else:
+        self.output_dir.mkdir(exist_ok=True, parents=True)
+        args = [(cell, "raw", "processed", self.config.cell_trace_processing, self.traces_processing_steps) for cell in self.population.cells]
+
+        with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+            list(tqdm(executor.map(process_and_plot_worker, args), total=len(self.population.cells), desc="Parallel Trace Processing"))
+
+        save_pickle_file(self.population, self.processed_traces_path)
+
+        plot_raster_heatmap(self.heatmap_raster_path, self.population.cells, cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points)
+
+def process_and_plot_worker(args: tuple[Cell, str, str, dict, Path]) -> Cell:
+    """
+    Function to process and plot a single trace in a subprocess.
+
+    Args:
+        args (tuple): (cell, input_version, output_version, config, output_path)
+
+    Returns:
+        Cell: The processed cell object.
+    """
+    cell, input_version, output_version, config, output_path = args
+    try:
+        cell.trace.process_and_plot_trace(input_version, output_version, config, output_path / f"{cell.label}.png")
+    except Exception as e:
+        logger.error(f"Worker error on processing trace of cell {cell.label}: {e}")
 
 
 def run_umap(self):

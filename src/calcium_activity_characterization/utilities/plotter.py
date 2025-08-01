@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import logging
-import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import List, Optional
@@ -10,6 +9,102 @@ from scipy.optimize import curve_fit
 
 logger = logging.getLogger(__name__)
 
+def plot_raster(
+    output_path: Path,
+    binary_traces: List[List[int]],
+    cut_trace: int = 0
+) -> None:
+    """
+    Plot a raster plot from a list of binary traces, with optional x-axis shift.
+
+    Args:
+        output_path (Path): File path to save the plot.
+        binary_traces (List[List[int] | np.ndarray]): List of binary activity traces.
+        cut_trace (int): Offset to add to x-axis labels for synchronization.
+    """
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not binary_traces:
+            logger.warning("No binary traces provided for raster plot.")
+            return
+
+        binarized_matrix = np.array(binary_traces)
+        _, ax = plt.subplots(figsize=(12, 6))
+        ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+        ax.set_title("Binarized Activity Raster Plot")
+        ax.set_ylabel("Cell Index")
+        ax.set_xlabel("Time")
+
+        n_time = binarized_matrix.shape[1]
+        ax.set_xticks(np.arange(0, n_time, max(1, n_time // 17)))
+        ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=600)
+        plt.close()
+        logger.info(f"Raster plot saved to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate raster plot: {e}")
+        raise
+
+def plot_raster_heatmap(
+    output_path: Path,
+    processed_traces: List[np.ndarray],
+    clip_percentile: float = 98.0,
+    cut_trace: int = 0
+) -> None:
+    """
+    Plot a raster of processed calcium traces with a continuous colormap.
+
+    Args:
+        output_path (Path): Path to save the output figure.
+        processed_traces (List[np.ndarray]): List of processed calcium intensity traces.
+        clip_percentile (float): Percentile for upper clipping of intensities.
+        cut_trace (int): Offset to add to the time axis (x-axis) for synchronization.
+
+    Raises:
+        ValueError: If no valid traces are provided.
+    """
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not processed_traces:
+            logger.warning("No processed traces provided for raster plot.")
+            return
+
+        trace_array = np.array(processed_traces)
+
+        # Clip upper percentile to enhance contrast
+        upper_clip = np.percentile(trace_array, clip_percentile)
+        trace_array_clipped = np.clip(trace_array, a_min=None, a_max=upper_clip)
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        cmap = plt.get_cmap("viridis")
+        im = ax.imshow(trace_array_clipped, aspect='auto', cmap=cmap, interpolation='nearest')
+
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label("Processed Trace Intensity")
+
+        ax.set_title("Processed Trace Raster Heatmap")
+        ax.set_ylabel("Cell Index")
+        ax.set_xlabel("Time")
+
+        # Add offset to x-axis if cut_trace > 0
+        if cut_trace > 0:
+            n_time = trace_array_clipped.shape[1]
+            ax.set_xticks(np.arange(0, n_time, max(1, n_time // 17)))
+            ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
+
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=600)
+        plt.close()
+        logger.info(f"Processed trace raster plot saved to {output_path}")
+
+    except Exception as e:
+        logger.error(f"Failed to generate processed trace raster plot: {e}")
+        raise
 
 def convert_grayscale16_to_rgb(
     img16: np.ndarray
@@ -187,65 +282,6 @@ def plot_final_baseline_fit(
     save_path = output_dir / f"baseline_fit_{counter}.png"
     plt.savefig(save_path)
     plt.close()
-
-
-def show_cell_plot(cell) -> None:
-    """
-    Plot the intensity trace of a single cell.
-
-    Args:
-        cell (Cell): The cell object whose intensity trace will be plotted.
-    """
-    if not cell.raw_intensity_trace:
-        logger.info(f"Cell {cell.label} has no intensity data to plot.")
-        return
-
-    try:
-        fig, ax = plt.subplots()
-        ax.plot(cell.raw_intensity_trace, label=f"Cell {cell.label} ({cell.centroid[1]}, {cell.centroid[0]})")
-        ax.set_title(f"Intensity Profile for Cell {cell.label}")
-        ax.set_xlabel("Timepoint")
-        ax.set_ylabel("Mean Intensity")
-        ax.legend()
-        ax.grid(True)
-        plt.show(block=False)
-    except Exception as e:
-        logger.error(f"Failed to plot intensity profile for cell {cell.label}: {e}")
-
-
-
-def plot_arcos_binarized_data(df: pd.DataFrame, track_id: int):
-    """
-    Plot raw intensity, detrended/rescaled intensity, and binarized data
-    for a specific trackID.
-
-    Args:
-        df (pd.DataFrame): DataFrame containing the binarized data.
-        track_id (int): Track identifier (cell label).
-    """
-    cell_data = df[df['trackID'] == track_id].sort_values('frame')
-
-    fig, ax = plt.subplots(figsize=(12, 4))
-
-    ax.plot(cell_data['frame'], cell_data['intensity'], 
-            label='Raw Intensity', color='gray', linestyle='--', alpha=0.6)
-
-    ax.plot(cell_data['frame'], cell_data['intensity.resc'], 
-            label='Detrended & Rescaled Intensity', color='blue')
-
-    # Plot binarized data (scaled for visibility)
-    ax.step(cell_data['frame'], cell_data['intensity.bin'] * cell_data['intensity.resc'].max(), 
-            label='Binarized Activity', color='red', linewidth=2, where='post')
-
-    ax.set_xlabel('Frame (Time)')
-    ax.set_ylabel('Intensity')
-    ax.set_title(f'ARCOS Binarization - Cell {track_id}')
-    ax.legend()
-    ax.grid(True)
-    plt.tight_layout()
-    plt.show()
-
-
 
 
 def plot_umap(
@@ -437,3 +473,97 @@ def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, ti
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_path, dpi=300)
     plt.close(fig)
+
+
+def plot_interaction_graph(
+    graph: nx.Graph,
+    nuclei_mask: Optional[np.ndarray] = None,
+    output_path: Optional[Path] = None
+) -> None:
+    """
+    Plot or save the interaction graph with weighted edges overlayed on an optional overlay image.
+
+    Args:
+        graph (nx.Graph): Interaction graph to plot.
+        overlay_path (Optional[Path]): Path to overlay image (e.g. overlay.TIF).
+        output_path (Optional[Path]): If provided, saves the figure to this path. Else, shows interactively.
+    """
+    try:
+        if not graph.nodes:
+            raise ValueError("Graph has no nodes to plot.")
+
+        # Filter edges with weight > 1
+        filtered_edges = [(u, v) for u, v in graph.edges() if graph[u][v]['weight'] > 3]
+        weights = [graph[u][v]['weight'] for u, v in filtered_edges]
+        max_weight = max(weights) if weights else 1
+        norm_weights = [w / max_weight for w in weights]
+
+        plt.figure(figsize=(8, 8))
+        if nuclei_mask is not None:
+            plt.imshow(nuclei_mask, cmap="gray", alpha=0.6)
+
+        pos = {node: (xy[1], xy[0]) for node, xy in nx.get_node_attributes(graph, "pos").items()}  # x=col, y=row
+        nx.draw(
+            graph.edge_subgraph(filtered_edges),
+            pos,
+            node_size=15,
+            node_color='red',
+            edge_color=[w / max(weights) for w in weights],
+            edge_cmap=plt.cm.inferno,
+            width=[1 + 2 * (w / max(weights)) for w in weights],
+            with_labels=False
+        )
+
+        plt.axis("equal")
+        plt.title("Interaction Graph (Weighted Edges)")
+
+        if output_path:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(output_path, dpi=300)
+            plt.close()
+        else:
+            plt.tight_layout()
+            plt.show()
+
+    except Exception as e:
+        logger.error(f"Failed to plot interaction graph: {e}")
+
+
+def plot_origin_overlay(
+    nuclei_mask: np.ndarray,
+    cell_pixel_coords: dict[int, np.ndarray],
+    origin_counts: dict[int, int],
+    output_path: Path,
+    cmap: str = "Reds"
+) -> None:
+    """
+    Plot the nuclei overlay colored by origin count per cell.
+
+    Args:
+        nuclei_mask (np.ndarray): Original nuclei image to display as background.
+        cell_pixel_coords (dict[int, np.ndarray]): Mapping from cell label to pixel coordinates (Y, X).
+        origin_counts (dict[int, int]): Mapping from cell label to number of origin events.
+        output_path (Path): File path to save the plot.
+        cmap (str): Matplotlib colormap to use.
+    """
+    overlay = np.zeros_like(nuclei_mask, dtype=np.float32)
+
+    max_count = max(origin_counts.values()) if origin_counts else 1
+
+    for label, coords in cell_pixel_coords.items():
+        count = origin_counts.get(label, 0)
+        norm_value = count #/ max_count
+        for coord in coords:
+            y, x = coord
+            overlay[y, x] = norm_value
+
+    plt.figure(figsize=(10, 10))
+    plt.imshow(nuclei_mask, cmap="gray", alpha=0.6)
+    im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=0, vmax=max_count)
+    plt.colorbar(im, label="Number of Origin Events")
+    plt.title("Origin Event Frequency per Cell")
+    plt.axis("off")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    logger.info(f"Origin frequency overlay saved at {output_path}")

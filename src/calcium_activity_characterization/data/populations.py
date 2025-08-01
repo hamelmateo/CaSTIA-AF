@@ -8,9 +8,7 @@ Usage example:
     >>> print(population.metadata)
 """
 
-from typing import List, Dict, Optional, Any
-import copy
-from pathlib import Path
+from typing import List, Optional
 import numpy as np
 import networkx as nx
 from scipy.spatial import Voronoi
@@ -24,7 +22,6 @@ from calcium_activity_characterization.event_detection.global_event import (
     find_significant_activity_peaks,
     extract_global_event_blocks
 )
-from calcium_activity_characterization.utilities.metrics import Distribution
 from calcium_activity_characterization.config.presets import (
     SignalProcessingConfig, 
     PeakDetectionConfig,
@@ -50,7 +47,8 @@ class Population:
         embedding (Any): UMAP or PCA embedding of cells.
     """
 
-    def __init__(self, cells: List[Cell], neighbor_graph: nx.Graph) -> None:
+    def __init__(self, nuclei_mask: np.ndarray, cells: List[Cell], neighbor_graph: nx.Graph) -> None:
+        self.nuclei_mask: np.ndarray = nuclei_mask
         self.cells: List[Cell] = cells
         self.neighbor_graph: nx.Graph = neighbor_graph
         self.copeaking_neighbors: List[CoPeakingNeighbors] = None
@@ -58,9 +56,10 @@ class Population:
         self.events: List[Event] = []
         self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
 
-    @classmethod
+    @classmethod #TODO: refactor
     def from_roi_filtered(
         cls,
+        nuclei_mask: np.ndarray,
         cells: List[Cell],
         graph: nx.Graph,
         roi_scale: float,
@@ -120,7 +119,7 @@ class Population:
             if pruned_graph.has_node(cell.label):
                 pruned_graph.nodes[cell.label]['pos'] = cell.centroid
 
-        return cls(filtered_cells, pruned_graph)
+        return cls(nuclei_mask,filtered_cells, pruned_graph)
 
 
     def _create_trace_object(self, trace: np.ndarray, default_version: str, 
@@ -343,20 +342,6 @@ class Population:
             population_centroids=population_centroids
         ))
 
-
-    def _create_cells_without_global_peaks(self) -> list[Cell]:
-        """
-        Returns a deep copy of cells with peaks marked as in_global_event removed.
-        Original cells are not affected.
-        """
-        clean_cells = copy.deepcopy(self.cells)
-        for cell in clean_cells:
-            cell.trace.peaks = [p for p in cell.trace.peaks if getattr(p, 'in_event', None) != "global"]
-            #reassign_peak_ids(cell.trace.peaks)
-
-        return clean_cells
-
-
     def assign_peak_event_ids(self) -> None:
         """
         Assigns event_id to each peak that is part of a global or sequential event.
@@ -367,7 +352,7 @@ class Population:
                 cell.trace.peaks[peak_id].event_id = int(event.id)
 
 
-    def compute_cell_interaction_clusters(self) -> None:
+    def compute_cell_interaction_clusters(self) -> nx.Graph:
         """
         Build interaction graph from co-participating neighbor cells in sequential events.
         Assigns interaction_cluster_id to each cell.
@@ -383,7 +368,7 @@ class Population:
 
         # Initialize node set
         for cell in self.cells:
-            interaction_graph.add_node(cell.label)
+            interaction_graph.add_node(cell.label, pos=cell.centroid)
 
         for event in self.events:
             if not event.__class__.__name__ == "SequentialEvent":
@@ -400,54 +385,9 @@ class Population:
                             interaction_graph[i][j]['weight'] += 1
                         else:
                             interaction_graph.add_edge(i, j, weight=1)
+
+        return interaction_graph
         
-        self.plot_interaction_graph(interaction_graph)
-        
-
-
-    def plot_interaction_graph(self, graph: nx.Graph, overlay_path: Optional[Path] = Path("D:/Mateo/20250326/Output/IS1/cell-mapping/overlay.TIF"), output_path: Optional[Path] = Path("D:/Mateo/20250326/Output/IS1/cell-mapping/interaction_graph.png")) -> None:
-        """
-        Plot or save the interaction graph with weighted edges overlayed on an optional overlay image.
-
-        Args:
-            graph (nx.Graph): Interaction graph to plot.
-            overlay_path (Optional[Path]): Path to overlay image (e.g. overlay.TIF).
-            output_path (Optional[Path]): If provided, saves the figure to this path. Else, shows interactively.
-        """
-        try:
-            import matplotlib.pyplot as plt
-            from calcium_activity_characterization.utilities.loader import load_existing_img
-            if not graph.nodes:
-                raise ValueError("Graph has no nodes to plot.")
-
-            pos = {cell.label: (cell.centroid[1], cell.centroid[0]) for cell in self.cells if cell.label in graph.nodes}
-            weights = [graph[u][v]['weight'] for u, v in graph.edges()]
-            max_weight = max(weights) if weights else 1
-            norm_weights = [w / max_weight for w in weights]
-
-            plt.figure(figsize=(8, 8))
-            if overlay_path and overlay_path.exists():
-                overlay_img = load_existing_img(overlay_path)
-                plt.imshow(overlay_img, cmap="gray")
-
-            nx.draw(graph, pos, node_size=15, node_color='red', edge_color=norm_weights,
-                    edge_cmap=plt.cm.inferno, width=[1 + 2 * w for w in norm_weights], with_labels=False)
-
-            plt.axis("equal")
-            plt.title("Interaction Graph (Weighted Edges)")
-
-            if output_path:
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                plt.savefig(output_path, dpi=300)
-                plt.close()
-            else:
-                plt.tight_layout()
-                plt.show()
-
-        except Exception as e:
-            logger.error(f"Failed to plot interaction graph: {e}")
-
-
     @staticmethod
     def build_spatial_neighbor_graph(cells: List[Cell]) -> nx.Graph:
         """
@@ -481,3 +421,15 @@ class Population:
             graph.add_edge(label_i, label_j, method="voronoi")
 
         return graph
+
+    def count_origin_peaks_in_sequential_events(self) -> dict[int, int]:
+        """
+        Count how many times each cell was the origin of a sequential event.
+
+        Returns:
+            dict[int, int]: Mapping from cell label to origin count.
+        """
+        return {
+            cell.label: cell.count_origin_sequential_peaks()
+            for cell in self.cells
+        }
