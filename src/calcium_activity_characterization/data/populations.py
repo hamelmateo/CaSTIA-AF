@@ -357,8 +357,8 @@ class Population:
         Build interaction graph from co-participating neighbor cells in sequential events.
         Assigns interaction_cluster_id to each cell.
 
-        Args:
-            method (str): Clustering algorithm to use ("louvain" or "connected_components").
+        Returns:
+            nx.Graph: Undirected graph where nodes are cell labels and edges indicate interaction frequency.
         """
         if self.neighbor_graph is None or not self.events:
             logger.warning("No neighbor graph or events available to build interaction clusters.")
@@ -422,14 +422,22 @@ class Population:
 
         return graph
 
-    def count_origin_peaks_in_sequential_events(self) -> dict[int, int]:
+    def count_cell_occurences_in_events(self) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
         """
-        Count how many times each cell was the origin of a sequential event.
+        Count the number of occurrences of each cell in different types of events.
 
         Returns:
-            dict[int, int]: Mapping from cell label to origin count.
+            dict[int, int]: Mapping from cell label to number of occurrences in global events.
+            dict[int, int]: Mapping from cell label to number of occurrences in sequential events.
+            dict[int, int]: Mapping from cell label to number of occurrences in individual events.
+            dict[int, int]: Mapping from cell label to number of occurrences as origin in sequential events.
         """
-        return {
-            cell.label: cell.count_origin_sequential_peaks()
-            for cell in self.cells
-        }
+        global_occurences = {cell.label: cell.count_occurences_global_events()
+                             for cell in self.cells}
+        sequential_occurences = {cell.label: cell.count_occurences_sequential_events()
+                                 for cell in self.cells}
+        individual_occurences = {cell.label: cell.count_occurences_individual_events()
+                                 for cell in self.cells}
+        origin_occurences = {cell.label: cell.count_occurences_sequential_events_as_origin()
+                             for cell in self.cells}
+        return global_occurences, sequential_occurences, individual_occurences, origin_occurences

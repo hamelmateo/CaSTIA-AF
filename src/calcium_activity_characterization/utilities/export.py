@@ -93,7 +93,9 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "Cell ID", "Centroid X coordinate (um)", "Centroid Y coordinate (um)",
-                "Number of peaks", "Is active", "Peak frequency (Hz)", "Periodicity score"
+                "Number of peaks", "Is active", "Occurences in global events", "Occurences in sequential events", 
+                "Occurences in individual events", "Occurences in sequential events as origin",
+                "Peak frequency (Hz)", "Periodicity score"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
@@ -108,6 +110,10 @@ class NormalizedDataExporter:
                     "Centroid Y coordinate (um)": format(cell.centroid[0]*self.pixel_to_micron_y, '.2f'),
                     "Number of peaks": len(cell.trace.peaks),
                     "Is active": bool(cell.is_active),
+                    "Occurences in global events": int(cell.occurences_global_events),
+                    "Occurences in sequential events": int(cell.occurences_sequential_events),
+                    "Occurences in individual events": int(cell.occurences_individual_events),
+                    "Occurences in sequential events as origin": int(cell.occurences_sequential_events_as_origin),
                     "Peak frequency (Hz)": format(cell.trace.metadata.get("peak_frequency", 0), '.2g'),
                     "Periodicity score": format(cell.trace.metadata.get("periodicity_score", 0), '.2g'),
                 })

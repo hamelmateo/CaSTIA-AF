@@ -32,6 +32,10 @@ class Cell:
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.is_valid: bool = len(self.pixel_coords) >= object_size_thresholds.min and len(self.pixel_coords) <= object_size_thresholds.max
         self.is_active: bool = False
+        self.occurences_global_events: int = 0
+        self.occurences_sequential_events: int = 0
+        self.occurences_individual_events: int = 0
+        self.occurences_sequential_events_as_origin: int = 0
 
         self.trace: Trace = Trace()
 
@@ -68,17 +72,58 @@ class Cell:
         cy, cx = self.centroid
         self.centroid = (cy - start_h, cx - start_w)
 
-    def count_origin_sequential_peaks(self) -> int:
+    def count_occurences_global_events(self) -> int:
+        """
+        Count the number of unique global events this cell is involved in.
+
+        Returns:
+            int: Number of unique global events this cell is involved in.
+        """
+        unique_event_ids = set(
+            p.event_id for p in self.trace.peaks
+            if p.in_event == "global"
+        )
+        self.occurences_global_events = len(unique_event_ids)
+        return self.occurences_global_events
+
+    def count_occurences_sequential_events(self) -> int:
+        """
+        Count the number of unique sequential events this cell is involved in.
+
+        Returns:
+            int: Number of unique sequential events this cell is involved in.
+        """
+        unique_event_ids = set(
+            p.event_id for p in self.trace.peaks
+            if p.in_event == "sequential"
+        )
+        self.occurences_sequential_events = len(unique_event_ids)
+        return self.occurences_sequential_events
+    
+    def count_occurences_individual_events(self) -> int:
+        """
+        Count the number of peaks in this cell that are classified as individual events.
+
+        Returns:
+            int: Number of individual event peaks.
+        """
+        count = sum(1 for p in self.trace.peaks if p.in_event == "individual")
+        self.occurences_individual_events = count
+        return count
+
+    def count_occurences_sequential_events_as_origin(self) -> int:
         """
         Count the number of peaks in this cell that are origins of sequential events.
 
         Returns:
             int: Number of origin peaks involved in sequential events.
         """
-        return sum(
-            1 for p in self.trace.peaks
+        unique_event_ids = set(
+            p.event_id for p in self.trace.peaks
             if p.origin_type == "origin" and p.in_event == "sequential"
         )
+        self.occurences_sequential_events_as_origin = len(unique_event_ids)
+        return self.occurences_sequential_events_as_origin
 
     @classmethod
     def from_segmentation_mask(cls, mask: np.ndarray, cell_filtering_parameters: CellFilteringConfig) -> list["Cell"]:

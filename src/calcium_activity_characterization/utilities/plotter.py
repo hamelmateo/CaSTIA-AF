@@ -529,11 +529,13 @@ def plot_interaction_graph(
         logger.error(f"Failed to plot interaction graph: {e}")
 
 
-def plot_origin_overlay(
+def plot_metric_on_overlay(
     nuclei_mask: np.ndarray,
     cell_pixel_coords: dict[int, np.ndarray],
-    origin_counts: dict[int, int],
+    metric_counts: dict[int, int],
     output_path: Path,
+    title: str = "Mapping of Cell Metric",
+    colorbar_label: str = "Metric Count",
     cmap: str = "Reds"
 ) -> None:
     """
@@ -542,16 +544,16 @@ def plot_origin_overlay(
     Args:
         nuclei_mask (np.ndarray): Original nuclei image to display as background.
         cell_pixel_coords (dict[int, np.ndarray]): Mapping from cell label to pixel coordinates (Y, X).
-        origin_counts (dict[int, int]): Mapping from cell label to number of origin events.
+        metric_counts (dict[int, int]): Mapping from cell label to number of origin events.
         output_path (Path): File path to save the plot.
         cmap (str): Matplotlib colormap to use.
     """
     overlay = np.zeros_like(nuclei_mask, dtype=np.float32)
 
-    max_count = max(origin_counts.values()) if origin_counts else 1
+    max_count = max(metric_counts.values()) if metric_counts else 1
 
     for label, coords in cell_pixel_coords.items():
-        count = origin_counts.get(label, 0)
+        count = metric_counts.get(label, 0)
         norm_value = count #/ max_count
         for coord in coords:
             y, x = coord
@@ -560,10 +562,11 @@ def plot_origin_overlay(
     plt.figure(figsize=(10, 10))
     plt.imshow(nuclei_mask, cmap="gray", alpha=0.6)
     im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=0, vmax=max_count)
-    plt.colorbar(im, label="Number of Origin Events")
-    plt.title("Origin Event Frequency per Cell")
+    cbar = plt.colorbar(im, fraction=0.046, pad=0.04, aspect=20, shrink=0.8)
+    cbar.set_label(colorbar_label)
+    plt.title(title)
     plt.axis("off")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=300)
     plt.close()
-    logger.info(f"Origin frequency overlay saved at {output_path}")
+    logger.info(f"{title} figure saved at {output_path}")

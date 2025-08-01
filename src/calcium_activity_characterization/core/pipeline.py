@@ -31,7 +31,7 @@ from calcium_activity_characterization.utilities.plotter import (
     plot_interaction_graph,
     plot_raster_heatmap,
     plot_raster,
-    plot_origin_overlay
+    plot_metric_on_overlay
 )
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
@@ -395,12 +395,40 @@ class CalciumPipeline:
                     save_path=self.output_dir / "events" / f"event-growth-curve-{event.id}.png"
                 )
 
-        # Analyze sequential events
-        origin_counts = self.population.count_origin_peaks_in_sequential_events()
         cell_pixel_coords = {cell.label: cell.pixel_coords for cell in self.population.cells}
-        plot_origin_overlay(self.population.nuclei_mask, cell_pixel_coords, origin_counts, self.output_dir / "cell-mapping" / "origin_overlay.png")
 
+        # Analyze cell occurences in events
+        global_counts, seq_counts, individual_counts, origin_counts = self.population.count_cell_occurences_in_events()
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               global_counts,
+                               self.output_dir / "cell-mapping" / "cell_occurences_in_global_events_overlay.png",
+                               title="Mapping of Cell Occurences in Global Events",
+                               colorbar_label="Occurences of Global Events"
+                               )
+        plot_metric_on_overlay(self.population.nuclei_mask, 
+                               cell_pixel_coords, 
+                               seq_counts, 
+                               self.output_dir / "cell-mapping" / "cell_occurences_in_sequential_events_overlay.png",
+                               title="Mapping of Cell Occurences in Sequential Events",
+                               colorbar_label="Occurences of Sequential Events"
+                               )
+        plot_metric_on_overlay(self.population.nuclei_mask, 
+                               cell_pixel_coords, 
+                               individual_counts, 
+                               self.output_dir / "cell-mapping" / "cell_occurences_in_individual_events_overlay.png",
+                               title="Mapping of Cell Occurences in Individual Events",
+                               colorbar_label="Occurences of Individual Events"
+                               )
+        plot_metric_on_overlay(self.population.nuclei_mask, 
+                               cell_pixel_coords, 
+                               origin_counts, 
+                               self.output_dir / "cell-mapping" / "cell_occurences_in_origin_seq_events_overlay.png",
+                               title="Mapping of Cell Occurences as Origin in Sequential Events",
+                               colorbar_label="Occurences as Origin in Sequential Events"
+                               )
 
+        # Analyze cell cell interaction
         interaction_graph = self.population.compute_cell_interaction_clusters()
         plot_interaction_graph(interaction_graph, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "interaction_graph.png")
 
