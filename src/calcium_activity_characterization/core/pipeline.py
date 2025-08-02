@@ -28,7 +28,7 @@ from calcium_activity_characterization.utilities.plotter import (
     plot_spatial_neighbor_graph, 
     render_cell_outline_overlay,
     plot_event_growth_curve,
-    plot_interaction_graph,
+    plot_cell_connection_network,
     plot_raster_heatmap,
     plot_raster,
     plot_metric_on_overlay
@@ -429,8 +429,8 @@ class CalciumPipeline:
                                )
 
         # Analyze cell cell interaction
-        interaction_graph = self.population.compute_cell_interaction_clusters()
-        plot_interaction_graph(interaction_graph, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "interaction_graph.png")
+        cell_connection_network = self.population.compute_cell_connection_network_graph()
+        plot_cell_connection_network(cell_connection_network, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "cell_connection_network.png")
 
 
     def _export_normalized_datasets(self) -> None:

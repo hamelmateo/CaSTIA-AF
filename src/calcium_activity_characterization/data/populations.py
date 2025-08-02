@@ -352,41 +352,56 @@ class Population:
                 cell.trace.peaks[peak_id].event_id = int(event.id)
 
 
-    def compute_cell_interaction_clusters(self) -> nx.Graph:
+    def compute_cell_connection_network_graph(self) -> nx.Graph:
         """
-        Build interaction graph from co-participating neighbor cells in sequential events.
-        Assigns interaction_cluster_id to each cell.
+        Build an interaction graph based on registered cell-to-cell communications
+        from sequential events. For each communication, an edge is added between
+        the origin and cause cell labels with weights incremented by 1.
 
         Returns:
-            nx.Graph: Undirected graph where nodes are cell labels and edges indicate interaction frequency.
+            nx.Graph: Undirected graph where nodes are cell labels and edges indicate
+                      communication frequency between cell pairs.
         """
-        if self.neighbor_graph is None or not self.events:
-            logger.warning("No neighbor graph or events available to build interaction clusters.")
-            return
+        communication_graph = nx.Graph()
 
-        interaction_graph = nx.Graph()
-
-        # Initialize node set
+        # Add all known cells as nodes with positions
         for cell in self.cells:
-            interaction_graph.add_node(cell.label, pos=cell.centroid)
+            communication_graph.add_node(cell.label, pos=cell.centroid)
 
         for event in self.events:
             if not event.__class__.__name__ == "SequentialEvent":
-                continue  # Skip non-sequential events
+                continue 
 
-            # Get unique cell labels involved in this event using peaks_involved
-            involved_labels = set(cell_label for cell_label, _ in event.peaks_involved)
+            for communication in event.communications:
+                origin_label = communication.origin[0]  # (cell_label, peak_id)
+                cause_label = communication.cause[0]
 
-            # For each pair of involved neighboring cells
-            for i in involved_labels:
-                for j in self.neighbor_graph.neighbors(i):
-                    if j in involved_labels:
-                        if interaction_graph.has_edge(i, j):
-                            interaction_graph[i][j]['weight'] += 1
-                        else:
-                            interaction_graph.add_edge(i, j, weight=1)
+                if communication_graph.has_edge(origin_label, cause_label):
+                    communication_graph[origin_label][cause_label]['weight'] += 1
+                else:
+                    communication_graph.add_edge(origin_label, cause_label, weight=1)
 
-        return interaction_graph
+        return communication_graph
+
+    def count_cell_occurences_in_events(self) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
+        """
+        Count the number of occurrences of each cell in different types of events.
+
+        Returns:
+            dict[int, int]: Mapping from cell label to number of occurrences in global events.
+            dict[int, int]: Mapping from cell label to number of occurrences in sequential events.
+            dict[int, int]: Mapping from cell label to number of occurrences in individual events.
+            dict[int, int]: Mapping from cell label to number of occurrences as origin in sequential events.
+        """
+        global_occurences = {cell.label: cell.count_occurences_global_events()
+                             for cell in self.cells}
+        sequential_occurences = {cell.label: cell.count_occurences_sequential_events()
+                                 for cell in self.cells}
+        individual_occurences = {cell.label: cell.count_occurences_individual_events()
+                                 for cell in self.cells}
+        origin_occurences = {cell.label: cell.count_occurences_sequential_events_as_origin()
+                             for cell in self.cells}
+        return global_occurences, sequential_occurences, individual_occurences, origin_occurences
         
     @staticmethod
     def build_spatial_neighbor_graph(cells: List[Cell]) -> nx.Graph:
@@ -421,23 +436,3 @@ class Population:
             graph.add_edge(label_i, label_j, method="voronoi")
 
         return graph
-
-    def count_cell_occurences_in_events(self) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
-        """
-        Count the number of occurrences of each cell in different types of events.
-
-        Returns:
-            dict[int, int]: Mapping from cell label to number of occurrences in global events.
-            dict[int, int]: Mapping from cell label to number of occurrences in sequential events.
-            dict[int, int]: Mapping from cell label to number of occurrences in individual events.
-            dict[int, int]: Mapping from cell label to number of occurrences as origin in sequential events.
-        """
-        global_occurences = {cell.label: cell.count_occurences_global_events()
-                             for cell in self.cells}
-        sequential_occurences = {cell.label: cell.count_occurences_sequential_events()
-                                 for cell in self.cells}
-        individual_occurences = {cell.label: cell.count_occurences_individual_events()
-                                 for cell in self.cells}
-        origin_occurences = {cell.label: cell.count_occurences_sequential_events_as_origin()
-                             for cell in self.cells}
-        return global_occurences, sequential_occurences, individual_occurences, origin_occurences

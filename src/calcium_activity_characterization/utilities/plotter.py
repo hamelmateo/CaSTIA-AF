@@ -475,58 +475,130 @@ def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, ti
     plt.close(fig)
 
 
-def plot_interaction_graph(
+def plot_cell_connection_network(
     graph: nx.Graph,
     nuclei_mask: Optional[np.ndarray] = None,
     output_path: Optional[Path] = None
 ) -> None:
     """
-    Plot or save the interaction graph with weighted edges overlayed on an optional overlay image.
+    Plot or save the interaction graph with weighted edges (weight ≥3) 
+    overlayed on an optional nuclei segmentation mask.
+
+    - Figure background is white.
+    - Nuclei mask: all nonzero pixels shown as uniform gray on white.
+    - Edges colored by weight with a colorbar.
+    - Nodes plotted in red.
 
     Args:
         graph (nx.Graph): Interaction graph to plot.
-        overlay_path (Optional[Path]): Path to overlay image (e.g. overlay.TIF).
-        output_path (Optional[Path]): If provided, saves the figure to this path. Else, shows interactively.
+        nuclei_mask (Optional[np.ndarray]): 2D array of integer labels
+            (0 = background, >0 = cell). If provided, nonzero pixels
+            will be shaded gray.
+        output_path (Optional[Path]): Path to save the figure. If None,
+            displays interactively.
     """
     try:
         if not graph.nodes:
             raise ValueError("Graph has no nodes to plot.")
 
-        # Filter edges with weight > 0
-        filtered_edges = [(u, v) for u, v in graph.edges() if graph[u][v]['weight'] > 0]
+        # 1) filter edges by weight ≥3
+        filtered_edges = [
+            (u, v) 
+            for u, v, d in graph.edges(data=True) 
+            if d.get('weight', 0) >= 3
+        ]
         weights = [graph[u][v]['weight'] for u, v in filtered_edges]
-        max_weight = max(weights) if weights else 1
-        norm_weights = [w / max_weight for w in weights]
+        if not weights:
+            logger.warning("No edges with weight ≥3 to display.")
+            return
 
-        plt.figure(figsize=(8, 8))
+        # 2) Determine active vs inactive nodes
+        active_nodes = {u for u, v in filtered_edges} | {v for u, v in filtered_edges}
+        # build a color for each node: dark red if active, light red otherwise
+        node_colors = [
+            'red' if node in active_nodes else 'lightcoral'
+            for node in graph.nodes()
+        ]
+
+        # normalize for colormap
+        max_w = max(weights)
+        norm_weights = [w / max_w for w in weights]
+
+        # 2) white background
+        fig, ax = plt.subplots(figsize=(10, 10), facecolor='white')
+        ax.set_facecolor('white')
+
+        # Overlay nuclei mask as uniform gray on white background
         if nuclei_mask is not None:
-            plt.imshow(nuclei_mask, cmap="gray", alpha=0.6)
+            # Build a float image: 1.0 = white, 0.7 = dark gray for cells
+            mask_img = np.ones_like(nuclei_mask, dtype=float)
+            mask_img[nuclei_mask == 0] = 0.9
+            mask_img[nuclei_mask > 0] = 0.7
+            ax.imshow(mask_img, cmap='gray', vmin=0.0, vmax=1.0)
 
-        pos = {node: (xy[1], xy[0]) for node, xy in nx.get_node_attributes(graph, "pos").items()}  # x=col, y=row
-        nx.draw(
+        # 4) get positions
+        pos = {
+            node: (xy[1], xy[0]) 
+            for node, xy in nx.get_node_attributes(graph, 'pos').items()
+        }
+
+        # 5) draw edges
+        nx.draw_networkx_edges(
             graph.edge_subgraph(filtered_edges),
             pos,
-            node_size=15,
-            node_color='red',
-            edge_color=[w / max(weights) for w in weights],
-            edge_cmap=plt.cm.inferno,
-            width=[1 + 2 * (w / max(weights)) for w in weights],
-            with_labels=False
+            edge_color=norm_weights,
+            edge_cmap=plt.cm.Reds,
+            edge_vmin=0,
+            edge_vmax=1,
+            width=2,
+            ax=ax
         )
 
-        plt.axis("equal")
-        plt.title("Interaction Graph (Weighted Edges)")
+        # 7) Draw nodes with per-node color
+        nx.draw_networkx_nodes(
+            graph,
+            pos,
+            node_size=8,
+            node_color=node_colors,
+            ax=ax
+        )
+
+        # 8) colorbar
+        sm = plt.cm.ScalarMappable(
+            cmap=plt.cm.Reds, 
+            norm=plt.Normalize(vmin=min(weights), vmax=max(weights))
+        )
+        sm.set_array(weights)
+        cbar = fig.colorbar(
+            sm, ax=ax, fraction=0.046, pad=0.04, 
+            aspect=20, shrink=0.8
+        )
+        cbar.set_label("Edge Weight (Communication Count)")
+        # keep ticks readable on white
+        cbar.ax.yaxis.set_tick_params(color='black')
+        plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color='black')
+
+        # 8) finalize
+        ax.set_aspect('equal')
+        ax.set_title(
+            "Cells Connection Network (Weighted Edges, ≥3)", 
+            color='black'
+        )
+        ax.axis('off')
+        plt.tight_layout()
 
         if output_path:
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_path, dpi=300)
-            plt.close()
+            plt.savefig(
+                output_path, dpi=300, 
+                facecolor=fig.get_facecolor()
+            )
+            plt.close(fig)
         else:
-            plt.tight_layout()
             plt.show()
 
     except Exception as e:
-        logger.error(f"Failed to plot interaction graph: {e}")
+        logger.error(f"Failed to plot cell connection network: {e}")
 
 
 def plot_metric_on_overlay(
