@@ -325,3 +325,80 @@ def plot_histogram_by_group(
     fig.suptitle(title, fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+
+
+def plot_scatter_size_coded(
+    df: pd.DataFrame,
+    x_col: str = "occurrences in individual events",
+    y_col: str = "occurrences in sequential events",
+    size_scale: float = 20,
+    figsize: tuple = (8, 6),
+) -> None:
+    """
+    Scatter plot where the marker size and color represent the count of overlapping points.
+
+    Args:
+        df: DataFrame with occurrence counts.
+        x_col: Column for individual event counts.
+        y_col: Column for sequential event counts.
+        size_scale: Multiplier to scale marker sizes.
+        figsize: Figure size.
+
+    Returns:
+        None
+    """
+    if x_col not in df.columns or y_col not in df.columns:
+        raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
+    counts = df.groupby([x_col, y_col]).size().reset_index(name="count")
+    plt.figure(figsize=figsize)
+    sc = plt.scatter(
+        counts[x_col],
+        counts[y_col],
+        s=counts["count"] * size_scale,
+        c=counts["count"],
+        cmap="viridis",
+        alpha=0.7,
+        edgecolor="k",
+    )
+    plt.colorbar(sc, label="Number of Cells")
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title("Size coded Scatter: Overlap Density")
+    plt.grid(True, linestyle='--', linewidth=0.5)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_scatter_hexbin(
+    df: pd.DataFrame,
+    x_col: str = "occurrences in individual events",
+    y_col: str = "occurrences in sequential events",
+    gridsize: int = 15,
+    figsize: tuple = (8, 6),
+) -> None:
+    """
+    Hexbin density plot to visualize point overlap in bins.
+
+    Args:
+        df: DataFrame with occurrence counts.
+        x_col: Column for individual event counts.
+        y_col: Column for sequential event counts.
+        gridsize: Number of hexagons in the x-direction.
+        figsize: Figure size.
+
+    Returns:
+        None
+    """
+    if x_col not in df.columns or y_col not in df.columns:
+        raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
+    x = df[x_col]
+    y = df[y_col]
+    plt.figure(figsize=figsize)
+    hb = plt.hexbin(x, y, gridsize=gridsize, cmap="Blues", mincnt=1)
+    plt.colorbar(hb, label="Count in Bin")
+    plt.xlabel(x_col)
+    plt.ylabel(y_col)
+    plt.title("Hexbin Density: Individual vs Sequential Occurrences")
+    plt.grid(True, linestyle='--', linewidth=0.5)
+    plt.tight_layout()
+    plt.show()
