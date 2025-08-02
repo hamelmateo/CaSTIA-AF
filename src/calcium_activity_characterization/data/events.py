@@ -188,7 +188,7 @@ class SequentialEvent(Event):
         Construct the directed graph from communication links.
         """
         for comm in self.communications:
-            self.graph.add_edge(comm.origin[0], comm.cause[0], delta_t=comm.delta_t)
+            self.graph.add_edge(comm.origin[0], comm.cause[0], delta_t=comm.duration)
 
 
     def _compute_dag_metrics(self) -> Dict[str, float]:
@@ -268,10 +268,10 @@ class SequentialEvent(Event):
         Compute the distribution of communication delays (delta_t) across all communications.
 
         Returns:
-            Distribution: Distribution of communication times (delta_t).
+            Distribution: Distribution of communication delays (delta_t).
         """
         try:
-            dt_values = [comm.delta_t for comm in self.communications if comm.delta_t > 0]
+            dt_values = [comm.duration for comm in self.communications]
             return Distribution.from_values(dt_values)
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute communication times: {e}")
@@ -280,30 +280,14 @@ class SequentialEvent(Event):
 
     def _communication_speed_distribution(self) -> Distribution:
         """
-        Compute the distribution of communication speeds (centroid distance / delta_t).
-        If delta_t == 0, it means that we don't have the temporal resolution to measure speed, 
-        so we use the maximum possible resolution (1 frame).
+        Compute the distribution of communication speeds across all communications.
 
         Returns:
-            Distribution: Distribution of communication speeds.
+            Distribution: Distribution of communication speeds (distance / delta_t).
         """
-        speeds = []
         try:
-            for comm in self.communications:
-                if comm.delta_t < 0:
-                    continue
-                elif comm.delta_t == 0:
-                    time = 1
-                else:
-                    time = comm.delta_t
-
-                dist = euclidean(self.label_to_centroid[comm.origin[0]],
-                                 self.label_to_centroid[comm.cause[0]])
-                speed = dist / time
-                speeds.append(speed)
-
+            speeds = [comm.speed for comm in self.communications]
             return Distribution.from_values(speeds)
-
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute communication speeds: {e}")
             return Distribution.from_values([])
@@ -369,13 +353,9 @@ class SequentialEvent(Event):
             magnitude = np.linalg.norm(direction)
 
             # Step 2: Compute CoM of directly caused peaks
-            caused_labels = [
-                comm.cause[0] for comm in self.communications
-                if comm.origin[0] == origin_label
-            ]
             caused_centroids = [
-                np.array(self.label_to_centroid[label])
-                for label in caused_labels if label in self.label_to_centroid
+                np.array(comm.cause_centroid) for comm in self.communications
+                if comm.origin[0] == origin_label
             ]
 
             if not caused_centroids:
@@ -429,7 +409,7 @@ class SequentialEvent(Event):
                 label = comm.cause[0]
                 if label == origin_label:
                     continue
-                displacement = np.array(self.label_to_centroid[label]) - origin_centroid
+                displacement = np.array(comm.cause_centroid) - origin_centroid
                 projection = np.dot(displacement, dir_vec)
                 if projection > max_proj:
                     max_proj = projection

@@ -46,6 +46,7 @@ class NormalizedDataExporter:
         self.export_peaks()
         self.export_cells()
         self.export_events()
+        self.export_communications()
 
     def export_peaks(self) -> None:
         path = self.output_dir / "peaks.csv"
@@ -177,6 +178,29 @@ class NormalizedDataExporter:
                     "Radiality score": format(event.radiality_score, '.2f') if is_seq else None,
                     "Compactness score": format(event.compactness_score, '.2f') if is_seq else None
                 })
+
+    def export_communications(self) -> None:
+        path = self.output_dir / "communications.csv"
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "Communication ID", "Event ID", "Origin Cell ID", "Cause Cell ID", "Start Time (s)", "End Time (s)",
+                "Duration (s)", "Distance (um)", "Speed (um/s)"
+            ])
+            writer.writeheader()
+            for event in tqdm(self.population.events, desc="Exporting communications", unit="communication"):
+                if event.__class__.__name__ == "SequentialEvent":
+                    for comm in event.communications:
+                        writer.writerow({
+                            "Communication ID": int(comm.id),
+                            "Event ID": int(event.id),
+                            "Origin Cell ID": int(comm.origin[0]),
+                            "Cause Cell ID": int(comm.cause[0]),
+                            "Start Time (s)": format(comm.origin_start_time/self.frame_rate, '.1f'),
+                            "End Time (s)": format(comm.cause_start_time/self.frame_rate, '.1f'),
+                            "Duration (s)": format((comm.duration)/self.frame_rate, '.1f'),
+                            "Distance (um)": format(comm.distance * self.pixel_to_micron_x, '.2f'),
+                            "Speed (um/s)": format(comm.speed * self.pixel_per_frame_to_micron_per_second, '.2f')
+                        })
 
     def export_population_metrics(self) -> None:
         try:

@@ -7,6 +7,7 @@
 
 from typing import Tuple, List, Dict, Set
 import networkx as nx
+from scipy.spatial.distance import euclidean
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors
@@ -31,12 +32,36 @@ class CellToCellCommunication:
         origin: Tuple[int, int],
         cause: Tuple[int, int],
         origin_start_time: int,
-        cause_start_time: int
+        cause_start_time: int,
+        origin_centroid: Tuple[int, int],
+        cause_centroid: Tuple[int, int]
     ) -> None:
+        self.id: int = id(self)  # Unique identifier for the communication
         self.origin: Tuple[int, int] = origin
         self.cause: Tuple[int, int] = cause
         self.origin_start_time: int = origin_start_time
         self.cause_start_time: int = cause_start_time
+
+        assert self.cause_start_time >= self.origin_start_time, (
+            f"Cause peak must start after origin peak. "
+            f"Got origin_start_time={self.origin_start_time}, cause_start_time={self.cause_start_time}"
+        )
+
+        self.origin_centroid: Tuple[int, int] = origin_centroid
+        self.cause_centroid: Tuple[int, int] = cause_centroid
+
+        self.duration: int = self.cause_start_time - self.origin_start_time
+        self.distance: float = euclidean(origin_centroid, cause_centroid)
+        self.speed: float = self.compute_speed()
+
+    def compute_speed(self) -> float:
+        """Compute speed of communication in units per frame."""
+        if self.duration > 0:
+            return self.distance / self.duration
+        elif self.duration == 0:
+            return self.distance / 1.0  # Avoid division by zero, treat as instantaneous
+        else:
+            raise ValueError("Duration cannot be negative.")
 
     @property
     def delta_t(self) -> int:
@@ -123,7 +148,9 @@ def _resolve_copeaking_group(
                     origin=(origin_label, origin_id),
                     cause=(target_label, target_id),
                     origin_start_time=origin_time,
-                    cause_start_time=cause_time
+                    cause_start_time=cause_time,
+                    origin_centroid=label_to_cell[origin_label].centroid,
+                    cause_centroid=label_to_cell[target_label].centroid
                 ))
                 label_to_cell[target_label].trace.peaks[target_id].is_analyzed = True
                 direct_targets.add((target_label, target_id))
@@ -178,7 +205,9 @@ def _bfs_propagate_within_group(
                         origin=(current, current_peak_id),  
                         cause=(cand_label, cand_id),
                         origin_start_time=label_to_cell[current].trace.peaks[current_peak_id].communication_time,
-                        cause_start_time=label_to_cell[cand_label].trace.peaks[cand_id].communication_time
+                        cause_start_time=label_to_cell[cand_label].trace.peaks[cand_id].communication_time,
+                        origin_centroid=label_to_cell[current].centroid,
+                        cause_centroid=label_to_cell[cand_label].centroid
                     )
                     communications.append(comm)
                     label_to_cell[cand_label].trace.peaks[cand_id].is_analyzed = True
@@ -221,7 +250,9 @@ def _resolve_individual_peaks(
                     origin=(origin_label, origin_id),
                     cause=(cell.label, peak.id),
                     origin_start_time=origin_time,
-                    cause_start_time=peak.communication_time
+                    cause_start_time=peak.communication_time,
+                    origin_centroid=label_to_cell[origin_label].centroid,
+                    cause_centroid=cell.centroid
                 )
                 communications.append(comm)
                 peak.is_analyzed = True
