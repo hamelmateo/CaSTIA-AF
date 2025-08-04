@@ -201,6 +201,27 @@ class ImageProcessingConfig:
     hot_pixel_cleaning: HotPixelParameters = field(default_factory=HotPixelParameters)
 
 
+    @staticmethod
+    def from_json(fp: Path) -> "ImageProcessingConfig":
+        payload = json.loads(fp.read_text())
+
+        pipeline_data = payload.get("pipeline", {})
+        pipeline = ImageProcessingPipeline(**pipeline_data)
+
+        hot_pixel_data = payload.get("hot_pixel_cleaning", {})
+        method_str = hot_pixel_data.get("method", HotPixelMethod.REPLACE)
+        method = HotPixelMethod(method_str)  # Cast string to enum
+        hot_pixel_data["method"] = method
+        hot_pixel_cleaning = HotPixelParameters(**hot_pixel_data)
+
+        return ImageProcessingConfig(
+            pipeline=pipeline,
+            padding_digits=payload.get("padding_digits", 5),
+            roi_scale=payload.get("roi_scale", 0.75),
+            hot_pixel_cleaning=hot_pixel_cleaning,
+        )
+
+
 # ===========================
 # TRACE EXTRACTION PARAMETERS
 # ===========================
