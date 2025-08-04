@@ -233,7 +233,7 @@ image_sequences = [
         "date": "20250416",
         "image_sequence": "IS1",
         "experiment_type": "spontaneous",
-        "condition": "control - 1st run",
+        "condition": "unuseful",
         "confluency": 600000,
         "concentration": None,
         "time": None
@@ -243,7 +243,7 @@ image_sequences = [
         "date": "20250416",
         "image_sequence": "IS2",
         "experiment_type": "spontaneous",
-        "condition": "control - 2nd run",
+        "condition": "unuseful",
         "confluency": 600000,
         "concentration": None,
         "time": None
@@ -253,7 +253,7 @@ image_sequences = [
         "date": "20250416",
         "image_sequence": "IS3",
         "experiment_type": "spontaneous",
-        "condition": "control - 1st run",
+        "condition": "unuseful",
         "confluency": 600000,
         "concentration": None,
         "time": None
@@ -263,7 +263,7 @@ image_sequences = [
         "date": "20250416",
         "image_sequence": "IS4",
         "experiment_type": "spontaneous",
-        "condition": "control - 2nd run",
+        "condition": "control - 1st run",
         "confluency": 600000,
         "concentration": None,
         "time": None
@@ -273,7 +273,7 @@ image_sequences = [
         "date": "20250416",
         "image_sequence": "IS5",
         "experiment_type": "spontaneous",
-        "condition": "unuseful",
+        "condition": "control - 2nd run",
         "confluency": 600000,
         "concentration": None,
         "time": None

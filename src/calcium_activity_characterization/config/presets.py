@@ -8,7 +8,7 @@ from .structures import *
 # FLAGS
 # ===========================
 DEBUG_CONFIG = DebugConfig(
-    debugging=True,
+    debugging=False,
     debugging_file_path="D:/Mateo/20250326/Data/IS1",
     harddrive_path="D:/Mateo"
 )
@@ -25,7 +25,8 @@ SEGMENTATION_CONFIG = SegmentationConfig(
         interior_threshold=0.05,
         interior_smooth=1.0,
         small_objects_threshold=25,
-        fill_holes_threshold=15
+        fill_holes_threshold=15,
+        radius=2
     ),
     save_overlay=True
 )
@@ -50,7 +51,14 @@ HOECHST_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
     ),
     padding_digits=5,
     roi_scale=0.75,
-    hot_pixel_cleaning=HOTPIXEL_CONFIG
+    hot_pixel_cleaning=HotPixelParameters(
+        method=HotPixelMethod.CLIP,
+        use_auto_threshold=False,
+        percentile=99.9,
+        mad_scale=20.0,
+        static_threshold=8000,
+        window_size=3
+    )
 )
 
 FITC_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(

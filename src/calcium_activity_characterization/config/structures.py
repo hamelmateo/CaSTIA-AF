@@ -1,10 +1,13 @@
 # config/structures.py
 # Master configuration schema using dataclasses + Enums
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
 from typing import Optional, List, Tuple
 from abc import ABC
+import json
+
 
 
 # ===========================
@@ -106,6 +109,37 @@ class SegmentationConfig:
     method: SegmentationMethod = SegmentationMethod.MESMER
     params: SegmentationParams = field(default_factory=MesmerParams)
     save_overlay: bool = True
+
+
+    @staticmethod
+    def from_json(fp: Path) -> "SegmentationConfig":
+        payload = json.loads(fp.read_text())
+        method = SegmentationMethod(payload["method"])
+        params_data = payload["params"]
+
+        # Choose the right params class
+        if method is SegmentationMethod.MESMER:
+            params = MesmerParams(**params_data)
+        elif method is SegmentationMethod.CELLPOSE:
+            params = CellPoseParams(**params_data)
+        elif method is SegmentationMethod.WATERSHED:
+            params = WatershedParams(**params_data)
+        else:
+            raise ValueError(f"Unknown segmentation method: {method}")
+
+        save_overlay = payload.get("save_overlay", True)
+        return SegmentationConfig(method=method, params=params, save_overlay=save_overlay)
+
+    def to_json(self, fp: Path):
+        # Serialize the params dataclass only
+        payload = {
+            "method": self.method.value,
+            "params": asdict(self.params),
+            "save_overlay": self.save_overlay
+        }
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(json.dumps(payload, indent=2))
+
 
 
 # ===========================

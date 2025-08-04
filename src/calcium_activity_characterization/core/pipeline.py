@@ -10,9 +10,10 @@ import numpy as np
 import logging
 from pathlib import Path
 from skimage.segmentation import find_boundaries
+import json
 
 
-from calcium_activity_characterization.config.presets import GlobalConfig
+from calcium_activity_characterization.config.presets import GlobalConfig, SegmentationConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.export import NormalizedDataExporter
@@ -117,6 +118,7 @@ class CalciumPipeline:
         output_dir.mkdir(parents=True, exist_ok=True)
         self._init_paths(data_dir, output_dir)
         self._segment_cells()
+        return
         self._compute_intensity()
 
         self._signal_processing_pipeline()
@@ -159,6 +161,7 @@ class CalciumPipeline:
 
         # Paths for spatial mapping
         spatial_mapping_dir = output_dir / "cell-mapping"
+        self.saved_seg_config_path = spatial_mapping_dir / "segmentation_config.json"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
         self.full_nuclei_mask_path = spatial_mapping_dir / "full_nuclei_mask.TIF"
         self.overlay_path = spatial_mapping_dir / "overlay.TIF"
@@ -184,12 +187,18 @@ class CalciumPipeline:
             nuclei_mask = None
             processor = ImageProcessor(config=self.config.image_processing_hoechst)
             if not self.nuclei_mask_path.exists():
+                if self.saved_seg_config_path.exists():
+                    logger.info(f"Loading segmentation config from {self.saved_seg_config_path}")
+                    seg_config = SegmentationConfig.from_json(self.saved_seg_config_path)
+                else:
+                    seg_config = self.config.segmentation
+                    logger.info(f"No saved segmentation config found. Using default config.")
                 full_nuclei_mask = segmented(
                     processor.process_all(
                         self.hoechst_img_path,
                         self.hoechst_file_pattern
                     ),
-                    self.config.segmentation
+                    seg_config
                 )
                 save_tif_image(full_nuclei_mask, self.full_nuclei_mask_path)
             else:
