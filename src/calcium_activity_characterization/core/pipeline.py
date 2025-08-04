@@ -13,7 +13,7 @@ from skimage.segmentation import find_boundaries
 import json
 
 
-from calcium_activity_characterization.config.presets import GlobalConfig, SegmentationConfig
+from calcium_activity_characterization.config.presets import GlobalConfig, SegmentationConfig, ImageProcessingConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
 from calcium_activity_characterization.utilities.export import NormalizedDataExporter
@@ -160,6 +160,7 @@ class CalciumPipeline:
 
         # Paths for spatial mapping
         spatial_mapping_dir = output_dir / "cell-mapping"
+        self.saved_processing_config_path = spatial_mapping_dir / "hoechst_image_processing.json"
         self.saved_seg_config_path = spatial_mapping_dir / "segmentation_config.json"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
         self.full_nuclei_mask_path = spatial_mapping_dir / "full_nuclei_mask.TIF"
@@ -179,12 +180,27 @@ class CalciumPipeline:
 
     def _segment_cells(self) -> None:
         """
-        Perform segmentation on DAPI images if needed and convert the mask to Cell objects.
-        Reloads from file if available and permitted.
+        Segment cells from Hoechst images and build the population object.
+        If segmentation already exists, load from file.
+        Saves the nuclei mask, cell outlines overlay, and spatial neighbor graph.
+        Uses saved image processing and segmentation configurations if available.
+        Reloads from raw_cells_path if it exists.
+
+        Raises:
+            FileNotFoundError: If Hoechst images are not found in the expected directory.
+            ValueError: If no valid cells are detected after segmentation.
         """
         if not self.raw_cells_path.exists():
             nuclei_mask = None
-            processor = ImageProcessor(config=self.config.image_processing_hoechst)
+
+            if self.saved_processing_config_path.exists():
+                logger.info(f"Loading image processing config from {self.saved_processing_config_path}")
+                proc_config = ImageProcessingConfig.from_json(self.saved_processing_config_path)
+            else:
+                proc_config = self.config.image_processing_hoechst
+                logger.info(f"No saved image processing config found. Using default config.")
+
+            processor = ImageProcessor(config=proc_config)
             if not self.nuclei_mask_path.exists():
                 if self.saved_seg_config_path.exists():
                     logger.info(f"Loading segmentation config from {self.saved_seg_config_path}")
@@ -323,12 +339,11 @@ class CalciumPipeline:
                                 cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points
                                 )
 
-            """
             # Select 25 random cells (or all if fewer than 25)
             sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
             for cell in sample_cells:
                 cell.trace.plot_all_traces(self.traces_processing_steps / f"{cell.label}_all_traces.png")
-            """
+            
 
     def _binarization_pipeline(self) -> None: 
         """

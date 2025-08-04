@@ -131,7 +131,7 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
             fitting_method="linear",
 
             diagnostics_enabled=False,
-            diagnostics_output_dir="D:/Mateo/20250404/Output/IS3/debugging/detrending-diagnostics",
+            diagnostics_output_dir="D:/Mateo/20250624/Output/IS02/debugging/detrending-diagnostics",
         )
     )
 )
@@ -189,7 +189,7 @@ ACTIVITY_TRACE_PEAK_DETECTION_CONFIG = PeakDetectionConfig(
     peak_grouping=PeakGroupingParams(
         overlap_margin=0
     ),
-    start_frame=50,
+    start_frame=None,
     end_frame=None,
     filter_overlapping_peaks=True,
     refine_durations=True

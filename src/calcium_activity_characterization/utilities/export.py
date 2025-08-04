@@ -116,7 +116,7 @@ class NormalizedDataExporter:
                     "Occurences in individual events": int(cell.occurences_individual_events),
                     "Occurences in sequential events as origin": int(cell.occurences_sequential_events_as_origin),
                     "Peak frequency (Hz)": format(cell.trace.metadata.get("peak_frequency", 0), '.2g'),
-                    "Periodicity score": format(cell.trace.metadata.get("periodicity_score", 0), '.2g'),
+                    "Periodicity score": (format(score, '.2g') if (score := cell.trace.metadata.get("periodicity_score")) is not None else None),
                 })
 
     def export_events(self) -> None:

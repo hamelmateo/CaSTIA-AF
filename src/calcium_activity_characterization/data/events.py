@@ -754,7 +754,7 @@ class GlobalEvent(Event):
         peak_times_end = last_bin["peak_times"]
 
         if not peak_times_start or not peak_times_end:
-            return None
+            return 0.0
 
         t_start = np.mean(peak_times_start)
         t_end = np.mean(peak_times_end)

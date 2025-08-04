@@ -18,6 +18,12 @@ class Cell:
         pixel_coords (np.ndarray): Array of (y, x) pixel coordinates belonging to the cell.
         trace (Trace): Associated calcium trace and analysis results.
         is_valid (bool): Whether the cell passes quality control (e.g., pixel count >= threshold).
+        is_active (bool): Whether the cell is classified as active based on detected peaks.
+        occurences_global_events (int): Number of unique global events this cell is involved in.
+        occurences_sequential_events (int): Number of unique sequential events this cell is involved in
+        occurences_individual_events (int): Number of individual event peaks in this cell.
+        occurences_sequential_events_as_origin (int): Number of sequential events where this cell is
+            the origin of the event.
     """
 
     def __init__(
