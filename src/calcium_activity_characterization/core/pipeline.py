@@ -118,7 +118,6 @@ class CalciumPipeline:
         output_dir.mkdir(parents=True, exist_ok=True)
         self._init_paths(data_dir, output_dir)
         self._segment_cells()
-        return
         self._compute_intensity()
 
         self._signal_processing_pipeline()
