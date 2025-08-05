@@ -160,7 +160,7 @@ class CalciumPipeline:
 
         # Paths for spatial mapping
         spatial_mapping_dir = output_dir / "cell-mapping"
-        self.saved_processing_config_path = spatial_mapping_dir / "hoechst_image_processing.json"
+        self.saved_processing_config_path = spatial_mapping_dir / "hoechst_image_processing_config.json"
         self.saved_seg_config_path = spatial_mapping_dir / "segmentation_config.json"
         self.nuclei_mask_path = spatial_mapping_dir / "nuclei_mask.TIF"
         self.full_nuclei_mask_path = spatial_mapping_dir / "full_nuclei_mask.TIF"

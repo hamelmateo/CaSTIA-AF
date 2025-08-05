@@ -10,10 +10,8 @@ Usage:
 import sys
 import csv
 from pathlib import Path
-from typing import Optional
 from matplotlib import pyplot as plt
 from matplotlib.patches import Polygon
-from skimage.measure import find_contours
 from skimage.segmentation import find_boundaries
 
 import numpy as np
