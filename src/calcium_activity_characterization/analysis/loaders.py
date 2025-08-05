@@ -18,3 +18,17 @@ def load_and_merge_datasets(control_paths: dict[str, str], file_name: str) -> pd
         df["dataset"] = label
         dfs.append(df)
     return pd.concat(dfs, ignore_index=True)
+
+
+def load_dataset(path: str, file_name: str) -> pd.DataFrame:
+    """
+    Load a dataset from a specified path.
+
+    Args:
+        path (str): Path to the directory containing the dataset file.
+        file_name (str): Name of the CSV file to load.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the loaded dataset.
+    """
+    return pd.read_csv(f"{path}/{file_name}")

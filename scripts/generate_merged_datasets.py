@@ -21,13 +21,16 @@ def compile_dataset_metadata(
         output_folder (Path): Path where the summary CSV will be saved.
     """
     try:
+        # Add dataset label to each entry
+        for entry in image_sequences:
+            entry["dataset"] = f"{entry['date']}__{entry['image_sequence']}"
+
         df = pd.DataFrame(image_sequences)
         output_folder.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_folder / "experiments.csv", index=False)
         logger.info("Saved experiments metadata to experiments.csv")
     except Exception as e:
         logger.error(f"Failed to save dataset metadata: {e}")
-
 
 def merge_all_datasets(
     image_sequences: list[dict],
@@ -62,7 +65,7 @@ def merge_all_datasets(
     for entry in image_sequences:
         try:
             base_path = Path(entry["path"])
-            label = f"{entry['date']}__{entry['experiment_type']}__{entry['condition']}__{entry['concentration']}__{entry['time']}"
+            label = f"{entry['date']}__{entry['image_sequence']}"
 
             for filetype, collector in zip(
                 ["peaks", "cells", "events", "communications"],
