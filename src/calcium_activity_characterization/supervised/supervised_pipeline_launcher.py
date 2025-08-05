@@ -15,9 +15,9 @@ from calcium_activity_characterization.supervised.gui_signal_processing import S
 from calcium_activity_characterization.supervised.gui_events import ActivityAndEventDetectionGUI
 from calcium_activity_characterization.supervised.gui_export import FinalExportGUI
 
-import logging
+from calcium_activity_characterization.logger import logger
 
-logger = logging.getLogger(__name__)
+
 
 
 class SupervisedPipelineLauncher:

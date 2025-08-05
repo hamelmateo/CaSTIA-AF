@@ -6,78 +6,63 @@ Example:
     >>> pipeline.run(data_dir, output_dir)
 """
 
+import random
 import numpy as np
-import logging
 from pathlib import Path
 from skimage.segmentation import find_boundaries
-import json
 
-
+from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.config.presets import GlobalConfig, SegmentationConfig, ImageProcessingConfig
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.populations import Population
-from calcium_activity_characterization.utilities.export import NormalizedDataExporter
-from calcium_activity_characterization.utilities.loader import (
-    save_tif_image,
+from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
+from calcium_activity_characterization.preprocessing.segmentation import segmented
+from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
+from calcium_activity_characterization.io.export import NormalizedDataExporter
+from calcium_activity_characterization.io.images_loader import (
     load_existing_img,
-    save_pickle_file,
-    load_pickle_file,
-    save_rgb_png_image,
-    save_rgb_tif_image
+    load_pickle_file
+)
+from calcium_activity_characterization.io.export import (
+    save_tif_image,
+    save_rgb_tif_image,
+    save_pickle_file
 )
 from calcium_activity_characterization.utilities.plotter import (
-    plot_spatial_neighbor_graph, 
-    render_cell_outline_overlay,
+    plot_spatial_neighbor_graph,
     plot_event_growth_curve,
     plot_cell_connection_network,
     plot_raster_heatmap,
     plot_raster,
     plot_metric_on_overlay
 )
-from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
-from calcium_activity_characterization.preprocessing.segmentation import segmented
-from calcium_activity_characterization.preprocessing.trace_extraction import TraceExtractor
-import random
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
-
+from calcium_activity_characterization.utilities.image_utils import render_cell_outline_overlay
 
 
 class CalciumPipeline:
     """
-    Main processing pipeline for calcium imaging data.
-    This class orchestrates the entire workflow from segmentation to event detection.
-    It initializes paths, processes images, computes cell intensities, applies signal processing,
-    binarizes traces, detects events, and saves population-level metrics.
-    It can run in parallel or serial mode based on configuration settings.
+    Class to execute the full calcium imaging analysis pipeline.
 
     Attributes:
-        config (dict): Configuration dictionary containing parameters for processing.
-        population (Population): The population of cells processed in the pipeline.
-        nuclei_mask (np.ndarray): Mask of the nuclei used for segmentation.
-        data_dir (Path): Path to the input data directory containing ISX folders.
-        output_dir (Path): Path to the output directory where results will be saved.
-        directory_name (Path): Name of the parent directory containing the ISX folder.
-        fitc_file_pattern (Path): Regex pattern to match FITC image files.
-        hoechst_file_pattern (Path): Regex pattern to match HOECHST image files.
-        hoechst_img_path (Path): Path to the HOECHST images directory.
+        config (GlobalConfig): Configuration parameters for the pipeline.
+        population (Population): The cell population being analyzed.
+        data_dir (Path): Path to the input data directory.
+        output_dir (Path): Path to the output results directory.
+        directory_name (str): Name of the data directory.
+        fitc_file_pattern (str): Regex pattern for FITC image filenames.
+        hoechst_file_pattern (str): Regex pattern for Hoechst image filenames.
+        hoechst_img_path (Path): Path to the Hoechst images directory.
         fitc_img_path (Path): Path to the FITC images directory.
-        nuclei_mask_path (Path): Path to the nuclei mask image file.
-        overlay_path (Path): Path to the overlay image file.
-        raw_cells_path (Path): Path to save raw cell data.
-        raw_traces_path (Path): Path to save raw intensity traces.
-        processed_traces_path (Path): Path to save smoothed intensity traces.
-        binary_traces_path (Path): Path to save binarized intensity traces.
-        events_path (Path): Path to save detected events.
-        spatial_neighbor_graph_path (Path): Path to save the spatial neighbor graph.
-        activity_trace_path (Path): Path to save the activity trace plot.
-
-    Methods:
-        run(data_dir: Path, output_dir: Path) -> None:
-            Execute the full calcium imaging pipeline for one ISX folder.
-
+        nuclei_mask_path (Path): Path to save/load the nuclei mask image.
+        full_nuclei_mask_path (Path): Path to save/load the full nuclei mask image.
+        overlay_path (Path): Path to save the cell outline overlay image.
+        raw_cells_path (Path): Path to save/load the raw cells pickle file.
+        raw_traces_path (Path): Path to save/load the raw traces pickle file.
+        processed_traces_path (Path): Path to save/load the processed traces pickle file.
+        binary_traces_path (Path): Path to save/load the binary traces pickle file.
+        events_path (Path): Path to save/load the detected events pickle file.
+        spatial_neighbor_graph_path (Path): Path to save/load the spatial neighbor graph pickle file.
+        activity_trace_path (Path): Path to save/load the activity trace pickle file.
     """
 
     def __init__(self, config: GlobalConfig):
@@ -117,6 +102,7 @@ class CalciumPipeline:
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         self._init_paths(data_dir, output_dir)
+
         self._segment_cells()
         self._compute_intensity()
 
@@ -180,15 +166,7 @@ class CalciumPipeline:
 
     def _segment_cells(self) -> None:
         """
-        Segment cells from Hoechst images and build the population object.
-        If segmentation already exists, load from file.
-        Saves the nuclei mask, cell outlines overlay, and spatial neighbor graph.
-        Uses saved image processing and segmentation configurations if available.
-        Reloads from raw_cells_path if it exists.
-
-        Raises:
-            FileNotFoundError: If Hoechst images are not found in the expected directory.
-            ValueError: If no valid cells are detected after segmentation.
+        #TODO: Complete docstring
         """
         if not self.raw_cells_path.exists():
             nuclei_mask = None

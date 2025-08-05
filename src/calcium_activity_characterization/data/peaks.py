@@ -6,16 +6,16 @@ Example:
     >>> print(peak.fhw_symmetry_score)  # Already computed during creation
 """
 
-from typing import Optional, Literal, List
+from typing import Literal
 import numpy as np
 from scipy.signal import find_peaks, peak_widths, peak_prominences
 from collections import defaultdict, deque
-import logging
+from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.utilities.peak_utils import find_valley_bounds
 
 from calcium_activity_characterization.config.presets import PeakDetectionConfig
 
-logger = logging.getLogger(__name__)
+
 
 
 class Peak:
@@ -62,7 +62,7 @@ class Peak:
         fhw_end_time: int,
         height: float,
         prominence: float,
-        fhw_height: Optional[float] = None
+        fhw_height: float | None = None
     ):
         self.id = id
 
@@ -95,14 +95,14 @@ class Peak:
         self.fhw_symmetry_score: float = self._compute_symmetry_score()
 
         # Grouping metadata
-        self.group_id: Optional[int] = None  # ID of the overlapping group this peak belongs to
-        self.parent_peak_id: Optional[int] = None  # ID of the parent peak if this is part of an overlapping group
-        self.grouping_type: Optional[Literal["individual", "child", "parent"]] = None # Role in the overlapping group
+        self.group_id: int | None = None  # ID of the overlapping group this peak belongs to
+        self.parent_peak_id: int | None = None  # ID of the parent peak if this is part of an overlapping group
+        self.grouping_type: Literal["individual", "child", "parent"] | None = None # Role in the overlapping group
 
         # Event metadata
         self.is_analyzed: bool = False  # Flag to track if this peak has been analyzed
         self.in_event: Literal["global", "sequential"] = None  # Type of event this peak is part of, if any
-        self.event_id: Optional[int] = None  # ID of the event this peak is part of, if any
+        self.event_id: int | None = None  # ID of the event this peak is part of, if any
 
         self.origin_type: Literal["origin", "caused", "individual"] = "individual" # Type of cause for this peak
 
@@ -110,10 +110,10 @@ class Peak:
 
         # Deprecated attributes for experimental methods
         self.in_cluster: bool = False  # Set True once this peak is added to a cluster
-        self.cluster_id: Optional[int] = None  # ID of the assigned cluster
+        self.cluster_id: int | None = None  # ID of the assigned cluster
 
 
-    def _compute_symmetry_score(self) -> Optional[float]:
+    def _compute_symmetry_score(self) -> float | None:
         """
         Compute a symmetry score for the peak shape.
 
@@ -177,7 +177,7 @@ class PeakDetector:
             trace (list[float]): Calcium intensity trace.
         
         Returns:
-            list[Peak]: List of detected peaks.
+            list[Peak]: list of detected peaks.
         """
         peaks = self._detect(trace)
         peaks = self._group_overlapping_peaks(peaks)
@@ -204,7 +204,7 @@ class PeakDetector:
             trace (list[float]): Calcium intensity trace.
 
         Returns:
-            list[Peak]: List of detected peaks.
+            list[Peak]: list of detected peaks.
         """
 
         trace = np.array(trace, dtype=float)
@@ -263,12 +263,12 @@ class PeakDetector:
             raise NotImplementedError(f"Peak detection method '{self.method}' is not supported yet.")
 
 
-    def _refine_peak_durations(self, peaks: List[Peak], trace: np.ndarray) -> List[Peak]:
+    def _refine_peak_durations(self, peaks: list[Peak], trace: np.ndarray) -> list[Peak]:
         """
         Refine start/end times of each peak using find_valley_bounds.
 
         Args:
-            peaks (List[Peak]): Detected peaks.
+            peaks (list[Peak]): Detected peaks.
             trace (np.ndarray): Original trace.
         """
         trace = np.array(trace, dtype=float)
@@ -281,7 +281,7 @@ class PeakDetector:
 
         return peaks
 
-    def _group_overlapping_peaks(self, peaks: List[Peak]) -> List[Peak]:
+    def _group_overlapping_peaks(self, peaks: list[Peak]) -> list[Peak]:
         """
         Identify parent-child peak relationships based on containment and height.
 
@@ -292,10 +292,10 @@ class PeakDetector:
         # These categories help distinguish isolated events ("individual"), main events with nested sub-peaks ("parent"), and overlapping sub-events ("child").
 
         Args:
-            peaks (List[Peak]): List of detected peaks.
+            peaks (list[Peak]): list of detected peaks.
 
         Returns:
-            List[Peak]: Peaks with group_id, parent_peak_id, and role assigned.
+            list[Peak]: Peaks with group_id, parent_peak_id, and role assigned.
         """
         if not peaks:
             return []
@@ -354,15 +354,15 @@ class PeakDetector:
 
     
 
-    def _filter_children_peaks(self, peaks: List[Peak]) -> List[Peak]:
+    def _filter_children_peaks(self, peaks: list[Peak]) -> list[Peak]:
         """
         Eliminate overlapping peaks, retaining only those with role='parent'.
 
         Args:
-            peaks (List[Peak]): List of grouped peaks.
+            peaks (list[Peak]): list of grouped peaks.
 
         Returns:
-            List[Peak]: Filtered peaks.
+            list[Peak]: Filtered peaks.
         """
         filtered = [p for p in peaks if p.grouping_type == "individual" or p.grouping_type == "parent"]
         n_removed = len(peaks) - len(filtered)
@@ -372,16 +372,16 @@ class PeakDetector:
         return filtered
 
 
-def reassign_peak_ids(peaks: List[Peak]) -> List[Peak]:
+def reassign_peak_ids(peaks: list[Peak]) -> list[Peak]:
         """
         Reassign sequential IDs to all peaks across all cells after overlap removal.
         IDs will start at 0 and increment globally.
 
         Args:
-            peaks (List[Peak]): List of Peak objects to reassign IDs.
+            peaks (list[Peak]): list of Peak objects to reassign IDs.
 
         Returns:
-            List[Peak]: Peaks with reassigned IDs.
+            list[Peak]: Peaks with reassigned IDs.
         """
         try:
             new_id = 0

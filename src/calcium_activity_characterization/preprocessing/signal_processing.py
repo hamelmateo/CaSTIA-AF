@@ -17,14 +17,14 @@ from scipy.optimize import curve_fit
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import RANSACRegressor, HuberRegressor
 from sklearn.preprocessing import PolynomialFeatures
-import logging
+from calcium_activity_characterization.logger import logger
 
 from calcium_activity_characterization.config.presets import SignalProcessingConfig
 from calcium_activity_characterization.data.peaks import PeakDetector
 from calcium_activity_characterization.preprocessing.local_minima_detrender import LocalMinimaDetrender
 from calcium_activity_characterization.preprocessing.double_curve_detrender import DoubleCurveDetrender
 
-logger = logging.getLogger(__name__)
+
 
 
 class SignalProcessor:
@@ -80,7 +80,7 @@ class SignalProcessor:
         Get all intermediate trace versions generated during processing.
 
         Returns:
-            dict[str, np.ndarray]: Dictionary of trace versions.
+            dict[str, np.ndarray]: dictionary of trace versions.
         """
         return self.trace_versions
 

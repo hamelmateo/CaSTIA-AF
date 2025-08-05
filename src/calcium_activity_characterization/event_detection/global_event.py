@@ -4,18 +4,17 @@
 # >>> windows = find_significant_activity_peaks(trace, len(cells), threshold_ratio=0.4)
 # >>> global_blocks = extract_global_event_blocks(cells, windows, radius=300, global_max_comm_time=10, min_cell_count=5)
 
-from typing import List, Tuple, Dict, Set
-import logging
+from calcium_activity_characterization.logger import logger
 import numpy as np
 from calcium_activity_characterization.data.cells import Cell
 
-logger = logging.getLogger(__name__)
+
 
 def find_significant_activity_peaks(
     trace,
     total_cells: int,
     threshold_ratio: float = 0.4
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """
     Identify time windows from population activity peaks that exceed a threshold percentage of active cells.
 
@@ -25,7 +24,7 @@ def find_significant_activity_peaks(
         threshold_ratio (float): Ratio of active cells at peak to trigger detection.
 
     Returns:
-        List[Tuple[int, int]]: List of (start_frame, end_frame) windows to analyze as global events.
+        list[tuple[int, int]]: list of (start_frame, end_frame) windows to analyze as global events.
     """
     try:
         peak_windows = []
@@ -39,23 +38,23 @@ def find_significant_activity_peaks(
         return []
 
 def _get_framewise_peaking_labels(
-    cells: List[Cell],
+    cells: list[Cell],
     start: int,
     end: int
-) -> Dict[int, List[Tuple[int, int]]]:
+) -> dict[int, list[tuple[int, int]]]:
     """
     Build a dict mapping frame -> list of (cell label, peak id) tuples for all cells that have a peak in the given time window.
     This is used to determine which cells are peaking at each frame in the specified time window.
 
     Args:
-        cells (List[Cell]): All cells to consider.
+        cells (list[Cell]): All cells to consider.
         start (int): Start frame of time window.
         end (int): End frame of time window.
 
     Returns:
-        Dict[int, List[Tuple[int, int]]]: Mapping from frame to list of (cell label, peak id) tuples peaking at this frame.
+        dict[int, list[tuple[int, int]]]: Mapping from frame to list of (cell label, peak id) tuples peaking at this frame.
     """
-    framewise: Dict[int, List[Tuple[int, int]]] = {}
+    framewise: dict[int, list[tuple[int, int]]] = {}
     for cell in cells:
         valid_peaks = [p for p in cell.trace.peaks if start <= p.communication_time <= end]
         if not valid_peaks:
@@ -71,25 +70,25 @@ def _get_framewise_peaking_labels(
     return framewise_sorted
 
 def _get_activated_cells(
-    framewise_active: Dict[int, List[int]],
-    cells: List[Cell]
-) -> Tuple[Dict[int, Cell], Dict[Tuple[int, int], int]]:
+    framewise_active: dict[int, list[int]],
+    cells: list[Cell]
+) -> tuple[dict[int, Cell], dict[tuple[int, int], int]]:
     """
     Extract active cells and their activation times from framewise active labels.
 
     Args:
-        framewise_active (Dict[int, List[Tuple[int, int]]]): Framewise active labels.
-        cells (List[Cell]): List of all cells in the population.
+        framewise_active (dict[int, list[tuple[int, int]]]): Framewise active labels.
+        cells (list[Cell]): list of all cells in the population.
     
     Returns:
-        Tuple[Dict[int, Cell], Dict[Tuple[int, int], int]]:
+        tuple[dict[int, Cell], dict[tuple[int, int], int]]:
             - active_cells: Mapping of cell labels to Cell objects that were active.
             - activation_times: Mapping of (cell label, peak id) to activation time.
     """
     label_to_cell = {cell.label: cell for cell in cells}
 
-    active_cells: Dict[int, Cell] = {}
-    activation_times: Dict[Tuple[int, int], int] = {}
+    active_cells: dict[int, Cell] = {}
+    activation_times: dict[tuple[int, int], int] = {}
 
     for t, entries in framewise_active.items():
         for label, peak_id in entries:
@@ -102,24 +101,24 @@ def _get_activated_cells(
 def _cluster_event_from_origin(
     label: int,
     peak_id: int,
-    active_cells: Dict[int, Cell],
-    cell_activation_time: Dict[Tuple[int, int], int],
+    active_cells: dict[int, Cell],
+    cell_activation_time: dict[tuple[int, int], int],
     radius: float,
     global_max_comm_time: int
-) -> Set[Tuple[int, int]]:
+) -> set[tuple[int, int]]:
     """
     Cluster cells based on spatial proximity and temporal activation from an origin cell.
 
     Args:
         label (int): Label of the origin cell.
         peak_id (int): Peak ID of the origin cell.
-        active_cells (Dict[int, Cell]): Mapping of active cell labels to Cell objects.
-        cell_activation_time (Dict[int, int]): Mapping of cell labels to their activation times.
+        active_cells (dict[int, Cell]): Mapping of active cell labels to Cell objects.
+        cell_activation_time (dict[int, int]): Mapping of cell labels to their activation times.
         radius (float): Distance threshold to consider spatial spreading.
         global_max_comm_time (int): Maximum number of frames allowed between activations to consider propagation.
 
     Returns:
-        Set[Tuple[int, int]]: Set of (cell label, peak id) tuples in the cluster.
+        set[tuple[int, int]]: set of (cell label, peak id) tuples in the cluster.
     """
     origin_cell = active_cells[label]
     origin_peak = origin_cell.trace.peaks[peak_id]
@@ -172,24 +171,24 @@ def _cluster_event_from_origin(
     return cluster
 
 def extract_global_event_blocks(
-    cells: List[Cell],
-    peak_windows: List[Tuple[int, int]],
+    cells: list[Cell],
+    peak_windows: list[tuple[int, int]],
     radius: float,
     global_max_comm_time: int,
     min_cell_count: int = 3
-) -> List[Dict[int, List[Tuple[int, int]]]]:
+) -> list[dict[int, list[tuple[int, int]]]]:
     """
     From each peak window, extract spatially propagating global events by radius/time criteria.
 
     Args:
-        cells (List[Cell]): List of all cells in the population.
-        peak_windows (List[Tuple[int, int]]): Time windows to analyze.
+        cells (list[Cell]): list of all cells in the population.
+        peak_windows (list[tuple[int, int]]): Time windows to analyze.
         radius (float): Distance threshold to consider spatial spreading.
         global_max_comm_time (int): Maximum number of frames allowed between activations to consider propagation.
         min_cell_count (int): Minimum size to keep the global event.
 
     Returns:
-        List[Dict[int, List[Tuple[int, int]]]]: List of framewise (cell label, peak id) dicts (one per GlobalEvent).
+        list[dict[int, list[tuple[int, int]]]]: list of framewise (cell label, peak id) dicts (one per GlobalEvent).
     """
     global_event_blocks = []
 

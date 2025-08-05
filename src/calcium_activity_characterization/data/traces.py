@@ -12,21 +12,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.stats import entropy, skew
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from calcium_activity_characterization.preprocessing.signal_processing import SignalProcessor
 from calcium_activity_characterization.data.peaks import PeakDetector
 
-from calcium_activity_characterization.utilities.metrics import compute_histogram_func, compute_peak_frequency_over_time
-from calcium_activity_characterization.utilities.peak_utils import find_valley_bounds
+from calcium_activity_characterization.analysis.metrics import compute_histogram_func, compute_peak_frequency_over_time
 
 from calcium_activity_characterization.config.presets import SignalProcessingConfig, PeakDetectionConfig
 
-if TYPE_CHECKING:
-    from calcium_activity_characterization.data.peaks import Peak
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.data.peaks import Peak
+
+from calcium_activity_characterization.logger import logger
+
 class Trace:
     """
     A container for calcium activity trace and analysis results.
@@ -35,40 +34,40 @@ class Trace:
     and supports peak detection, binarization, and metadata computation based on a selected version.
 
     Attributes:
-        versions (Dict[str, List[float]]): Stores multiple processed versions of the trace.
+        versions (dict[str, list[float]]): Stores multiple processed versions of the trace.
         default_version (str): Key to access the active trace.
-        binary (List[int]): Binarized version of the trace based on detected peaks.
-        peaks (List[Peak]): Detected peaks in the active trace.
-        metadata (Dict[str, Any]): Analysis metadata derived from the trace.
+        binary (list[int]): Binarized version of the trace based on detected peaks.
+        peaks (list[Peak]): Detected peaks in the active trace.
+        metadata (dict[str, any]): Analysis metadata derived from the trace.
     """
 
-    def __init__(self, raw_trace: Optional[List[float]] = None) -> None:
+    def __init__(self, raw_trace: list[float] | None = None) -> None:
         """
         Initialize a Trace object to store calcium signal versions and analysis results.
 
         Args:
-            raw_trace (Optional[List[float]]): Optional list of raw intensity values.
+            raw_trace (Optional[list[float]]): Optional list of raw intensity values.
         """
-        self.versions: Dict[str, List[float]] = {}
+        self.versions: dict[str, list[float]] = {}
         if raw_trace is not None:
             self.versions["raw"] = raw_trace
         
         self.default_version: str = "raw"
-        self.binary: List[int] = []
-        self.peaks: List["Peak"] = []
-        self.metadata: Dict[str, Any] = {}
+        self.binary: list[int] = []
+        self.peaks: list[Peak] = []
+        self.metadata: dict[str, any] = {}
 
     @property
-    def active_trace(self) -> List[float]:
+    def active_trace(self) -> list[float]:
         """Returns the currently selected version of the trace."""
         return self.versions.get(self.default_version, [])
     
-    def add_trace(self, trace: List[float], version_name: str) -> None:
+    def add_trace(self, trace: list[float], version_name: str) -> None:
         """
         Add a new trace version to the versions dictionary.
 
         Args:
-            trace (List[float]): The trace data to add.
+            trace (list[float]): The trace data to add.
             version_name (str): The key under which to store the trace.
         """
         if not isinstance(trace, list):
@@ -257,7 +256,7 @@ class Trace:
         )
 
 
-    def plot_metadata(self, save_path: Optional[Path] = None) -> None:
+    def plot_metadata(self, save_path: Path | None = None) -> None:
         """
         Visualize scalar metadata, histograms, and time evolution of the trace.
 
@@ -327,7 +326,7 @@ class Trace:
             plt.show()
 
 
-    def plot_trace(self, version: str, save_path: Optional[Path] = None):
+    def plot_trace(self, version: str, save_path: Path | None = None):
         """Plot or save a specific version of the trace.
 
         Args:
@@ -347,7 +346,7 @@ class Trace:
             else:
                 plt.show()
 
-    def plot_binary_trace(self, save_path: Optional[Path] = None):
+    def plot_binary_trace(self, save_path: Path | None = None):
         """Plot or save the binary trace.
         
         Args:  
@@ -365,7 +364,7 @@ class Trace:
             else:
                 plt.show()
 
-    def plot_peaks_over_trace(self, save_path: Optional[Path] = None):
+    def plot_peaks_over_trace(self, save_path: Path | None = None):
         """Plot or save the active trace with detected peaks overlayed.
         
         Args:
@@ -391,7 +390,7 @@ class Trace:
         else:
             plt.show()
 
-    def plot_all_versions(self, save_path: Optional[Path] = None) -> None:
+    def plot_all_versions(self, save_path: Path | None = None) -> None:
         """Plot or save all versions of the trace.
 
         Args:
@@ -420,7 +419,7 @@ class Trace:
         else:
             plt.show()
 
-    def plot_all_traces(self, save_path: Optional[Path] = None) -> None:
+    def plot_all_traces(self, save_path: Path | None = None) -> None:
         """Plot or save all traces: raw, versions, binary, and peak overlay.
 
         Args:
@@ -487,7 +486,7 @@ class Trace:
     def __repr__(self) -> str:
         return f"<Trace default='{self.default_version}', peaks={len(self.peaks)}, active={self.metadata.get('fraction_active_time', 0):.2f}>"
 
-    def get_peak_starting_at(self, frame: int) -> Optional["Peak"]:
+    def get_peak_starting_at(self, frame: int) -> Peak | None:
         """
         Return the first peak whose activation_start_time matches the given frame.
 

@@ -4,7 +4,6 @@
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Tuple
 from abc import ABC
 import json
 
@@ -295,7 +294,7 @@ class SkimageParams(PeakDetectorParams):
         height (float): Minimum height. Default is 20.
         threshold (float): Threshold for detecting a peak. Default is None.
         width (float): Minimum peak width. Default is None.
-        scale_class_quantiles (Tuple[float, float]): Quantiles to assign peak scale class. Default is (0.33, 0.66).
+        scale_class_quantiles (tuple[float, float]): Quantiles to assign peak scale class. Default is (0.33, 0.66).
         full_half_width (float): Height relative to max for filtering. Default is 0.3.
         full_duration_threshold (float): Duration relative to full trace. Default is 0.95.
     """
@@ -304,7 +303,7 @@ class SkimageParams(PeakDetectorParams):
     height: float = 20
     threshold: float = None
     width: float = None
-    scale_class_quantiles: Tuple[float, float] = (0.33, 0.66)
+    scale_class_quantiles: tuple[float, float] = (0.33, 0.66)
     full_half_width: float = 0.3
     full_duration_threshold: float = 0.95
 
@@ -577,13 +576,13 @@ class DoubleCurveFittingParams(DetrendingParams):
         fit_method (str): Fitting method to use. Default is "movingaverage".
         window_size (int): Size of the moving average window. Default is 121.
         mask_method (str): Masking method to use. Default is "percentile".
-        percentile_bounds (Tuple[int, int]): Percentile bounds for masking. Default is (0, 75).
+        percentile_bounds (tuple[int, int]): Percentile bounds for masking. Default is (0, 75).
         max_iterations (int): Maximum number of iterations for fitting. Default is 5.
     """
     fit_method: str = "movingaverage"
     window_size: int = 121
     mask_method: str = "percentile"
-    percentile_bounds: Tuple[int, int] = (0, 75)
+    percentile_bounds: tuple[int, int] = (0, 75)
     max_iterations: int = 5
 
 @dataclass
@@ -959,7 +958,7 @@ class AgglomerativeParams(ClusteringParams):
 
 @dataclass
 class AffinityPropagationParams(ClusteringParams):
-    preference: Optional[float] = None
+    preference: float | None = None
     damping: float = 0.9
     max_iter: int = 200
     convergence_iter: int = 15
@@ -990,7 +989,7 @@ class ArcosBindataParameters:
 
 @dataclass
 class ArcosTrackingParameters:
-    position_columns: List[str] = field(default_factory=lambda: ["x", "y"])
+    position_columns: list[str] = field(default_factory=lambda: ["x", "y"])
     frame_column: str = "frame"
     id_column: str = "trackID"
     binarized_measurement_column: str = "intensity.bin"

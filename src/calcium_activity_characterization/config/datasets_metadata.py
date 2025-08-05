@@ -95,7 +95,7 @@ def get_all_image_sequences() -> list[dict]:
             "date": "20250404",
             "image_sequence": "IS4",
             "experiment_type": "spontaneous",
-            "condition": "control - 2nd run",
+            "condition": "unuseful",
             "confluency": 1200000,
             "concentration": None,
             "time": None

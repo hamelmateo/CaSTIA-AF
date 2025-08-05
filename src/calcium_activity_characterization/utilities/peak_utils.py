@@ -4,18 +4,17 @@
 # >>> left, right = find_valley_bounds(trace, fhw_start_time=100, fhw_end_time=120)
 
 import numpy as np
-from typing import Tuple
-import logging
+from calcium_activity_characterization.logger import logger
 
-logger = logging.getLogger(__name__)
+
 
 def find_valley_bounds(
     trace: np.ndarray,
     fhw_start_time: int,
     fhw_end_time: int,
-    max_search: int = 350, #TODO: make this a config parameter
-    window: int = 15
-) -> Tuple[int, int]:
+    max_search: int | None = 350, #TODO: make this a config parameter
+    window: int | None = 15
+) -> tuple[int, int]:
     """
     Find the left and right valley bounds of a peak in a 1D trace.
 
@@ -30,7 +29,7 @@ def find_valley_bounds(
         window (int, optional): Number of neighboring frames to consider when detecting a valley. Defaults to 25.
 
     Returns:
-        Tuple[int, int]: Refined (start_time, end_time) indices of the valley bounds.
+        tuple[int, int]: Refined (start_time, end_time) indices of the valley bounds.
     """
     trace = np.asarray(trace, dtype=float)
     n = len(trace)

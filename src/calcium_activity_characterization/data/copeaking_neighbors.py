@@ -3,7 +3,6 @@
 # >>> from calcium_activity_characterization.logic.copeaking_neighbors import generate_copeaking_groups
 # >>> groups = generate_copeaking_groups(cells, neighbor_graph)
 
-from typing import List, Tuple, Dict
 import networkx as nx
 from collections import defaultdict
 from calcium_activity_characterization.data.cells import Cell
@@ -15,26 +14,26 @@ class CoPeakingNeighbors:
 
     Attributes:
         frame (int): Frame index where peaks co-occur.
-        members (List[Tuple[int, int]]): List of (cell_label, peak.id) pairs.
+        members (list[tuple[int, int]]): list of (cell_label, peak.id) pairs.
         labels (set): Unique set of cell labels in the group.
         subgraph (nx.Graph): Subgraph connecting spatial neighbors within the group.
     """
 
-    def __init__(self, frame: int, members: List[Tuple[int, int]], full_graph: nx.Graph):
+    def __init__(self, frame: int, members: list[tuple[int, int]], full_graph: nx.Graph):
         """
         Initialize a CoPeakingNeighbors group.
 
         Args:
             frame (int): The frame when the peaks co-occur.
-            members (List[Tuple[int, int]]): List of (cell_label, peak.id) pairs.
+            members (list[tuple[int, int]]): list of (cell_label, peak.id) pairs.
             full_graph (nx.Graph): Full spatial neighbor graph of the population.
         """
         self.frame: int = frame
-        self.members: List[Tuple[int, int]] = members
+        self.members: list[tuple[int, int]] = members
         self.labels = {label for label, _ in members}
         self.subgraph: nx.Graph = full_graph.subgraph(self.labels).copy()
 
-    def get_labels(self) -> List[int]:
+    def get_labels(self) -> list[int]:
         """Return a list of unique cell labels involved in the co-peaking event."""
         return list(self.labels)
 
@@ -42,26 +41,26 @@ class CoPeakingNeighbors:
         return f"<CoPeakingNeighbors frame={self.frame} labels={sorted(self.labels)}>"
 
 
-def generate_copeaking_groups(cells: List[Cell], neighbor_graph: nx.Graph) -> List[CoPeakingNeighbors]:
+def generate_copeaking_groups(cells: list[Cell], neighbor_graph: nx.Graph) -> list[CoPeakingNeighbors]:
     """
     Generate all co-peaking groups from a list of cells and a spatial neighbor graph.
 
     Args:
-        cells (List[Cell]): List of Cell objects with peak data.
+        cells (list[Cell]): list of Cell objects with peak data.
         neighbor_graph (nx.Graph): Undirected graph of spatial neighbors.
 
     Returns:
-        List[CoPeakingNeighbors]: List of detected co-peaking neighbor groups.
+        list[CoPeakingNeighbors]: list of detected co-peaking neighbor groups.
     """
     # Map frame -> list of (label, peak_index)
-    frame_to_peaks: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+    frame_to_peaks: dict[int, list[tuple[int, int]]] = defaultdict(list)
 
     for cell in cells:
         for peak in cell.trace.peaks:
             if not peak.in_event:
                 frame_to_peaks[peak.communication_time].append((cell.label, peak.id))
 
-    groups: List[CoPeakingNeighbors] = []
+    groups: list[CoPeakingNeighbors] = []
 
     for frame, peak_entries in frame_to_peaks.items():
         if len(peak_entries) < 2:

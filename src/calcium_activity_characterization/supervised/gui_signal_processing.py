@@ -27,8 +27,8 @@ from calcium_activity_characterization.config.structures import (
     SavgolParams, ButterworthParams, FIRParams, WaveletParams, DoubleCurveFittingParams
 )
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.logger import logger
+
 
 NORMALIZATION_PARAMS = {
     NormalizationMethod.ZSCORE: ZScoreParams,

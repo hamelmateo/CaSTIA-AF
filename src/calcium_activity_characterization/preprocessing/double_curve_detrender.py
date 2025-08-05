@@ -4,15 +4,13 @@
 #   >>> detrended = detrender.run()
 #   >>> versions = detrender.get_intermediate_versions()
 
-from typing import Dict, Tuple
 import numpy as np
-import logging
+from calcium_activity_characterization.logger import logger
 from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
 
 from calcium_activity_characterization.config.presets import DoubleCurveFittingParams
 
-logger = logging.getLogger(__name__)
+
 
 class DoubleCurveDetrender:
     """
@@ -29,7 +27,7 @@ class DoubleCurveDetrender:
         self.config = config
         self.trace = trace
         self.cut_length = cut_length
-        self.trace_versions: Dict[str, np.ndarray] = {}
+        self.trace_versions: dict[str, np.ndarray] = {}
 
     def run(self) -> np.ndarray:
         """
@@ -86,12 +84,12 @@ class DoubleCurveDetrender:
             logger.error(f"Double curve fitting failed: {e}")
             return self.trace.copy()
 
-    def get_intermediate_versions(self) -> Dict[str, np.ndarray]:
+    def get_intermediate_versions(self) -> dict[str, np.ndarray]:
         """
         Return intermediate versions from each iteration.
 
         Returns:
-            Dict[str, np.ndarray]: Dictionary of trace versions.
+            dict[str, np.ndarray]: dictionary of trace versions.
         """
         return self.trace_versions
 
@@ -117,7 +115,7 @@ class DoubleCurveDetrender:
         lower, upper = self._get_fwhm_bounds(mu, sigma)
         return (residual >= lower) & (residual <= upper)
 
-    def _fit_gaussian_to_histogram(self, hist: np.ndarray, bin_centers: np.ndarray) -> Tuple[float, float, float]:
+    def _fit_gaussian_to_histogram(self, hist: np.ndarray, bin_centers: np.ndarray) -> tuple[float, float, float]:
         try:
             def gaussian(x, A, mu, sigma):
                 return A * np.exp(-((x - mu) ** 2) / (2 * sigma ** 2))
@@ -130,6 +128,6 @@ class DoubleCurveDetrender:
             logger.error(f"Gaussian fitting failed: {e}")
             return (np.nan, np.nan, np.nan)
 
-    def _get_fwhm_bounds(self, mu: float, sigma: float) -> Tuple[float, float]:
+    def _get_fwhm_bounds(self, mu: float, sigma: float) -> tuple[float, float]:
         fwhm = 2.355 * sigma
         return mu - fwhm / 2, mu + fwhm / 2

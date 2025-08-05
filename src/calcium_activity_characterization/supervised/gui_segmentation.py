@@ -10,9 +10,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import Qt
-from dataclasses import asdict, fields, replace
-from typing import Type
-import logging
+from dataclasses import asdict, fields
+from calcium_activity_characterization.logger import logger
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 from calcium_activity_characterization.config.structures import (
@@ -21,7 +20,7 @@ from calcium_activity_characterization.config.structures import (
     MesmerParams
 )
 
-logger = logging.getLogger(__name__)
+
 
 # Map enum values to parameter dataclass types
 PARAM_CLASSES = {
@@ -105,7 +104,7 @@ class SegmentationTunerGUI(QMainWindow):
         if param_cls is None:
             return
 
-        self.param_dataclass_type: Type = param_cls
+        self.param_dataclass_type: type = param_cls
 
         # Add save_overlay
         self.save_overlay_field = QLineEdit(str(config.save_overlay))

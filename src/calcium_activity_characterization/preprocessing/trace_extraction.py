@@ -13,7 +13,7 @@ import gc
 import math
 import cupy as cp
 from pathlib import Path
-from typing import List
+from typing import Any
 from functools import partial
 from concurrent.futures import ProcessPoolExecutor
 from tqdm import tqdm
@@ -22,8 +22,8 @@ from calcium_activity_characterization.config.presets import TraceExtractionConf
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.logger import logger
+
 
 
 class TraceExtractor:
@@ -31,13 +31,13 @@ class TraceExtractor:
     Extracts raw calcium traces for a list of cells from FITC image sequences.
 
     Args:
-        cells (List[Cell]): List of segmented cells with pixel coordinates.
+        cells (list[Cell]): list of segmented cells with pixel coordinates.
         images_dir (Path): Path to the directory containing FITC images.
-        config (dict): Dictionary of trace extraction configuration parameters.
+        config (dict): dictionary of trace extraction configuration parameters.
         processor (ImageProcessor, optional): Image processing utility for preprocessing steps.
     """
 
-    def __init__(self, cells: List[Cell], images_dir: Path, config: TraceExtractionConfig, processor: any = None) -> None:
+    def __init__(self, cells: list[Cell], images_dir: Path, config: TraceExtractionConfig, processor: Any | None = None) -> None:
         self.cells = cells
         self.images_dir = images_dir
         self.processor = processor
@@ -194,17 +194,17 @@ class TraceExtractor:
         return summed / pixel_counts
 
     @staticmethod
-    def _process_single_image(image_path: Path, cell_coords: List[np.ndarray], processor: ImageProcessor) -> List[float]:
+    def _process_single_image(image_path: Path, cell_coords: list[np.ndarray], processor: ImageProcessor) -> list[float]:
         """
         Compute the mean intensity for each cell in a single image.
 
         Args:
             image_path (Path): Path to a single FITC image.
-            cell_coords (List[np.ndarray]): Pixel coordinates of each cell.
+            cell_coords (list[np.ndarray]): Pixel coordinates of each cell.
             roi_scale (float): Scale for cropping around ROI.
 
         Returns:
-            List[float]: List of mean intensities for each cell.
+            list[float]: list of mean intensities for each cell.
         """
         try:
             img = processor.process_single_image(image_path)

@@ -8,7 +8,6 @@ Usage example:
     >>> print(population.metadata)
 """
 
-from typing import List, Optional
 import numpy as np
 import networkx as nx
 from scipy.spatial import Voronoi
@@ -28,8 +27,8 @@ from calcium_activity_characterization.config.presets import (
     EventExtractionConfig
 )
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.logger import logger
+
 
 
 class Population:
@@ -38,29 +37,29 @@ class Population:
     along with aggregated metrics, traces, and clustering results.
 
     Attributes:
-        cells (List[Cell]): List of valid Cell objects.
+        cells (list[Cell]): list of valid Cell objects.
         global_trace (Optional[Trace]): Average trace over all cells.
-        metadata (Dict[str, Any]): Dictionary of population-level statistics.
-        similarity_matrices (Any): Correlation/similarity matrices.
-        peak_clusters (Any): List of temporally clustered peak groups.
-        gc_graphs (List[Any]): Granger causality graphs if computed.
-        embedding (Any): UMAP or PCA embedding of cells.
+        metadata (dict[str, any]): dictionary of population-level statistics.
+        similarity_matrices (any): Correlation/similarity matrices.
+        peak_clusters (any): list of temporally clustered peak groups.
+        gc_graphs (list[any]): Granger causality graphs if computed.
+        embedding (any): UMAP or PCA embedding of cells.
     """
 
-    def __init__(self, nuclei_mask: np.ndarray, cells: List[Cell], neighbor_graph: nx.Graph) -> None:
+    def __init__(self, nuclei_mask: np.ndarray, cells: list[Cell], neighbor_graph: nx.Graph) -> None:
         self.nuclei_mask: np.ndarray = nuclei_mask
-        self.cells: List[Cell] = cells
+        self.cells: list[Cell] = cells
         self.neighbor_graph: nx.Graph = neighbor_graph
-        self.copeaking_neighbors: List[CoPeakingNeighbors] = None
-        self.cell_to_cell_communication: List[CellToCellCommunication] = None
-        self.events: List[Event] = []
-        self.activity_trace: Optional[Trace] = None # Sum of raster plot traces over time
+        self.copeaking_neighbors: list[CoPeakingNeighbors] = None
+        self.cell_to_cell_communication: list[CellToCellCommunication] = None
+        self.events: list[Event] = []
+        self.activity_trace: Trace | None = None # Sum of raster plot traces over time
 
     @classmethod #TODO: refactor
     def from_roi_filtered(
         cls,
         nuclei_mask: np.ndarray,
-        cells: List[Cell],
+        cells: list[Cell],
         graph: nx.Graph,
         roi_scale: float,
         img_shape: tuple[int, int],
@@ -70,10 +69,10 @@ class Population:
         Construct a Population by applying an ROI crop and filtering cells and graph.
 
         Args:
-            cells (List[Cell]): Initial list of valid Cell objects.
+            cells (list[Cell]): Initial list of valid Cell objects.
             graph (nx.Graph): Spatial neighbor graph with cell.label as nodes.
             roi_scale (float): Fraction of image to keep (0 < roi_scale <= 1).
-            img_shape (Tuple[int, int]): Shape (height, width) of the full image.
+            img_shape (tuple[int, int]): Shape (height, width) of the full image.
             border_margin (int): Margin inside ROI to exclude near-border cells.
 
         Returns:
@@ -96,7 +95,7 @@ class Population:
         safe_start_w = start_w + border_margin
         safe_end_w   = end_w   - border_margin
 
-        filtered_cells: List[Cell] = []
+        filtered_cells: list[Cell] = []
         for cell in cells:
             coords = cell.pixel_coords
 
@@ -404,12 +403,12 @@ class Population:
         return global_occurences, sequential_occurences, individual_occurences, origin_occurences
         
     @staticmethod
-    def build_spatial_neighbor_graph(cells: List[Cell]) -> nx.Graph:
+    def build_spatial_neighbor_graph(cells: list[Cell]) -> nx.Graph:
         """
         Build a Voronoi-based spatial neighbor graph from cell centroids.
 
         Args:
-            cells (List[Cell]): List of Cell objects with centroid attributes.
+            cells (list[Cell]): list of Cell objects with centroid attributes.
 
         Returns:
             nx.Graph: Undirected graph with one node per cell, and edges for Voronoi neighbors.

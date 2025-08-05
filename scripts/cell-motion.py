@@ -21,7 +21,7 @@ from calcium_activity_characterization.config.presets import GLOBAL_CONFIG
 from calcium_activity_characterization.config.structures import ImageProcessingConfig, SegmentationConfig
 from calcium_activity_characterization.preprocessing.image_processing import ImageProcessor
 from calcium_activity_characterization.preprocessing.segmentation import segmented
-from calcium_activity_characterization.utilities.loader import save_tif_image
+from calcium_activity_characterization.io.export import save_tif_image
 from calcium_activity_characterization.utilities.plotter import (
     plot_spatial_neighbor_graph
 )

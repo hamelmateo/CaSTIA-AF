@@ -1,0 +1,124 @@
+from typing import list
+from calcium_activity_characterization.data.cells import Cell
+from calcium_activity_characterization.archived.analysis.clusters import Cluster
+
+
+class PeakClusteringEngine:
+    """
+    Engine for clustering temporally related peaks across multiple cells.
+    """
+
+    def __init__(self, config: dict):
+        """
+        Initialize the clustering engine using a configuration dictionary.
+
+        Args:
+            config (dict): Should contain:
+                - "method": str ("adaptive" or "fixed")
+                - "fixed_window_size": int
+                - "score_weights": dict with keys "time" and "duration"
+        """
+        self.method = config.get("method", "adaptive")
+        self.fixed_window_size = config.get("fixed_window_size", 25)
+        self.adaptive_window_factor = config.get("adaptive_window_factor", 0.25)
+
+        weights = config.get("score_weights", {})
+        self.time_weight = weights.get("time", 0.7)
+        self.duration_weight = weights.get("duration", 0.3)
+
+        self.clusters: list[Cluster] = []
+        self.cluster_id_counter = 0
+
+    def run(self, cells: list[Cell]) -> list[Cluster]:
+        if self.method == "fixed":
+            return self.run_fixed_time_window(cells)
+        else:
+            return self.run_adaptive_time_window(cells)
+
+    def run_adaptive_time_window(self, cells: list[Cell]) -> list[Cluster]:
+        n = len(cells)
+
+        for i in range(n):
+            origin_cell = cells[i]
+            for origin_peak_idx, origin_peak in enumerate(origin_cell.trace.peaks):
+                if origin_peak.in_cluster:
+                    continue
+
+                lag_margin = int(self.fixed_window_size)
+                window_start = origin_peak.fhw_start_time - lag_margin
+                window_end = origin_peak.fhw_start_time + lag_margin
+
+                cluster_members = [(origin_cell, origin_peak_idx)]
+
+                for j in range(n):
+                    if j == i:
+                        continue
+                    other_cell = cells[j]
+
+                    best_score = -1
+                    best_idx = None
+
+                    for other_idx, other_peak in enumerate(other_cell.trace.peaks):
+                        if other_peak.in_cluster:
+                            continue
+                        if window_start <= other_peak.fhw_start_time <= window_end:
+                            score = self._compute_score(origin_peak, other_peak)
+                            if score > best_score:
+                                best_score = score
+                                best_idx = other_idx
+
+                    if best_idx is not None:
+                        cluster_members.append((other_cell, best_idx))
+
+                if len(cluster_members) > 1:
+                    cluster = Cluster(self.cluster_id_counter, window_start, window_end)
+                    for cell, idx in cluster_members:
+                        cluster.add(cell, idx)
+                    self.clusters.append(cluster)
+                    self.cluster_id_counter += 1
+
+        return self.clusters
+
+    def run_fixed_time_window(self, cells: list[Cell]) -> list[Cluster]:
+        trace_length = max(len(cell.trace.binary) for cell in cells)
+        peak_spread_flags = {}  # (cell.label, peak.id): bool
+
+        for window_start in range(0, trace_length, self.fixed_window_size):
+            window_end = window_start + self.fixed_window_size
+            cluster = Cluster(self.cluster_id_counter, window_start, window_end)
+            added_any = False
+
+            for cell in cells:
+                for peak_idx, peak in enumerate(cell.trace.peaks):
+                    key = (cell.label, peak.id)
+
+                    # Add to current window if fhw_start_time in window
+                    if window_start <= peak.fhw_start_time < window_end:
+                        cluster.add(cell, peak_idx)
+                        added_any = True
+                        peak_spread_flags[key] = peak.fhw_end_time > window_end
+
+                    # Add only if flagged to spread to next window
+                    elif peak_spread_flags.get(key, False) and window_start == ((peak.fhw_start_time // self.fixed_window_size + 1) * self.fixed_window_size):
+                        cluster.add(cell, peak_idx)
+                        added_any = True
+                        peak_spread_flags[key] = False
+
+            if added_any:
+                self.clusters.append(cluster)
+                self.cluster_id_counter += 1
+
+        return self.clusters
+
+    def _compute_score(self, peak1, peak2) -> float:
+        time_diff = abs(peak1.fhw_start_time - peak2.fhw_start_time)
+        duration_diff = abs(peak1.fhw_duration - peak2.fhw_duration)
+
+        max_time_window = self.adaptive_window_factor * peak1.fhw_duration
+        if max_time_window == 0:
+            return 0.0
+
+        score_time = 1 - (time_diff / max_time_window)
+        score_duration = 1 - (duration_diff / max(peak1.fhw_duration, peak2.fhw_duration, 1))
+
+        return self.time_weight * score_time + self.duration_weight * score_duration

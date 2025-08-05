@@ -1,12 +1,12 @@
 import numpy as np
-import logging
+from calcium_activity_characterization.logger import logger
 
 from calcium_activity_characterization.data.traces import Trace
 from calcium_activity_characterization.config.presets import CellFilteringConfig, ObjectSizeThresholds
 
 
 
-logger = logging.getLogger(__name__)
+
 
 class Cell:
     """
@@ -143,7 +143,7 @@ class Cell:
                 - border_margin: int, margin to exclude cells near the image border.
 
         Returns:
-            List[Cell]: List of Cell instances parsed from the mask.
+            list[Cell]: list of Cell instances parsed from the mask.
         """
         cells = []
         label = 1

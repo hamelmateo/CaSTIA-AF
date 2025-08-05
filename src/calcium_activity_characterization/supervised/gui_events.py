@@ -11,14 +11,14 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPixmap
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
-import logging
+from calcium_activity_characterization.logger import logger
 from dataclasses import asdict, fields, replace
 from copy import deepcopy
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 from calcium_activity_characterization.config.structures import EventExtractionConfig, ConvexHullParams
 
-logger = logging.getLogger(__name__)
+
 
 class ActivityAndEventDetectionGUI(QMainWindow):
     """

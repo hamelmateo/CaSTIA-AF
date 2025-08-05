@@ -4,7 +4,6 @@
 # >>> print(event.event_duration, event.n_cells_involved)
 # >>> global_event = GlobalEvent.from_framewise_peaking_labels(id=1, label_to_cell=..., framewise_peaking_labels=..., config={})
 
-from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
 import numpy as np
 from scipy.spatial.distance import euclidean, pdist
@@ -14,15 +13,15 @@ from abc import ABC, abstractmethod
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.cell_to_cell_communication import CellToCellCommunication
-from calcium_activity_characterization.utilities.metrics import Distribution
+from calcium_activity_characterization.analysis.metrics import Distribution
 from calcium_activity_characterization.config.presets import EventExtractionConfig, ConvexHullParams, DirectionComputationParams
 
 from pathlib import Path
 from calcium_activity_characterization.utilities.plotter import plot_event_graph
 
-import logging
+from calcium_activity_characterization.logger import logger
 
-logger = logging.getLogger(__name__)
+
 
 class Event(ABC):
     """
@@ -30,25 +29,25 @@ class Event(ABC):
 
     Attributes:
         id (int): Unique identifier.
-        peaks_involved (List[Tuple[int, int]]): list of cell label and peaks indices involved in the event.
-        label_to_centroid (Dict[int, np.ndarray]): Map of cell labels to centroids.
+        peaks_involved (list[tuple[int, int]]): list of cell label and peaks indices involved in the event.
+        label_to_centroid (dict[int, np.ndarray]): Map of cell labels to centroids.
         n_cells_involved (int): Number of cells in the event.
         event_start_time (int): Earliest peak start time.
         event_end_time (int): Latest peak start time.
         event_duration (int): Duration of the event.
-        framewise_peaking_labels (Dict[int, List[int]]): Map of cell labels peaking at each frame.
-        wavefront (Dict[int, List[np.ndarray]]): Centroids of peaking cells per frame.
-        config (Dict): Detection parameters used.
-        dominant_direction_vector (Tuple[float, float]): Direction of propagation as a unit vector.
+        framewise_peaking_labels (dict[int, list[int]]): Map of cell labels peaking at each frame.
+        wavefront (dict[int, list[np.ndarray]]): Centroids of peaking cells per frame.
+        config (dict): Detection parameters used.
+        dominant_direction_vector (tuple[float, float]): Direction of propagation as a unit vector.
         directional_propagation_speed (float): Speed of propagation in the dominant direction.
     """
 
     def __init__(
         self,
         id: int,
-        peaks_involved: List[Tuple[int, int]],
-        label_to_centroid: Dict[int, np.ndarray],
-        framewise_peaking_labels: Dict[int, List[int]] = None
+        peaks_involved: list[tuple[int, int]],
+        label_to_centroid: dict[int, np.ndarray],
+        framewise_peaking_labels: dict[int, list[int]] = None
     ) -> None:
         self.id = int(id)
 
@@ -69,22 +68,22 @@ class Event(ABC):
         self.directional_propagation_speed = None # to be computed in subclasses
 
 
-    def _compute_event_bounds(self) -> Tuple[int, int]:
+    def _compute_event_bounds(self) -> tuple[int, int]:
         """
         Compute the start and end times of the event based on active labels.
         
         Returns:
-            Tuple[int, int]: Start and end times of the event.
+            tuple[int, int]: Start and end times of the event.
         """
         times = list(self.framewise_peaking_labels.keys())
         return min(times), max(times)
 
-    def _compute_incremental_wavefront(self) -> Dict[int, List[np.ndarray]]:
+    def _compute_incremental_wavefront(self) -> dict[int, list[np.ndarray]]:
         """
         Accumulate all cells active up to each time t.
 
         Returns:
-            Dict[int, List[np.ndarray]]: Mapping from t to list of centroids.
+            dict[int, list[np.ndarray]]: Mapping from t to list of centroids.
         """
         wavefront = {}
         activated = set()
@@ -111,7 +110,7 @@ class Event(ABC):
             return Distribution.from_values([])    
 
     @abstractmethod
-    def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
+    def _compute_dominant_direction_vector(self) -> tuple[float, float]:
         """Compute direction of propagation."""
         pass
 
@@ -125,11 +124,11 @@ class SequentialEvent(Event):
     Event subclass for sequential neighbor-to-neighbor propagation events.
 
     Additional Attributes:
-        communications (List[CellToCellCommunication]): Directed links between cells.
+        communications (list[CellToCellCommunication]): Directed links between cells.
         graph (nx.DiGraph): Causal propagation graph.
-        dag_metrics (Dict): Precomputed DAG metrics.
-        communication_speed_distribution (List[float]): Optional.
-        communication_time_distribution (List[float]): Optional.
+        dag_metrics (dict): Precomputed DAG metrics.
+        communication_speed_distribution (list[float]): Optional.
+        communication_time_distribution (list[float]): Optional.
         elongation_score (float): Shape metric.
         compactness_score (float): Shape metric.
         global_propagation_speed (float): Mean propagation speed.
@@ -138,10 +137,10 @@ class SequentialEvent(Event):
     def __init__(
         self,
         id: int,
-        communications: List[CellToCellCommunication],
-        label_to_centroid: Dict[int, np.ndarray],
+        communications: list[CellToCellCommunication],
+        label_to_centroid: dict[int, np.ndarray],
         config_hull: ConvexHullParams,
-        population_centroid: List[np.ndarray]
+        population_centroid: list[np.ndarray]
     ) -> None:
         peak_indices = list({comm.origin for comm in communications}.union({comm.cause for comm in communications}))
         self.communications = communications
@@ -167,12 +166,12 @@ class SequentialEvent(Event):
         self.radiality_score: float = self._compute_radiality_score()
         self.compactness_score: float = self._compute_compactness_score(population_centroid)
 
-    def _compute_framewise_peaking_labels(self) -> Dict[int, List[int]]:
+    def _compute_framewise_peaking_labels(self) -> dict[int, list[int]]:
         """
         Build raw map of which cells are active at each frame.
 
         Returns:
-            Dict[int, List[int]]: Mapping from time t to list of active cell labels.
+            dict[int, list[int]]: Mapping from time t to list of active cell labels.
         """
         active_at_t = defaultdict(list)
         for comm in self.communications:
@@ -191,12 +190,12 @@ class SequentialEvent(Event):
             self.graph.add_edge(comm.origin[0], comm.cause[0], delta_t=comm.duration)
 
 
-    def _compute_dag_metrics(self) -> Dict[str, float]:
+    def _compute_dag_metrics(self) -> dict[str, float]:
         """
         Compute structural metrics describing the DAG topology of the event propagation graph.
 
         Returns:
-            Dict[str, float]: Dictionary of DAG metrics including:
+            dict[str, float]: dictionary of DAG metrics including:
                 - n_nodes: Total number of nodes in the graph
                 - n_edges: Total number of directed edges
                 - n_roots: Nodes with in-degree 0 (initial cells)
@@ -325,14 +324,14 @@ class SequentialEvent(Event):
         return d_area / d_time if d_time >= min_dt else 0.0
 
 
-    def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
+    def _compute_dominant_direction_vector(self) -> tuple[float, float]:
         """
         Compute dominant direction of propagation as the unit vector from origin
         to the center of mass (CoM) of all other involved centroids.
         The direction is validated against the average distance from the origin to the directly caused peaks.
 
         Returns:
-            Tuple[float, float]: Dominant direction vector or (0, 0) if radial or undirected.
+            tuple[float, float]: Dominant direction vector or (0, 0) if radial or undirected.
         """
         try:
             origin_label = self._get_origin_label()
@@ -474,13 +473,13 @@ class SequentialEvent(Event):
             return 0.0
 
 
-    def _compute_compactness_score(self, population_centroids: List[np.ndarray]) -> float:
+    def _compute_compactness_score(self, population_centroids: list[np.ndarray]) -> float:
         """
         TODO: direct neighbors distance instead of pairwise distance.
         Compute how tightly clustered the event cells are compared to the global population.
 
         Args:
-            population_centroids (List[np.ndarray]): List of centroids of all cells in the image.
+            population_centroids (list[np.ndarray]): list of centroids of all cells in the image.
 
         Returns:
             float: Compactness score (event spacing / population spacing)
@@ -497,7 +496,7 @@ class SequentialEvent(Event):
             return 0.0
 
 
-    def _get_origin_label(self) -> Optional[int]:
+    def _get_origin_label(self) -> int | None:
         """
         Find the label of the origin cell (the root node in the DAG).
         This is the cell with no incoming edges in the graph.
@@ -533,22 +532,22 @@ class SequentialEvent(Event):
     def from_communications(
         cls,
         n_global_events: int,
-        communications: List[CellToCellCommunication],
-        cells: List[Cell],
+        communications: list[CellToCellCommunication],
+        cells: list[Cell],
         config: EventExtractionConfig,
-        population_centroids: List[np.ndarray] = None
-    ) -> List["SequentialEvent"]:
+        population_centroids: list[np.ndarray] | None = None
+    ) -> list["SequentialEvent"]:
         """
         Extract events from a list of cell-to-cell communications.
 
         Args:
-            communications (List[CellToCellCommunication]): List of directed cell-to-cell communication links.
-            cells (List[Cell]): List of all cells in the image.
-            config (Dict): Configuration parameters for event extraction.
-            population_centroids (List[np.ndarray]): Optional list of centroids of all cells in the image.
+            communications (list[CellToCellCommunication]): list of directed cell-to-cell communication links.
+            cells (list[Cell]): list of all cells in the image.
+            config (dict): Configuration parameters for event extraction.
+            population_centroids (list[np.ndarray]): Optional list of centroids of all cells in the image.
 
         Returns:
-            List[SequentialEvent]: List of extracted SequentialEvent instances.
+            list[SequentialEvent]: list of extracted SequentialEvent instances.
         """
         label_to_cell = {cell.label: cell for cell in cells}
         G = nx.Graph()
@@ -588,9 +587,9 @@ class GlobalEvent(Event):
         self,
         id: int,
         event_peak_time: int,
-        peak_indices: Tuple[int, int],
-        label_to_centroid: Dict[int, np.ndarray],
-        framewise_peaking_labels: Dict[int, List[int]],
+        peak_indices: tuple[int, int],
+        label_to_centroid: dict[int, np.ndarray],
+        framewise_peaking_labels: dict[int, list[int]],
         config_direction: DirectionComputationParams
     ) -> None:
         super().__init__(id, peak_indices, label_to_centroid, framewise_peaking_labels)
@@ -604,7 +603,7 @@ class GlobalEvent(Event):
 
         self.time_to_50, self.normalized_peak_rate_at_50 = self._compute_time_and_peak_rate_at_50()
 
-    def _compute_dominant_direction_metadata(self, config: DirectionComputationParams) -> Dict[str, Any]:
+    def _compute_dominant_direction_metadata(self, config: DirectionComputationParams) -> dict[str, any]:
         """
         Compute dominant direction and supporting metadata using trimmed CoM over time bins.
 
@@ -719,7 +718,7 @@ class GlobalEvent(Event):
             "bins": bin_metadata
         }
 
-    def _compute_dominant_direction_vector(self) -> Tuple[float, float]:
+    def _compute_dominant_direction_vector(self) -> tuple[float, float]:
         """
         Compute dominant direction vector of a global wave event.
 
@@ -766,7 +765,7 @@ class GlobalEvent(Event):
         return displacement / delta_t
 
 
-    def _compute_time_and_peak_rate_at_50(self, window_size: int = 5) -> Tuple[int, float]:
+    def _compute_time_and_peak_rate_at_50(self, window_size: int = 5) -> tuple[int, float]:
         """
         Compute the number of frames from event start until cumulative recruited peaks
         reach at least 50% of the total.
@@ -806,21 +805,21 @@ class GlobalEvent(Event):
     @classmethod
     def from_framewise_peaking_labels(
         cls,
-        events_peak_times: List[int],
-        framewise_label_blocks: List[Dict[int, List[Tuple[int, int]]]],
-        cells: List[Cell],
+        events_peak_times: list[int],
+        framewise_label_blocks: list[dict[int, list[tuple[int, int]]]],
+        cells: list[Cell],
         config: EventExtractionConfig
-    ) -> List["GlobalEvent"]:
+    ) -> list["GlobalEvent"]:
         """
         Create multiple GlobalEvent objects from a list of framewise (cell_label, peak_id) dictionaries.
 
         Args:
-            framewise_label_blocks (List[Dict[int, List[Tuple[int, int]]]]): List of frame -> [(cell_label, peak_id)] mappings, one per event.
-            cells (List[Cell]): All available cell objects.
+            framewise_label_blocks (list[dict[int, list[tuple[int, int]]]]): list of frame -> [(cell_label, peak_id)] mappings, one per event.
+            cells (list[Cell]): All available cell objects.
             config (EventExtractionConfig): Configuration object. Should contain 'min_cell_count'.
 
         Returns:
-            List[GlobalEvent]: List of created GlobalEvent instances.
+            list[GlobalEvent]: list of created GlobalEvent instances.
         """
         min_cells = config.min_cell_count
         label_to_cell = {cell.label: cell for cell in cells}

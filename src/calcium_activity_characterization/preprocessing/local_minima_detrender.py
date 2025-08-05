@@ -4,10 +4,9 @@
 #   >>> detrended = detrender.run()
 #   >>> versions = detrender.get_intermediate_versions()
 
-from typing import Dict, List, Tuple
 import numpy as np
 from pathlib import Path
-import logging
+from calcium_activity_characterization.logger import logger
 from scipy.signal import argrelmin
 from math import atan2, degrees
 
@@ -17,7 +16,7 @@ from calcium_activity_characterization.utilities.plotter import (
 )
 from calcium_activity_characterization.config.presets import LocalMinimaParams
 
-logger = logging.getLogger(__name__)
+
 
 
 class LocalMinimaDetrender:
@@ -34,10 +33,10 @@ class LocalMinimaDetrender:
         self.config = config
         self.verbose = config.verbose
         self.trace = np.asarray(trace, dtype=np.float32)
-        self.trace_versions: Dict[str, np.ndarray] = {}
-        self.anchor_indices: List[int] = []
-        self.discarded_minima: Dict[str, List[int]] = {}
-        self.inserted_anchors: List[int] = []
+        self.trace_versions: dict[str, np.ndarray] = {}
+        self.anchor_indices: list[int] = []
+        self.discarded_minima: dict[str, list[int]] = {}
+        self.inserted_anchors: list[int] = []
 
     def run(self) -> np.ndarray:
         """
@@ -56,12 +55,12 @@ class LocalMinimaDetrender:
             self._plot_diagnostics()
         return detrended
 
-    def get_intermediate_versions(self) -> Dict[str, np.ndarray]:
+    def get_intermediate_versions(self) -> dict[str, np.ndarray]:
         """
         Return intermediate trace versions for debugging or plotting.
 
         Returns:
-            Dict[str, np.ndarray]: Dictionary of trace versions.
+            dict[str, np.ndarray]: dictionary of trace versions.
         """
         return self.trace_versions
 
@@ -263,12 +262,12 @@ class LocalMinimaDetrender:
             logger.error(f"Failed to plot diagnostics: {e}")
 
     # Internal helpers (inlined from baseline_utils)
-    def _filter_by_shoulder_rejection_iterative(self, neighbor_dist: int, window: int) -> Tuple[List[int], List[int]]:
+    def _filter_by_shoulder_rejection_iterative(self, neighbor_dist: int, window: int) -> tuple[list[int], list[int]]:
         """
         Discard minima higher than both neighbors within given distance.
 
         Returns:
-            Tuple[List[int], List[int]]: (retained, discarded)
+            tuple[list[int], list[int]]: (retained, discarded)
         """
         minima = sorted(self.anchor_indices)
         discarded_total = []
@@ -292,16 +291,16 @@ class LocalMinimaDetrender:
             minima = filtered
         return minima, discarded_total
 
-    def _filter_by_angle_valley(self, angle_thresh_deg: float) -> Tuple[List[int], List[int]]:
+    def _filter_by_angle_valley(self, angle_thresh_deg: float) -> tuple[list[int], list[int]]:
         """
         Discard middle minima with sharp valley angle using atan2 geometry.
 
         Args:
-            minima (List[int]): List of anchor indices to filter.
+            minima (list[int]): list of anchor indices to filter.
             angle_thresh_deg (float): Angle threshold for filtering.
 
         Returns:
-            Tuple[List[int], List[int]]: (retained, discarded)
+            tuple[list[int], list[int]]: (retained, discarded)
         """
         minima = sorted(self.anchor_indices)
         discarded_total = []

@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Dict, Optional
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
@@ -13,11 +12,11 @@ def plot_histogram_by_dataset(
     column: str,
     title: str,
     ylabel: str = "Count",
-    bin_width: float = None,
-    bin_count: int = None,
-    n_cols: int = 2,
-    log_scale_datasets: list[str] = [],
-    horizontal_layout: bool = False
+    bin_width: float | None = None,
+    bin_count: int | None = None,
+    n_cols: int | None = 2,
+    log_scale_datasets: list[str] | None = [],
+    horizontal_layout: bool | None = False
 ) -> None:
     """
     Plot histograms of a column per dataset, with stats annotation.
@@ -29,7 +28,7 @@ def plot_histogram_by_dataset(
         bin_width (float, optional): Width of histogram bins.
         bin_count (int, optional): Number of bins (ignored if bin_width is used).
         n_cols (int, optional): Number of columns in the subplot grid (default: 3).
-        log_scale_datasets (list[str], optional): List of dataset names to plot with log scale on y-axis.
+        log_scale_datasets (list[str], optional): list of dataset names to plot with log scale on y-axis.
         horizontal_layout (bool, optional): If True, prioritizes horizontal layout (max 2 rows).
     """
     datasets = sorted(df["dataset"].unique())
@@ -92,7 +91,7 @@ def plot_histogram_by_dataset(
 
 
 def visualize_image(
-    dataset_paths: Dict[str, str],
+    dataset_paths: dict[str, str],
     image_name: str = "signal-processing/raster_plot.png",
     title: str = "Binary Activity Raster Plots by Dataset",
     n_cols: int = 2,
@@ -102,7 +101,7 @@ def visualize_image(
     Plot raster images side by side for each dataset.
 
     Args:
-        dataset_paths (Dict[str, str]): Dict mapping dataset labels to folder paths.
+        dataset_paths (dict[str, str]): dict mapping dataset labels to folder paths.
         image_name (str): Raster image file name (default: 'raster_plot.png').
         title (str): Global title.
         n_cols (int): Number of subplot columns (default: 2).
@@ -149,8 +148,8 @@ def plot_pie_chart_by_dataset(
     column: str,
     title: str = "Category Distribution",
     n_cols: int = 2,
-    value_label_formatter: Optional[callable] = None,
-    label_prefix: Optional[str] = None,
+    value_label_formatter: callable | None = None,
+    label_prefix: str | None = None,
     palette: str = "tab10"
 ) -> None:
     """
@@ -215,11 +214,11 @@ def plot_bar_by_dataset(
     axis_column: str,
     value_column: str,
     title: str,
-    hue_column: Optional[str] = None,
-    ylabel: str = "Count",
-    xlabel: str = "Dataset",
-    rotation: int = 45,
-    palette: str = "viridis"
+    hue_column: str | None = None,
+    ylabel: str | None = "Count",
+    xlabel: str | None = "Dataset",
+    rotation: int | None = 45,
+    palette: str | None = "muted"
 ) -> None:
     """
     Plot a bar chart of a metric aggregated per dataset.

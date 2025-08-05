@@ -13,9 +13,9 @@ Note:
 
 import subprocess
 from pathlib import Path
-import logging
+from calcium_activity_characterization.logger import logger
 
-logger = logging.getLogger(__name__)
+
 
 
 def export_current_notebook_to_pdf(notebook_filename: str) -> None:

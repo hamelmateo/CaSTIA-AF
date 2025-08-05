@@ -1,17 +1,16 @@
 import matplotlib.pyplot as plt
-import logging
+from calcium_activity_characterization.logger import logger
 import numpy as np
 from pathlib import Path
-from typing import List, Optional
 import networkx as nx
 from scipy.optimize import curve_fit
 
+# TODO: plot funnctions should return the fig object and be sved in export.py
 
-logger = logging.getLogger(__name__)
 
 def plot_raster(
     output_path: Path,
-    binary_traces: List[List[int]],
+    binary_traces: list[list[int]],
     cut_trace: int = 0
 ) -> None:
     """
@@ -19,7 +18,7 @@ def plot_raster(
 
     Args:
         output_path (Path): File path to save the plot.
-        binary_traces (List[List[int] | np.ndarray]): List of binary activity traces.
+        binary_traces (list[list[int] | np.ndarray]): list of binary activity traces.
         cut_trace (int): Offset to add to x-axis labels for synchronization.
     """
     try:
@@ -51,7 +50,7 @@ def plot_raster(
 
 def plot_raster_heatmap(
     output_path: Path,
-    processed_traces: List[np.ndarray],
+    processed_traces: list[np.ndarray],
     clip_percentile: float = 98.0,
     cut_trace: int = 0
 ) -> None:
@@ -60,7 +59,7 @@ def plot_raster_heatmap(
 
     Args:
         output_path (Path): Path to save the output figure.
-        processed_traces (List[np.ndarray]): List of processed calcium intensity traces.
+        processed_traces (list[np.ndarray]): list of processed calcium intensity traces.
         clip_percentile (float): Percentile for upper clipping of intensities.
         cut_trace (int): Offset to add to the time axis (x-axis) for synchronization.
 
@@ -106,94 +105,13 @@ def plot_raster_heatmap(
         logger.error(f"Failed to generate processed trace raster plot: {e}")
         raise
 
-def convert_grayscale16_to_rgb(
-    img16: np.ndarray
-) -> np.ndarray:
-    """
-    Convert a 2D 16-bit (or float) image into an 8-bit RGB array.
-
-    Usage example:
-        >>> rgb = convert_grayscale16_to_rgb(raw16)
-
-    Args:
-        img16 (np.ndarray): 2D array of dtype uint16 or float.
-
-    Returns:
-        np.ndarray: H×W×3 uint8 RGB version of the input, linearly scaled.
-    """
-    if img16.ndim != 2:
-        raise ValueError(f"Expected 2D array, got shape {img16.shape}")
-
-    # Force float for scaling
-    data = img16.astype(np.float32)
-
-    mn, mx = float(data.min()), float(data.max())
-    logger.debug(f"Grayscale16 → float32: min={mn}, max={mx}")
-
-    if mx <= mn:
-        raise ValueError("Zero dynamic range: all pixels have the same value")
-
-    # normalize to [0,1]
-    norm = (data - mn) / (mx - mn)
-    # scale to [0,255]
-    gray8 = (norm * 255.0).round().astype(np.uint8)
-    logger.debug(f"After scaling: dtype={gray8.dtype}, min={gray8.min()}, max={gray8.max()}")
-
-    # Stack into RGB
-    rgb = np.stack([gray8, gray8, gray8], axis=-1)
-    return rgb
-
-def render_cell_outline_overlay(
-    background_image: np.ndarray,
-    outline_mask: np.ndarray
-) -> np.ndarray:
-    """
-    Create an RGB overlay image by converting a 16-bit grayscale background to RGB
-    and overlaying a red outline where the mask is True.
-
-    Args:
-        background_image (np.ndarray):
-            2D array (H×W) of dtype uint16 or float representing a grayscale image.
-        outline_mask (np.ndarray):
-            2D boolean array (H×W) where True indicates outline pixels.
-
-    Returns:
-        np.ndarray: H×W×3 uint8 RGB image with red outlines.
-
-    Raises:
-        ValueError: If shapes are incompatible or inputs invalid.
-    """
-    try:
-        # Convert background to 8-bit RGB
-        rgb = convert_grayscale16_to_rgb(background_image)
-
-        # Ensure mask is boolean and shape matches
-        mask = np.asarray(outline_mask, dtype=bool)
-        if mask.shape != rgb.shape[:2]:
-            raise ValueError(
-                f"Outline mask shape {mask.shape} does not match "
-                f"background image shape {rgb.shape[:2]}"
-            )
-
-        # Overlay red on masked pixels
-        overlay = rgb.copy()
-        overlay[mask, 0] = 255
-        overlay[mask, 1] = 0
-        overlay[mask, 2] = 0
-
-        return overlay
-
-    except Exception as e:
-        logger.error(f"RenderCellOutlineOverlay failed: {e}")
-        raise
-
 def plot_minima_diagnostics(
     trace: np.ndarray,
-    anchor_idx: List[int],
-    inserted_idx: List[int],
-    discarded1: List[int],
-    discarded2: List[int],
-    discarded3: List[int],
+    anchor_idx: list[int],
+    inserted_idx: list[int],
+    discarded1: list[int],
+    discarded2: list[int],
+    discarded3: list[int],
     output_dir: Path
 ) -> None:
     """
@@ -201,11 +119,11 @@ def plot_minima_diagnostics(
 
     Args:
         trace (np.ndarray): The smoothed intensity trace.
-        anchor_idx (List[int]): Final retained anchor indices.
-        inserted_idx (List[int]): Newly added anchors.
-        discarded1 (List[int]): Discarded after shoulder rejection.
-        discarded2 (List[int]): Discarded after angle filtering.
-        discarded3 (List[int]): Reserved for future use.
+        anchor_idx (list[int]): Final retained anchor indices.
+        inserted_idx (list[int]): Newly added anchors.
+        discarded1 (list[int]): Discarded after shoulder rejection.
+        discarded2 (list[int]): Discarded after angle filtering.
+        discarded3 (list[int]): Reserved for future use.
         output_dir (Path): Path to save the plot.
     """
     fig, ax = plt.subplots(figsize=(12, 4))
@@ -237,7 +155,7 @@ def plot_minima_diagnostics(
 def plot_final_baseline_fit(
     trace: np.ndarray,
     baseline: np.ndarray,
-    anchor_idx: List[int],
+    anchor_idx: list[int],
     detrended: np.ndarray,
     label: str,
     output_dir: Path,
@@ -249,7 +167,7 @@ def plot_final_baseline_fit(
     Args:
         trace (np.ndarray): Smoothed input trace.
         baseline (np.ndarray): Fitted baseline.
-        anchor_idx (List[int]): Anchor indices used for baseline fit.
+        anchor_idx (list[int]): Anchor indices used for baseline fit.
         detrended (np.ndarray): Detrended result.
         label (str): Label suffix for filename.
         output_dir (Path): Directory to save plot.
@@ -385,8 +303,8 @@ def plot_event_graph(event_id: int, graph: nx.DiGraph, label_to_time: dict, save
 
 def plot_spatial_neighbor_graph(
     graph: nx.Graph,
-    mask: Optional[np.ndarray] = None,
-    output_path: Optional[Path] = None
+    mask: np.ndarray | None = None,
+    output_path: Path | None = None
 ) -> None:
     """
     Plot or save a spatial neighbor graph from the population.
@@ -477,8 +395,8 @@ def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, ti
 
 def plot_cell_connection_network(
     graph: nx.Graph,
-    nuclei_mask: Optional[np.ndarray] = None,
-    output_path: Optional[Path] = None
+    nuclei_mask: np.ndarray | None = None,
+    output_path: Path | None = None
 ) -> None:
     """
     Plot or save the interaction graph with weighted edges (weight ≥3) 

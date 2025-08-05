@@ -5,7 +5,6 @@
 # >>> comms = generate_cell_to_cell_communications(cells, graph, copeaking_groups, max_time_gap=10)
 # >>> for c in comms: print(c)
 
-from typing import Tuple, List, Dict, Set
 import networkx as nx
 from scipy.spatial.distance import euclidean
 
@@ -13,32 +12,32 @@ from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.copeaking_neighbors import CoPeakingNeighbors
 from calcium_activity_characterization.config.presets import EventExtractionConfig
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.logger import logger
+
 
 class CellToCellCommunication:
     """
     Represents a causal link between two peaks in neighboring cells.
 
     Attributes:
-        origin (Tuple[int, int]): Tuple (cell_label, peak.id) for the origin peak.
-        cause (Tuple[int, int]): Tuple (cell_label, peak.id) for the peak that was caused.
+        origin (tuple[int, int]): tuple (cell_label, peak.id) for the origin peak.
+        cause (tuple[int, int]): tuple (cell_label, peak.id) for the peak that was caused.
         origin_start_time (int): Start time of the origin peak.
         cause_start_time (int): Start time of the caused peak.
     """
 
     def __init__(
         self,
-        origin: Tuple[int, int],
-        cause: Tuple[int, int],
+        origin: tuple[int, int],
+        cause: tuple[int, int],
         origin_start_time: int,
         cause_start_time: int,
-        origin_centroid: Tuple[int, int],
-        cause_centroid: Tuple[int, int]
+        origin_centroid: tuple[int, int],
+        cause_centroid: tuple[int, int]
     ) -> None:
         self.id: int = id(self)  # Unique identifier for the communication
-        self.origin: Tuple[int, int] = origin
-        self.cause: Tuple[int, int] = cause
+        self.origin: tuple[int, int] = origin
+        self.cause: tuple[int, int] = cause
         self.origin_start_time: int = origin_start_time
         self.cause_start_time: int = cause_start_time
 
@@ -47,8 +46,8 @@ class CellToCellCommunication:
             f"Got origin_start_time={self.origin_start_time}, cause_start_time={self.cause_start_time}"
         )
 
-        self.origin_centroid: Tuple[int, int] = origin_centroid
-        self.cause_centroid: Tuple[int, int] = cause_centroid
+        self.origin_centroid: tuple[int, int] = origin_centroid
+        self.cause_centroid: tuple[int, int] = cause_centroid
 
         self.duration: int = self.cause_start_time - self.origin_start_time
         self.distance: float = euclidean(origin_centroid, cause_centroid)
@@ -80,25 +79,25 @@ class CellToCellCommunication:
 # ===============================
 
 def generate_cell_to_cell_communications(
-    cells: List[Cell],
+    cells: list[Cell],
     neighbor_graph: nx.Graph,
-    copeaking_groups: List[CoPeakingNeighbors],
+    copeaking_groups: list[CoPeakingNeighbors],
     max_time_gap: int = 10
-) -> List[CellToCellCommunication]:
+) -> list[CellToCellCommunication]:
     """
     Build all causal CellToCellCommunication links from co-peaking groups and independent peaks.
 
     Args:
-        cells (List[Cell]): List of cell objects.
+        cells (list[Cell]): list of cell objects.
         neighbor_graph (nx.Graph): Spatial graph.
-        copeaking_groups (List[CoPeakingNeighbors]): Precomputed co-peaking groups.
+        copeaking_groups (list[CoPeakingNeighbors]): Precomputed co-peaking groups.
         max_time_gap (int): Max delay (in frames) to consider a causal link.
 
     Returns:
-        List[CellToCellCommunication]: All causal communications.
+        list[CellToCellCommunication]: All causal communications.
     """
-    label_to_cell: Dict[int, Cell] = {cell.label: cell for cell in cells}
-    communications: List[CellToCellCommunication] = []
+    label_to_cell: dict[int, Cell] = {cell.label: cell for cell in cells}
+    communications: list[CellToCellCommunication] = []
 
 
     for group in copeaking_groups:
@@ -116,12 +115,12 @@ def generate_cell_to_cell_communications(
 
 def _resolve_copeaking_group(
     group: CoPeakingNeighbors,
-    label_to_cell: Dict[int, Cell],
+    label_to_cell: dict[int, Cell],
     neighbor_graph: nx.Graph,
     max_time_gap: int
-) -> List[CellToCellCommunication]:
+) -> list[CellToCellCommunication]:
     """Resolve one CoPeaking group, creating communication links and tracking classified peaks."""
-    communications: List[CellToCellCommunication] = []
+    communications: list[CellToCellCommunication] = []
     external_origins = []
 
     # Check for external origins in the neighbor graph
@@ -175,21 +174,21 @@ def _resolve_copeaking_group(
 
 def _bfs_propagate_within_group(
     group: CoPeakingNeighbors,
-    label_to_cell: Dict[int, Cell],
-    start_labels: Set[Tuple[int, int]]
-) -> List[CellToCellCommunication]:
+    label_to_cell: dict[int, Cell],
+    start_labels: set[tuple[int, int]]
+) -> list[CellToCellCommunication]:
     """
     Propagate communication links within a group using BFS from one or more starting nodes.
 
     Args:
         group (CoPeakingNeighbors): Co-peaking group.
-        label_to_cell (Dict[int, Cell]): Mapping from label to Cell.
-        start_labels (Set[Tuple[int, int]]): Starting labels for BFS propagation.
+        label_to_cell (dict[int, Cell]): Mapping from label to Cell.
+        start_labels (set[tuple[int, int]]): Starting labels for BFS propagation.
 
     Returns:
-        List[CellToCellCommunication]: Communication edges inside the group.
+        list[CellToCellCommunication]: Communication edges inside the group.
     """
-    communications: List[CellToCellCommunication] = []
+    communications: list[CellToCellCommunication] = []
     start_cells = [label for label, _ in start_labels]
     visited = set(start_cells)
     queue = list(start_cells)
@@ -220,13 +219,13 @@ def _bfs_propagate_within_group(
 
 
 def _resolve_individual_peaks(
-    cells: List[Cell],
+    cells: list[Cell],
     neighbor_graph: nx.Graph,
-    label_to_cell: Dict[int, Cell],
+    label_to_cell: dict[int, Cell],
     max_time_gap: int
-) -> List[CellToCellCommunication]:
+) -> list[CellToCellCommunication]:
     """Handle communication creation for peaks not part of any group."""
-    communications: List[CellToCellCommunication] = []
+    communications: list[CellToCellCommunication] = []
 
     for cell in cells:
         for peak in cell.trace.peaks:
@@ -261,8 +260,8 @@ def _resolve_individual_peaks(
 
 
 def assign_peak_classifications(
-    cells: List[Cell],
-    communications: List[CellToCellCommunication]
+    cells: list[Cell],
+    communications: list[CellToCellCommunication]
 ) -> None:
     """
     Assign origin_type and origin_label to each peak based on communication links.
@@ -272,8 +271,8 @@ def assign_peak_classifications(
     - Else → "individual"
 
     Args:
-        cells (List[Cell]): List of cell objects containing peaks.
-        communications (List[CellToCellCommunication]): Communication links.
+        cells (list[Cell]): list of cell objects containing peaks.
+        communications (list[CellToCellCommunication]): Communication links.
     """
     caused_set = {comm.cause for comm in communications}
     origin_set = {comm.origin for comm in communications}

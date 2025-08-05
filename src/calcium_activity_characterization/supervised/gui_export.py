@@ -11,11 +11,11 @@ from PyQt5.QtCore import Qt
 from pathlib import Path
 from dataclasses import asdict
 import json
-import logging
+from calcium_activity_characterization.logger import logger
 
 from calcium_activity_characterization.core.pipeline import CalciumPipeline
 
-logger = logging.getLogger(__name__)
+
 
 class FinalExportGUI(QMainWindow):
     """

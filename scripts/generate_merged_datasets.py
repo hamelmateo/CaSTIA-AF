@@ -3,9 +3,9 @@
 from calcium_activity_characterization.config.datasets_metadata import get_all_image_sequences
 from pathlib import Path
 import pandas as pd
-import logging
+from calcium_activity_characterization.logger import logger
 
-logger = logging.getLogger(__name__)
+
 logging.basicConfig(level=logging.INFO)
 
 

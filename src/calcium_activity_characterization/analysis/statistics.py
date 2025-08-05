@@ -1,7 +1,6 @@
-from typing import List, Optional, Tuple
 import numpy as np
 
-def analyze_peak_intervals(peak_times: List[int]) -> Tuple[List[int], Optional[float], Optional[float]]:
+def analyze_peak_intervals(peak_times: list[int]) -> tuple[list[int], float | None, float | None]:
     """
     Analyze periodicity of global (or trace-level) peak times.
 
@@ -9,11 +8,11 @@ def analyze_peak_intervals(peak_times: List[int]) -> Tuple[List[int], Optional[f
     and average peak frequency (events per frame).
 
     Args:
-        peak_times (List[int]): Sorted list of peak times (in frames).
+        peak_times (list[int]): Sorted list of peak times (in frames).
 
     Returns:
-        Tuple:
-            - intervals (List[int]): List of inter-peak intervals.
+        tuple:
+            - intervals (list[int]): list of inter-peak intervals.
             - periodicity_score (Optional[float]): [0, 1] score or None if too few events.
             - average_frequency (Optional[float]): Events per frame, or None if invalid.
     """

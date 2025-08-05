@@ -1,14 +1,13 @@
-import logging
+import sys
 from pathlib import Path
 
 from PyQt5.QtWidgets import QApplication, QFileDialog, QWidget
-import sys
 
-from calcium_activity_characterization.core.pipeline import CalciumPipeline
+from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.config.presets import GLOBAL_CONFIG
+from calcium_activity_characterization.core.pipeline import CalciumPipeline
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+
 
 def find_isx_folders(folder: Path) -> list[Path]:
     """

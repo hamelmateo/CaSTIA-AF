@@ -10,18 +10,17 @@ Example:
 import re
 import numpy as np
 from pathlib import Path
-from typing import List
 import cupy as cp
 import cupyx.scipy.ndimage
 
 from calcium_activity_characterization.config.presets import ImageProcessingConfig
-from calcium_activity_characterization.utilities.loader import (
+from calcium_activity_characterization.io.images_loader import (
     load_existing_img,
     load_image_fast
 )
 
-import logging
-logger = logging.getLogger(__name__)
+from calcium_activity_characterization.logger import logger
+
 
 
 class ImageProcessor:
@@ -43,7 +42,7 @@ class ImageProcessor:
         self.roi_scale = config.roi_scale
         self.hot_cfg = config.hot_pixel_cleaning
 
-    def process_all(self, images_dir: Path, file_pattern: str) -> List[np.ndarray]:
+    def process_all(self, images_dir: Path, file_pattern: str) -> list[np.ndarray]:
         """
         Load and process all TIF images in a directory.
 
@@ -52,7 +51,7 @@ class ImageProcessor:
             file_pattern (str): Regex to identify frame number for padding.
 
         Returns:
-            List[np.ndarray]: List of cleaned, cropped images.
+            list[np.ndarray]: list of cleaned, cropped images.
         """
         if self.pipeline.padding:
             self.rename_with_padding(images_dir, file_pattern)
@@ -212,7 +211,7 @@ class ImageProcessor:
             raise ValueError(f"Unknown hot pixel cleaning method: {method}")
 
     @staticmethod
-    def _replace_hot_pixels(img: np.ndarray, threshold: float, window: int, image_name: str = "") -> np.ndarray:
+    def _replace_hot_pixels(img: np.ndarray, threshold: float, window: int, image_name: str | None = "") -> np.ndarray:
         """
         Replace hot pixels using local mean around each pixel individually.
         Much faster when very few hot pixels are present.

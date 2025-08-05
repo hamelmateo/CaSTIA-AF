@@ -8,13 +8,12 @@ import numpy as np
 from deepcell.applications import Mesmer
 from deepcell.utils.plot_utils import make_outline_overlay
 from pathlib import Path
-import logging
+from calcium_activity_characterization.logger import logger
 from dataclasses import asdict
 
-from calcium_activity_characterization.utilities.loader import save_tif_image
 from calcium_activity_characterization.config.presets import SegmentationConfig
 
-logger = logging.getLogger(__name__)
+
 
 def segmented(images: np.ndarray, config: SegmentationConfig) -> np.ndarray:
     """
