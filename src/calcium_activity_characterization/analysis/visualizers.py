@@ -6,17 +6,18 @@ import seaborn as sns
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
+from calcium_activity_characterization.logger import logger
 
 def plot_histogram_by_dataset(
     df: pd.DataFrame,
     column: str,
     title: str,
     ylabel: str = "Count",
-    bin_width: float | None = None,
-    bin_count: int | None = None,
-    n_cols: int | None = 2,
-    log_scale_datasets: list[str] | None = [],
-    horizontal_layout: bool | None = False
+    bin_width: float  = None,
+    bin_count: int  = None,
+    n_cols: int  = 2,
+    log_scale_datasets: list[str]  = [],
+    horizontal_layout: bool  = False
 ) -> None:
     """
     Plot histograms of a column per dataset, with stats annotation.
@@ -31,6 +32,9 @@ def plot_histogram_by_dataset(
         log_scale_datasets (list[str], optional): list of dataset names to plot with log scale on y-axis.
         horizontal_layout (bool, optional): If True, prioritizes horizontal layout (max 2 rows).
     """
+    if df.empty:
+        logger.warning(f"No data to plot for column '{column}'")
+        return
     datasets = sorted(df["dataset"].unique())
     n = len(datasets)
 
@@ -40,7 +44,7 @@ def plot_histogram_by_dataset(
     else:
         rows = math.ceil(n / n_cols)
 
-    fig, axs = plt.subplots(rows, n_cols, figsize=(6 * n_cols, 5 * rows))
+    fig, axs = plt.subplots(rows, n_cols, figsize=(5 * n_cols, 4 * rows))
     axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
 
     for i, dataset in enumerate(datasets):
@@ -85,7 +89,7 @@ def plot_histogram_by_dataset(
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
@@ -138,7 +142,7 @@ def visualize_image(
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
@@ -148,8 +152,8 @@ def plot_pie_chart_by_dataset(
     column: str,
     title: str = "Category Distribution",
     n_cols: int = 2,
-    value_label_formatter: callable | None = None,
-    label_prefix: str | None = None,
+    value_label_formatter: callable  = None,
+    label_prefix: str  = None,
     palette: str = "tab10"
 ) -> None:
     """
@@ -164,11 +168,15 @@ def plot_pie_chart_by_dataset(
         label_prefix (str, optional): Optional prefix for category labels.
         palette (str): Name of matplotlib colormap (default: 'tab10').
     """
+    if df.empty:
+        logger.warning(f"No data to plot for column '{column}'")
+        return
+    
     datasets = sorted(df["dataset"].unique())
     n = len(datasets)
     n_rows = math.ceil(n / n_cols)
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
 
     # Compute all unique categories once and assign consistent colors
@@ -192,19 +200,28 @@ def plot_pie_chart_by_dataset(
         ]
         pie_labels = labels if value_label_formatter is None else None
 
-        axs[i].pie(
+        wedges, texts, autotexts = axs[i].pie(
             counts,
             labels=pie_labels,
             autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
             startangle=90,
             colors=[colors[k] for k in counts.index]
         )
+
+        for autotext in autotexts:
+            autotext.set_color("black")
+            autotext.set_fontsize(8)
+
+        for text in texts:
+            text.set_fontsize(8)
+            text.set_color("black")
+
         axs[i].set_title(dataset)
 
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
@@ -214,11 +231,11 @@ def plot_bar_by_dataset(
     axis_column: str,
     value_column: str,
     title: str,
-    hue_column: str | None = None,
-    ylabel: str | None = "Count",
-    xlabel: str | None = "Dataset",
-    rotation: int | None = 45,
-    palette: str | None = "muted"
+    hue_column: str  = None,
+    ylabel: str  = "Count",
+    xlabel: str  = "Dataset",
+    rotation: int  = 45,
+    palette: str  = "muted"
 ) -> None:
     """
     Plot a bar chart of a metric aggregated per dataset.
@@ -233,7 +250,10 @@ def plot_bar_by_dataset(
         rotation (int): Rotation of x-axis labels.
         palette (str): Color palette.
     """
-    plt.figure(figsize=(10, 6))
+    if df.empty:
+        logger.warning(f"No data to plot for column '{value_column}'")
+        return
+    plt.figure(figsize=(5, 3))
     sns.barplot(data=df, x=axis_column, y=value_column, hue=hue_column, dodge=False, palette=palette, legend=False)
     plt.title(title)
     plt.xticks(rotation=rotation)
@@ -254,7 +274,7 @@ def plot_histogram_by_group(
     n_cols: int = 2,
     log_scale_datasets: list[str] = [],
     horizontal_layout: bool = False,
-    palette: str = "tab20",
+    palette: str = "muted", # tab20, Set2, Dark2, Paired, Accent, Pastel1, Pastel2, muted
     multiple: str = "dodge"
 ) -> None:
     """
@@ -272,6 +292,9 @@ def plot_histogram_by_group(
         horizontal_layout (bool, optional): Layout mode.
         palette (str): Seaborn color palette name.
     """
+    if df.empty:
+        logger.warning(f"No data to plot for column '{value_column}'")
+        return
     datasets = sorted(df["dataset"].unique())
     n = len(datasets)
 
@@ -281,7 +304,7 @@ def plot_histogram_by_group(
     else:
         rows = math.ceil(n / n_cols)
 
-    fig, axs = plt.subplots(rows, n_cols, figsize=(6 * n_cols, 5 * rows))
+    fig, axs = plt.subplots(rows, n_cols, figsize=(5 * n_cols, 4 * rows))
     axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
 
     for i, dataset in enumerate(datasets):
@@ -321,7 +344,7 @@ def plot_histogram_by_group(
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
-    fig.suptitle(title, fontsize=16)
+    fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
@@ -331,7 +354,7 @@ def plot_scatter_size_coded(
     x_col: str = "occurrences in individual events",
     y_col: str = "occurrences in sequential events",
     size_scale: float = 20,
-    figsize: tuple = (8, 6),
+    figsize: tuple = (6, 4),
 ) -> None:
     """
     Scatter plot where the marker size and color represent the count of overlapping points.
@@ -346,6 +369,10 @@ def plot_scatter_size_coded(
     Returns:
         None
     """
+    if df.empty:
+        logger.warning(f"No data to plot for column '{x_col}'")
+        return
+    
     if x_col not in df.columns or y_col not in df.columns:
         raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
     counts = df.groupby([x_col, y_col]).size().reset_index(name="count")
@@ -388,6 +415,10 @@ def plot_scatter_hexbin(
     Returns:
         None
     """
+    if df.empty:
+        logger.warning(f"No data to plot for column '{x_col}'")
+        return
+    
     if x_col not in df.columns or y_col not in df.columns:
         raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
     x = df[x_col]

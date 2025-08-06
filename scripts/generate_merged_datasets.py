@@ -5,10 +5,6 @@ from pathlib import Path
 import pandas as pd
 from calcium_activity_characterization.logger import logger
 
-
-logging.basicConfig(level=logging.INFO)
-
-
 def compile_dataset_metadata(
     image_sequences: list[dict],
     output_folder: Path
