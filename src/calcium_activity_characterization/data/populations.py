@@ -402,6 +402,59 @@ class Population:
                              for cell in self.cells}
         return global_occurences, sequential_occurences, individual_occurences, origin_occurences
         
+    def get_early_peakers_in_global_event(self, percentile: float, event_id: int) -> dict[int, int]:
+        """
+        Get a list of cells that are early peakers in a specific global event.
+
+        Args:
+            percentile (float): The percentile threshold to determine early peakers.
+            event_id (int): The ID of the global event to analyze.
+
+        Returns:
+            dict[int, int]: Mapping of cell labels to their early peaker status (1 or 0).
+        """
+        event = next((e for e in self.events if e.id == event_id), None)
+        if not event:
+            logger.warning(f"Global event {event_id} not found.")
+            return {}
+
+        first_peaking_cells = event.get_first_X_peaking_cells(percentile)
+
+        first_peaking_cells_mapping: dict[int, int] = {}
+        for cell in self.cells:
+            if cell.label in first_peaking_cells:
+                first_peaking_cells_mapping[cell.label] = 1
+            else:
+                first_peaking_cells_mapping[cell.label] = 0
+
+        return first_peaking_cells_mapping
+
+    def get_pre_event_peakers_of_global_event(self, percentile: float, event_id: int) -> dict[int, int]:
+        """
+        Get a list of cells that are pre-event peakers in a specific global event.
+
+        Args:
+            event_id (int): The ID of the global event to analyze.
+
+        Returns:
+            list[int]: List of cell labels that are considered pre-event peakers in the specified global event.
+        """
+        event = next((e for e in self.events if e.id == event_id), None)
+        if not event:
+            logger.warning(f"Global event {event_id} not found.")
+            return {}
+
+        pre_peakers_time_window = event.event_duration * percentile
+        pre_event_peakers_mapping: dict[int, int] = {}
+        
+        for cell in self.cells:
+            for peak in cell.trace.peaks:
+                if (event.event_start_time - pre_peakers_time_window) < peak.communication_time < event.event_start_time:
+                    pre_event_peakers_mapping[cell.label] = 1
+            pre_event_peakers_mapping.setdefault(cell.label, 0)
+            
+        return pre_event_peakers_mapping
+
     @staticmethod
     def build_spatial_neighbor_graph(cells: list[Cell]) -> nx.Graph:
         """

@@ -433,6 +433,31 @@ class CalciumPipeline:
         cell_connection_network = self.population.compute_cell_connection_network_graph()
         plot_cell_connection_network(cell_connection_network, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "cell_connection_network.png")
 
+        # Global events early peakers mapping
+        percent = 0.10
+        for event in self.population.events:
+            if event.__class__.__name__ == "GlobalEvent":
+                early_peakers = self.population.get_early_peakers_in_global_event(percent, event.id)
+                plot_metric_on_overlay(self.population.nuclei_mask,
+                                    cell_pixel_coords,
+                                    early_peakers,
+                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.png",
+                                    title=f"Mapping of the {percent * 100:.1f}% Early Peakers in Global Events {event.id}",
+                                    colorbar_label="Early Peakers in Global Events"
+                                    )
+                
+        # Global events pre-event peakers mapping
+        percent = 0.10
+        for event in self.population.events:
+            if event.__class__.__name__ == "GlobalEvent":
+                pre_event_peakers = self.population.get_pre_event_peakers_of_global_event(percent, event.id)
+                plot_metric_on_overlay(self.population.nuclei_mask,
+                                    cell_pixel_coords,
+                                    pre_event_peakers,
+                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_pre_event_peakers_overlay.png",
+                                    title=f"Mapping of Pre-Event Peakers in Global Events {event.id}",
+                                    colorbar_label="Pre-Event Peakers in Global Events"
+                                    )
 
     def _export_normalized_datasets(self) -> None:
         """

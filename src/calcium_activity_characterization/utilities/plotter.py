@@ -538,7 +538,11 @@ def plot_metric_on_overlay(
         output_path (Path): File path to save the plot.
         cmap (str): Matplotlib colormap to use.
     """
+    segmentation_mask = nuclei_mask > 0
     overlay = np.zeros_like(nuclei_mask, dtype=np.float32)
+
+    mask = np.zeros_like(nuclei_mask, dtype=bool)
+    mask[segmentation_mask] = 500
 
     max_count = max(metric_counts.values()) if metric_counts else 1
 
@@ -550,7 +554,7 @@ def plot_metric_on_overlay(
             overlay[y, x] = norm_value
 
     plt.figure(figsize=(10, 10))
-    plt.imshow(nuclei_mask, cmap="gray", alpha=0.6)
+    plt.imshow(mask, cmap="gray", alpha=0.6)
     im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=0, vmax=max_count)
     cbar = plt.colorbar(im, fraction=0.046, pad=0.04, aspect=20, shrink=0.8)
     cbar.set_label(colorbar_label)

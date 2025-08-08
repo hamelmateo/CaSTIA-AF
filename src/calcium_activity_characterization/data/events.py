@@ -108,6 +108,34 @@ class Event(ABC):
         except Exception as e:
             logger.error(f"[Event {self.id}] Failed to compute growth curve: {e}")
             return Distribution.from_values([])    
+        
+    def get_first_X_peaking_cells(self, percentile: float) -> list[int]:
+        """
+        Get the first X% peaking cell labels based on the event's framewise peaking labels.
+
+        Args:
+            percentile (float): Percentile of peaking cells to return (e.g., 0.1 for top 10%).
+
+        Returns:
+            list[int]: List of the first X peaking cell labels.
+        """
+        if not self.framewise_peaking_labels:
+            return []
+
+        share_of_cells = int(self.n_cells_involved * percentile)
+
+        seen: set[int] = set()
+        ordered_first: list[int] = []
+
+        # Iterate frames in chronological order; within-frame order is preserved as given
+        for t in sorted(self.framewise_peaking_labels.keys()):
+            labels = self.framewise_peaking_labels.get(t, [])
+            for lbl in labels:
+                if lbl not in seen:
+                    seen.add(lbl)
+                    ordered_first.append(lbl)
+                    if len(ordered_first) >= share_of_cells:
+                        return ordered_first
 
     @abstractmethod
     def _compute_dominant_direction_vector(self) -> tuple[float, float]:
