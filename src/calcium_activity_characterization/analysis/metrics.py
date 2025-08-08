@@ -2,6 +2,7 @@ import numpy as np
 from calcium_activity_characterization.logger import logger
 from typing import Literal
 import matplotlib.pyplot as plt
+import pandas as pd
 
 
 
@@ -267,3 +268,36 @@ def compute_peak_frequency_over_time(
     except Exception as e:
         logger.error(f"Failed to compute peak frequency evolution: {e}")
         return []
+    
+
+def detect_asymmetric_iqr_outliers(
+    df: pd.DataFrame = None,
+    column: str = None,
+    k_lower: float = 1.5,
+    k_upper: float = 3.0
+) -> tuple[pd.DataFrame, pd.DataFrame, float, float]:
+    """
+    Detect outliers using asymmetric IQR fences.
+
+    Args:
+        df (pd.DataFrame): DataFrame to analyze.
+        column (str): Column name to check for outliers.
+        k_lower (float): Multiplier for lower bound (default 1.5).
+        k_upper (float): Multiplier for upper bound (default 3.0).
+        return_rows (bool): If True, return full rows for outliers (requires df).
+
+    Returns:
+        tuple: (inliers, outliers, lower_bound, upper_bound)
+    """
+    data = df[column]
+    q1 = data.quantile(0.25)
+    q3 = data.quantile(0.75)
+    iqr = q3 - q1
+
+    lower_bound = q1 - k_lower * iqr
+    upper_bound = q3 + k_upper * iqr
+
+    df_outliers = df[(df[column] < lower_bound) | (df[column] > upper_bound)]
+    df_inliers = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+
+    return df_inliers, df_outliers, lower_bound, upper_bound

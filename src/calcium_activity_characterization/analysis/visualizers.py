@@ -6,7 +6,9 @@ import seaborn as sns
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
+from typing import Optional
 from calcium_activity_characterization.logger import logger
+from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
 
 def plot_histogram_by_dataset(
     df: pd.DataFrame,
@@ -17,8 +19,13 @@ def plot_histogram_by_dataset(
     bin_count: int  = None,
     n_cols: int  = 2,
     log_scale_datasets: list[str]  = [],
-    horizontal_layout: bool  = False
-) -> None:
+    horizontal_layout: bool  = False,
+    x_axis_boundaries: tuple[float, float] = None,
+    y_axis_boundaries: tuple[float, float] = None,
+    filter_outliers: bool = False,
+    outliers_bounds: Optional[tuple[float, float]] = None,
+    return_outliers: bool = False
+) -> Optional[pd.DataFrame]:
     """
     Plot histograms of a column per dataset, with stats annotation.
 
@@ -31,6 +38,14 @@ def plot_histogram_by_dataset(
         n_cols (int, optional): Number of columns in the subplot grid (default: 3).
         log_scale_datasets (list[str], optional): list of dataset names to plot with log scale on y-axis.
         horizontal_layout (bool, optional): If True, prioritizes horizontal layout (max 2 rows).
+        x_axis_boundaries (tuple[float, float], optional): Boundaries for x-axis (min, max).
+        y_axis_boundaries (tuple[float, float], optional): Boundaries for y-axis (min, max).
+        filter_outliers (bool, optional): If True, outliers are removed from the data before plotting.
+        outliers_bounds (tuple[float, float], optional): Bounds for detecting outliers (lower, upper).
+        return_outliers (bool, optional): If True, the function returns a DataFrame of the removed outliers.
+
+    Returns:
+        Optional[pd.DataFrame]: DataFrame of removed outliers if return_outliers is True, else None.
     """
     if df.empty:
         logger.warning(f"No data to plot for column '{column}'")
@@ -47,8 +62,20 @@ def plot_histogram_by_dataset(
     fig, axs = plt.subplots(rows, n_cols, figsize=(5 * n_cols, 4 * rows))
     axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
 
+    removed_outliers_frames: pd.DataFrame = pd.DataFrame()
+
     for i, dataset in enumerate(datasets):
         subset = df[df["dataset"] == dataset]
+        
+        if filter_outliers:
+            subset, outliers, lower_bound, upper_bound = detect_asymmetric_iqr_outliers(subset, 
+                                                                                         column, 
+                                                                                         outliers_bounds[0], 
+                                                                                         outliers_bounds[1])
+            removed_outliers_frames = pd.concat([removed_outliers_frames, outliers], axis=0)
+            logger.info(f"Removed {len(outliers)} outliers from dataset '{dataset}' for column '{column}'")
+            logger.info(f"Lower bound: {lower_bound}, Upper bound: {upper_bound}")
+
         clean = subset[column].dropna()
 
         if clean.empty:
@@ -86,6 +113,15 @@ def plot_histogram_by_dataset(
             bbox=dict(facecolor="white", alpha=0.8, boxstyle="round")
         )
 
+        if x_axis_boundaries is not None:
+            # x_axis_boundaries should be like (min_value, max_value)
+            axs[i].set_xlim(x_axis_boundaries[0], x_axis_boundaries[1])
+
+        if y_axis_boundaries is not None:
+            # y_axis_boundaries should be like (min_value, max_value)
+            axs[i].set_ylim(y_axis_boundaries[0], y_axis_boundaries[1])
+
+
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
@@ -93,6 +129,10 @@ def plot_histogram_by_dataset(
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
 
+    if return_outliers:
+        if not removed_outliers_frames.empty:
+            logger.info(f"Returning removed outliers DataFrame with {len(removed_outliers_frames)} entries.")
+            return removed_outliers_frames
 
 def visualize_image(
     dataset_paths: dict[str, str],
@@ -275,8 +315,13 @@ def plot_histogram_by_group(
     log_scale_datasets: list[str] = [],
     horizontal_layout: bool = False,
     palette: str = "muted", # tab20, Set2, Dark2, Paired, Accent, Pastel1, Pastel2, muted
-    multiple: str = "dodge"
-) -> None:
+    multiple: str = "dodge",
+    x_axis_boundaries: tuple[float, float] = None,
+    y_axis_boundaries: tuple[float, float] = None,
+    filter_outliers: bool = False,
+    outliers_bounds: Optional[tuple[float, float]] = None,
+    return_outliers: bool = False
+) -> Optional[pd.DataFrame]:
     """
     Plot histograms of a numeric column per dataset, colored by group.
 
@@ -291,6 +336,15 @@ def plot_histogram_by_group(
         log_scale_datasets (list[str], optional): Datasets to use log scale for y-axis.
         horizontal_layout (bool, optional): Layout mode.
         palette (str): Seaborn color palette name.
+        multiple (str): How to handle multiple observations per bin (e.g., 'dodge', 'stack').
+        x_axis_boundaries (tuple[float, float], optional): X-axis boundaries (min, max).
+        y_axis_boundaries (tuple[float, float], optional): Y-axis boundaries (min, max).
+        filter_outliers (bool, optional): Whether to filter out outliers.
+        outliers_bounds (tuple[float, float], optional): Outliers bounds (lower, upper).
+        return_outliers (bool, optional): Whether to return the outliers DataFrame.
+
+    Returns:
+        Optional[pd.DataFrame]: DataFrame containing outliers if return_outliers is True, else None.
     """
     if df.empty:
         logger.warning(f"No data to plot for column '{value_column}'")
@@ -307,8 +361,21 @@ def plot_histogram_by_group(
     fig, axs = plt.subplots(rows, n_cols, figsize=(5 * n_cols, 4 * rows))
     axs = axs.flatten() if isinstance(axs, np.ndarray) else [axs]
 
+    removed_outliers_frames: pd.DataFrame = pd.DataFrame()
+
     for i, dataset in enumerate(datasets):
         subset = df[df["dataset"] == dataset]
+
+        if filter_outliers:
+            subset, outliers, lower_bound, upper_bound = detect_asymmetric_iqr_outliers(subset, 
+                                                                                         value_column, 
+                                                                                         outliers_bounds[0], 
+                                                                                         outliers_bounds[1])
+            removed_outliers_frames = pd.concat([removed_outliers_frames, outliers], axis=0)
+            logger.info(f"Removed {len(outliers)} outliers from dataset '{dataset}' for column '{value_column}'")
+            logger.info(f"Lower bound: {lower_bound:.1f}, Upper bound: {upper_bound:.1f}")
+
+
         clean = subset[[value_column, group_column]].dropna()
 
         if clean.empty:
@@ -341,12 +408,25 @@ def plot_histogram_by_group(
         if dataset in log_scale_datasets:
             axs[i].set_yscale("log")
 
+        if x_axis_boundaries is not None:
+            # x_axis_boundaries should be like (min_value, max_value)
+            axs[i].set_xlim(x_axis_boundaries[0], x_axis_boundaries[1])
+
+        if y_axis_boundaries is not None:
+            # y_axis_boundaries should be like (min_value, max_value)
+            axs[i].set_ylim(y_axis_boundaries[0], y_axis_boundaries[1])
+
     for j in range(len(datasets), len(axs)):
         axs[j].axis("off")
 
     fig.suptitle(title, fontsize=12)
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
+
+    if return_outliers:
+        if not removed_outliers_frames.empty:
+            logger.info(f"Returning removed outliers DataFrame with {len(removed_outliers_frames)} entries.")
+            return removed_outliers_frames
 
 
 def plot_scatter_size_coded(

@@ -263,6 +263,6 @@ class ImageProcessor:
         """
         stride = 4
         sampled = img[::stride, ::stride]
-        base = np.percentile(sampled, 99.9)
+        base = np.percentile(sampled, percentile)
         mad = np.median(np.abs(img - base))
         return base + scale * mad

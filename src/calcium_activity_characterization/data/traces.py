@@ -239,12 +239,6 @@ class Trace:
         if amplitudes:
             self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_count=20)
 
-        if durations:
-            self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_width=10)
-
-        if symmetry_scores:
-            self.metadata["histogram_peak_amplitude"] = compute_histogram_func(amplitudes, bin_count=20)
-
         # Peak frequency over time
         window_size = 200
         step_size = 50

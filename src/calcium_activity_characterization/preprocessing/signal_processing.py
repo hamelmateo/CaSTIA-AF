@@ -97,11 +97,11 @@ class SignalProcessor:
             np.ndarray: Detrended trace.
         """
         if self.detrending_mode in {"butterworth", "fir", "wavelet"}:
-            return self._detrend_filter_based(trace), {}
+            return self._detrend_filter_based(trace)
         elif self.detrending_mode in {"movingaverage", "polynomial", "robustpoly", "exponentialfit", "savgol"}:
-            return self._detrend_baseline_subtraction(trace), {}
+            return self._detrend_baseline_subtraction(trace)
         elif self.detrending_mode == "doublecurvefitting":
-            return self._detrend_double_curve_fitting(trace), {}
+            return self._detrend_double_curve_fitting(trace)
         elif self.detrending_mode == "localminima":
             return self._detrend_local_minima(trace)
         else:
