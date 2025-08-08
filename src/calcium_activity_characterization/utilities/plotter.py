@@ -526,7 +526,10 @@ def plot_metric_on_overlay(
     output_path: Path,
     title: str = "Mapping of Cell Metric",
     colorbar_label: str = "Metric Count",
-    cmap: str = "Reds"
+    cmap: str = "Reds",
+    vmin: float = None,
+    vmax: float = None,
+    show_colorbar: bool = True
 ) -> None:
     """
     Plot the nuclei overlay colored by origin count per cell.
@@ -537,14 +540,18 @@ def plot_metric_on_overlay(
         metric_counts (dict[int, int]): Mapping from cell label to number of origin events.
         output_path (Path): File path to save the plot.
         cmap (str): Matplotlib colormap to use.
+        vmin (float | None): Minimum value for colormap normalization.
+        vmax (float | None): Maximum value for colormap normalization.
+        show_colorbar (bool): Whether to display the colorbar.
     """
     segmentation_mask = nuclei_mask > 0
     overlay = np.zeros_like(nuclei_mask, dtype=np.float32)
 
-    mask = np.zeros_like(nuclei_mask, dtype=bool)
-    mask[segmentation_mask] = 500
+    mask = segmentation_mask.astype(bool)
 
-    max_count = max(metric_counts.values()) if metric_counts else 1
+    auto_max = max(metric_counts.values()) if metric_counts else 1
+    vmin_plot = 0.0 if vmin is None else float(vmin)
+    vmax_plot = float(auto_max) if vmax is None else float(vmax)
 
     for label, coords in cell_pixel_coords.items():
         count = metric_counts.get(label, 0)
@@ -555,9 +562,12 @@ def plot_metric_on_overlay(
 
     plt.figure(figsize=(10, 10))
     plt.imshow(mask, cmap="gray", alpha=0.6)
-    im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=0, vmax=max_count)
-    cbar = plt.colorbar(im, fraction=0.046, pad=0.04, aspect=20, shrink=0.8)
-    cbar.set_label(colorbar_label)
+    im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=vmin_plot, vmax=vmax_plot)
+
+    if show_colorbar:
+        cbar = plt.colorbar(im, fraction=0.046, pad=0.04, aspect=20, shrink=0.8)
+        cbar.set_label(colorbar_label)
+        
     plt.title(title)
     plt.axis("off")
     output_path.parent.mkdir(parents=True, exist_ok=True)

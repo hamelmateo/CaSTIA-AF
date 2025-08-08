@@ -9,6 +9,7 @@ Example:
 import random
 import numpy as np
 from pathlib import Path
+from collections import Counter
 from skimage.segmentation import find_boundaries
 
 from calcium_activity_characterization.logger import logger
@@ -297,8 +298,8 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        #if self.processed_traces_path.exists():
-        if False:  # Disable reloading for debugging purposes
+        if self.processed_traces_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.processed_traces_path)
             return
 
@@ -327,8 +328,8 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        #if self.binary_traces_path.exists():
-        if False:  # Disable reloading for debugging purposes
+        if self.binary_traces_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.binary_traces_path)
             return
         
@@ -366,8 +367,8 @@ class CalciumPipeline:
         Detect events from the population traces and save them.
         This method is a placeholder for future event detection logic.
         """
-        #if self.events_path.exists():
-        if False:  # Disable reloading for debugging purposes
+        if self.events_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.events_path)
             return
 
@@ -435,6 +436,7 @@ class CalciumPipeline:
 
         # Global events early peakers mapping
         percent = 0.10
+        overlap_early_peakers = Counter()
         for event in self.population.events:
             if event.__class__.__name__ == "GlobalEvent":
                 early_peakers = self.population.get_early_peakers_in_global_event(percent, event.id)
@@ -443,11 +445,24 @@ class CalciumPipeline:
                                     early_peakers,
                                     self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.png",
                                     title=f"Mapping of the {percent * 100:.1f}% Early Peakers in Global Events {event.id}",
-                                    colorbar_label="Early Peakers in Global Events"
+                                    colorbar_label="Early Peakers in Global Events",
+                                    show_colorbar=False
                                     )
-                
+                overlap_early_peakers.update(early_peakers)
+        
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               overlap_early_peakers,
+                               self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_early_peakers_overlay.png",
+                               title=f"Mapping of Overlapping Early Peakers in Global Events",
+                               colorbar_label="Overlapping Early Peakers in Global Events",
+                               vmin=0,
+                               vmax=len([event for event in self.population.events if event.__class__.__name__ == "GlobalEvent"])
+                               )
+
         # Global events pre-event peakers mapping
         percent = 0.10
+        overlap_pre_event_peakers = Counter()
         for event in self.population.events:
             if event.__class__.__name__ == "GlobalEvent":
                 pre_event_peakers = self.population.get_pre_event_peakers_of_global_event(percent, event.id)
@@ -456,8 +471,31 @@ class CalciumPipeline:
                                     pre_event_peakers,
                                     self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_pre_event_peakers_overlay.png",
                                     title=f"Mapping of Pre-Event Peakers in Global Events {event.id}",
-                                    colorbar_label="Pre-Event Peakers in Global Events"
+                                    colorbar_label="Pre-Event Peakers in Global Events",
+                                    show_colorbar=False
                                     )
+                overlap_pre_event_peakers.update(pre_event_peakers)
+        
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                                cell_pixel_coords,
+                                overlap_pre_event_peakers,
+                                self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_pre_event_peakers_overlay.png",
+                                title=f"Mapping of Overlapping Pre-Event Peakers in Global Events",
+                                colorbar_label="Overlapping Pre-Event Peakers in Global Events",
+                                vmin=0,
+                                vmax=len([event for event in self.population.events if event.__class__.__name__ == "GlobalEvent"])
+                                )
+
+        # Analyze multi-modal distribution in cell-cell communications speed
+        speed_threshold = 45 # px/frame ~ 15 um/s
+        high_speed_cells = self.population.map_high_cell_communication_speed(speed_threshold)
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               high_speed_cells,
+                               self.output_dir / "cell-mapping" / "high_speed_cells_overlay.png",
+                               title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame",
+                               colorbar_label="High Speed Cells"
+                               )
 
     def _export_normalized_datasets(self) -> None:
         """

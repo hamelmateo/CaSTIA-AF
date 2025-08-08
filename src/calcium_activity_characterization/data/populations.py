@@ -51,7 +51,7 @@ class Population:
         self.cells: list[Cell] = cells
         self.neighbor_graph: nx.Graph = neighbor_graph
         self.copeaking_neighbors: list[CoPeakingNeighbors] = None
-        self.cell_to_cell_communication: list[CellToCellCommunication] = None
+        self.cell_to_cell_communications: list[CellToCellCommunication] = None
         self.events: list[Event] = []
         self.activity_trace: Trace | None = None # Sum of raster plot traces over time
 
@@ -454,6 +454,22 @@ class Population:
             pre_event_peakers_mapping.setdefault(cell.label, 0)
             
         return pre_event_peakers_mapping
+
+    def map_high_cell_communication_speed(self, speed_threshold: float = 15) -> dict[int, int]:
+        """
+        Map high cell-cell communication speeds within the population.
+        """
+        high_speed_cells: dict[int, int] = {}
+
+        for communication in self.cell_to_cell_communications:
+            if communication.speed > speed_threshold:
+                high_speed_cells[communication.origin[0]] = high_speed_cells.get(communication.origin[0], 0) + 1
+                high_speed_cells[communication.cause[0]] = high_speed_cells.get(communication.cause[0], 0) + 1
+
+        for cell in self.cells:
+            high_speed_cells.setdefault(cell.label, 0)
+
+        return high_speed_cells
 
     @staticmethod
     def build_spatial_neighbor_graph(cells: list[Cell]) -> nx.Graph:
