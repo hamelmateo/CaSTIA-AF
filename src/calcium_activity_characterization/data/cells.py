@@ -92,7 +92,7 @@ class Cell:
         self.occurences_global_events = len(unique_event_ids)
         return self.occurences_global_events
 
-    def count_occurences_sequential_events(self) -> int:
+    def count_occurences_sequential_events(self) -> tuple[int, int]:
         """
         Count the number of unique sequential events this cell is involved in.
 

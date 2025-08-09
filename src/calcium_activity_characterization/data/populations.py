@@ -402,6 +402,27 @@ class Population:
                              for cell in self.cells}
         return global_occurences, sequential_occurences, individual_occurences, origin_occurences
         
+    def filter_large_sequential_events(self, min_cells: int = 3) -> dict[int, int]:
+        """
+        Filter sequential events to retain only those involving a minimum number of cells.
+
+        Args:
+            min_cells (int): Minimum number of cells required to keep a sequential event.
+
+        Returns:
+            dict[int, int]: Mapping from event ID to the number of cells involved.
+        """
+        large_seq_occurences: dict[int, int] = {}
+        for event in self.events:
+            if event.__class__.__name__ == "SequentialEvent" and event.n_cells_involved >= min_cells:
+                for cell_label, _ in event.peaks_involved:
+                    large_seq_occurences[cell_label] = large_seq_occurences.get(cell_label, 0) + 1
+
+        for cell in self.cells:
+            large_seq_occurences.setdefault(cell.label, 0)
+
+        return large_seq_occurences
+
     def get_early_peakers_in_global_event(self, percentile: float, event_id: int) -> dict[int, int]:
         """
         Get a list of cells that are early peakers in a specific global event.
@@ -455,21 +476,35 @@ class Population:
             
         return pre_event_peakers_mapping
 
-    def map_high_cell_communication_speed(self, speed_threshold: float = 15) -> dict[int, int]:
+    def map_high_cell_communication_speed(self, speed_threshold: float = 15) -> tuple[dict[int, int], dict[int, int]]:
         """
         Map high cell-cell communication speeds within the population.
+
+        Args:
+            speed_threshold (float): The speed threshold to identify high-speed communications.
+
+        Returns:
+            tuple[dict[int, int], dict[int, int]]: Two dictionaries mapping cell labels to their high-speed communication counts.
         """
+        high_speed_cells_all_comms: dict[int, int] = {}
         high_speed_cells: dict[int, int] = {}
 
-        for communication in self.cell_to_cell_communications:
-            if communication.speed > speed_threshold:
-                high_speed_cells[communication.origin[0]] = high_speed_cells.get(communication.origin[0], 0) + 1
-                high_speed_cells[communication.cause[0]] = high_speed_cells.get(communication.cause[0], 0) + 1
+        for event in self.events:
+            if event.__class__.__name__ != "SequentialEvent":
+                continue
+            for communication in event.communications:
+                if communication.speed > speed_threshold:
+                    high_speed_cells_all_comms[communication.origin[0]] = high_speed_cells_all_comms.get(communication.origin[0], 0) + 1
+                    high_speed_cells_all_comms[communication.cause[0]] = high_speed_cells_all_comms.get(communication.cause[0], 0) + 1
+                    if event.n_cells_involved > 2:
+                        high_speed_cells[communication.origin[0]] = high_speed_cells.get(communication.origin[0], 0) + 1
+                        high_speed_cells[communication.cause[0]] = high_speed_cells.get(communication.cause[0], 0) + 1
 
-        for cell in self.cells:
-            high_speed_cells.setdefault(cell.label, 0)
+            for cell in self.cells:
+                high_speed_cells_all_comms.setdefault(cell.label, 0)
+                high_speed_cells.setdefault(cell.label, 0)
 
-        return high_speed_cells
+        return high_speed_cells_all_comms, high_speed_cells
 
     @staticmethod
     def build_spatial_neighbor_graph(cells: list[Cell]) -> nx.Graph:

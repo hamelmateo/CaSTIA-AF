@@ -430,6 +430,15 @@ class CalciumPipeline:
                                colorbar_label="Occurences as Origin in Sequential Events"
                                )
 
+        large_seq_counts = self.population.filter_large_sequential_events(min_cells=3)
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               large_seq_counts,
+                               self.output_dir / "cell-mapping" / "cell_occurences_in_large_sequential_events_overlay.png",
+                               title="Mapping of Cell Occurences in Large Sequential Events",
+                               colorbar_label="Occurences in Large Sequential Events"
+                               )
+
         # Analyze cell cell interaction
         cell_connection_network = self.population.compute_cell_connection_network_graph()
         plot_cell_connection_network(cell_connection_network, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "cell_connection_network.png")
@@ -488,12 +497,19 @@ class CalciumPipeline:
 
         # Analyze multi-modal distribution in cell-cell communications speed
         speed_threshold = 45 # px/frame ~ 15 um/s
-        high_speed_cells = self.population.map_high_cell_communication_speed(speed_threshold)
+        high_speed_cells_all_comms, high_speed_cells = self.population.map_high_cell_communication_speed(speed_threshold)
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               high_speed_cells_all_comms,
+                               self.output_dir / "cell-mapping" / "high_speed_cells_overlay.png",
+                               title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame",
+                               colorbar_label="High Speed Cells"
+                               )
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_cells,
-                               self.output_dir / "cell-mapping" / "high_speed_cells_overlay.png",
-                               title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame",
+                               self.output_dir / "cell-mapping" / "high_speed_cells_in_large_events_overlay.png",
+                               title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame in large events",
                                colorbar_label="High Speed Cells"
                                )
 
