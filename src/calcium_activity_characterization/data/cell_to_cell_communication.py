@@ -53,6 +53,9 @@ class CellToCellCommunication:
         self.distance: float = euclidean(origin_centroid, cause_centroid)
         self.speed: float = self.compute_speed()
 
+        self.event_time_phase: float = None  # Placeholder for event time phase, if needed
+        self.event_recruitment_phase: float = None  # Placeholder for recruitment phase, if needed
+
     def compute_speed(self) -> float:
         """Compute speed of communication in units per frame."""
         if self.duration > 0:

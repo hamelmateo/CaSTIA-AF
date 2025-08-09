@@ -298,8 +298,8 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if self.processed_traces_path.exists():
-        #if False:  # Disable reloading for debugging purposes
+        #if self.processed_traces_path.exists():
+        if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.processed_traces_path)
             return
 
@@ -328,8 +328,8 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        if self.binary_traces_path.exists():
-        #if False:  # Disable reloading for debugging purposes
+        #if self.binary_traces_path.exists():
+        if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.binary_traces_path)
             return
         
@@ -367,8 +367,8 @@ class CalciumPipeline:
         Detect events from the population traces and save them.
         This method is a placeholder for future event detection logic.
         """
-        if self.events_path.exists():
-        #if False:  # Disable reloading for debugging purposes
+        #if self.events_path.exists():
+        if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.events_path)
             return
 

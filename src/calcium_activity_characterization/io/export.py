@@ -185,8 +185,8 @@ class NormalizedDataExporter:
         path = self.output_dir / "communications.csv"
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
-                "Communication ID", "Event ID", "Origin Cell ID", "Cause Cell ID", "Start Time (s)", "End Time (s)",
-                "Duration (s)", "Distance (um)", "Speed (um/s)"
+                "Communication ID", "Event ID", "Origin cell ID", "Cause cell ID", "Start time (s)", "End time (s)",
+                "Duration (s)", "Distance (um)", "Speed (um/s)", "Event time phase (fraction of event duration)", "Event recruitment phase (fraction of involved cells)"
             ])
             writer.writeheader()
             for event in tqdm(self.population.events, desc="Exporting communications", unit="communication"):
@@ -195,13 +195,15 @@ class NormalizedDataExporter:
                         writer.writerow({
                             "Communication ID": int(comm.id),
                             "Event ID": int(event.id),
-                            "Origin Cell ID": int(comm.origin[0]),
-                            "Cause Cell ID": int(comm.cause[0]),
-                            "Start Time (s)": format(comm.origin_start_time/self.frame_rate, '.1f'),
-                            "End Time (s)": format(comm.cause_start_time/self.frame_rate, '.1f'),
+                            "Origin cell ID": int(comm.origin[0]),
+                            "Cause cell ID": int(comm.cause[0]),
+                            "Start time (s)": format(comm.origin_start_time/self.frame_rate, '.1f'),
+                            "End time (s)": format(comm.cause_start_time/self.frame_rate, '.1f'),
                             "Duration (s)": format((comm.duration)/self.frame_rate, '.1f'),
                             "Distance (um)": format(comm.distance * self.pixel_to_micron_x, '.2f'),
-                            "Speed (um/s)": format(comm.speed * self.pixel_per_frame_to_micron_per_second, '.2f')
+                            "Speed (um/s)": format(comm.speed * self.pixel_per_frame_to_micron_per_second, '.2f'),
+                            "Event time phase (fraction of event duration)": format(comm.event_time_phase, '.2f') if comm.event_time_phase is not None else None,
+                            "Event recruitment phase (fraction of involved cells)": format(comm.event_recruitment_phase, '.2f') if comm.event_recruitment_phase is not None else None
                         })
 
 def save_tif_image(image: np.ndarray, file_path: str, photometric: str = "minisblack", imagej: bool = True) -> None:

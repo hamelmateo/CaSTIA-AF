@@ -179,6 +179,9 @@ class SequentialEvent(Event):
 
         super().__init__(id, peak_indices, label_to_centroid, self._compute_framewise_peaking_labels())
 
+        if self.n_cells_involved > 2:
+            self._compute_communications_phases_in_event()
+
         self.dominant_direction_vector = self._compute_dominant_direction_vector()
         self.directional_propagation_speed = self._compute_directional_propagation_speed()
 
@@ -289,6 +292,66 @@ class SequentialEvent(Event):
             logger.error(f"[Event {self.id}] Failed to compute DAG metrics: {e}")
             return {}
 
+    def _compute_communications_phases_in_event(self) -> None:
+        """
+        Compute normalized temporal phases for each communication in this event.
+        Populates event_phi_time and event_phi_recruit in CellCellCommunication objects.
+        """
+        try:
+            times = [comm.cause_start_time for comm in self.communications if comm.cause_start_time is not None]
+            if not times:
+                logger.warning(f"[Event {self.id}] No valid cause_start_time values; cannot compute phases.")
+                return
+            t_start, t_end = min(times), max(times)
+
+            # Recruitment times per cell (derived from framewise peaking labels)
+            recruitment_times = self.first_peak_time_by_label()
+            sorted_recruitment = sorted(recruitment_times.items(), key=lambda x: x[1])
+            total_cells = len(sorted_recruitment)
+
+            for comm in self.communications:
+                if comm.cause_start_time is None:
+                    continue
+
+                # φ_time
+                if t_end > t_start:
+                    comm.event_time_phase = (comm.cause_start_time - t_start) / (t_end - t_start)
+                else:
+                    comm.event_time_phase = 0.0
+                    logger.warning(f"[Event {self.id}] Zero duration (t_start == t_end); set event_time_phase to 0.0")
+
+                # φ_recruit
+                recruited_cells = [cid for cid, rt in sorted_recruitment if rt <= comm.cause_start_time]
+                comm.event_recruitment_phase = len(recruited_cells) / total_cells if total_cells > 0 else 0.0
+
+        except Exception as e:
+            logger.error(f"[Event {self.id}] Error computing event phases: {e}")
+
+    def first_peak_time_by_label(self) -> dict[int, int]:
+        """
+        Compute the first activation (peak) frame per cell label from framewise peaking labels.
+
+        Returns:
+            dict[int, int]: Mapping {cell_label: first_frame_it_peaked}.
+
+        Notes:
+            - Within-frame order is preserved as given in framewise_peaking_labels,
+            but this function only records the first frame, not the within-frame index.
+        """
+        try:
+            first_times: dict[int, int] = {}
+            if not self.framewise_peaking_labels:
+                return first_times
+
+            for t in sorted(self.framewise_peaking_labels.keys()):
+                for label in self.framewise_peaking_labels.get(t, []):
+                    # Record only the first time a label appears
+                    if label not in first_times:
+                        first_times[label] = t
+            return first_times
+        except Exception as e:
+            logger.error(f"[Event {self.id}] Failed to compute first peak times per label: {e}")
+            return {}
 
     def _communication_time_distribution(self) -> Distribution:
         """
