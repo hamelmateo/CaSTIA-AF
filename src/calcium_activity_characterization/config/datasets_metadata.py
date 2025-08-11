@@ -737,4 +737,65 @@ def get_all_image_sequences() -> list[dict]:
             "concentration": "10uM",
             "time": "+1800s"
         },
-]
+        # 20250810 datasets - light experiments
+        {
+            "path": "D:/Mateo/20250810/Output/IS1",
+            "date": "20250810",
+            "image_sequence": "IS1",
+            "experiment_type": "spontaneous",
+            "condition": "control - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": None
+        },
+        {
+            "path": "D:/Mateo/20250810/Output/IS2",
+            "date": "20250810",
+            "image_sequence": "IS2",
+            "experiment_type": "spontaneous",
+            "condition": "control - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": None
+        },
+        {
+            "path": "D:/Mateo/20250810/Output/IS3",
+            "date": "20250810",
+            "image_sequence": "IS3",
+            "experiment_type": "stimulated",
+            "condition": "light - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": 300
+        },
+        {
+            "path": "D:/Mateo/20250810/Output/IS4",
+            "date": "20250810",
+            "image_sequence": "IS4",
+            "experiment_type": "stimulated",
+            "condition": "light - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": 300
+        },
+        {
+            "path": "D:/Mateo/20250810/Output/IS5",
+            "date": "20250810",
+            "image_sequence": "IS5",
+            "experiment_type": "stimulated",
+            "condition": "light - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": 600
+        },
+        {
+            "path": "D:/Mateo/20250810/Output/IS6",
+            "date": "20250810",
+            "image_sequence": "IS6",
+            "experiment_type": "stimulated",
+            "condition": "light - 1st run",
+            "confluency": 1200000,
+            "concentration": None,
+            "time": 600
+        }
+    ]

@@ -54,16 +54,16 @@ def plot_histogram(
     try:
         if df is None or df.empty:
             logger.warning(f"No data to plot for column '{column}' — DataFrame is empty.")
-            raise ValueError("Input DataFrame is empty.")
+            return None
 
         if column not in df.columns:
             logger.error(f"Column '{column}' not found in DataFrame columns: {list(df.columns)}")
-            raise KeyError(f"Column '{column}' not found in DataFrame.")
+            return None
 
         data = df[column].dropna()
         if data.empty:
             logger.warning(f"Column '{column}' has no valid values (all NaN after dropna()).")
-            raise ValueError(f"Column '{column}' has no valid values.")
+            return None
 
         removed_outliers_frames: pd.DataFrame = pd.DataFrame()
 
@@ -170,7 +170,7 @@ def plot_histogram(
     except Exception as e:
         # Top-level safety net — we log and re-raise to aid debugging upstream
         logger.exception("plot_histogram failed: %s", e)
-        raise
+        return None
 
 def visualize_image(
     image_source: dict[str, str],
@@ -204,11 +204,11 @@ def visualize_image(
             img = imread(img_path)
         except Exception as e:
             logger.exception("Failed to read image '%s': %s", img_path, e)
-            raise ValueError(f"Could not read image at '{img_path}'") from e
+            return None
 
         if img is None or (hasattr(img, "size") and getattr(img, "size", 0) == 0):
             logger.error("Loaded image is empty: '%s'", img_path)
-            raise ValueError(f"Loaded image is empty: '{img_path}'")
+            return None
 
         fig, ax = plt.subplots(figsize=figsize)
         ax.imshow(img, aspect="auto")
@@ -221,7 +221,7 @@ def visualize_image(
 
     except Exception as e:
         logger.exception("visualize_image failed: %s", e)
-        raise
+        return None
 
 
 def plot_pie_chart(
@@ -258,15 +258,15 @@ def plot_pie_chart(
     try:
         if df is None or df.empty:
             logger.warning("plot_pie_chart: empty DataFrame")
-            raise ValueError("Input DataFrame is empty.")
+            return None
         if column not in df.columns:
             logger.error("plot_pie_chart: column '%s' not found in DataFrame columns: %s", column, list(df.columns))
-            raise KeyError(f"Column '{column}' not found in DataFrame.")
+            return None
 
         series = df[column].dropna()
         if series.empty:
             logger.warning("plot_pie_chart: column '%s' has no non-NaN values", column)
-            raise ValueError(f"Column '{column}' has no valid values.")
+            return None
 
         # Determine unique categories and colors (stable ordering)
         try:
@@ -279,7 +279,7 @@ def plot_pie_chart(
         total = int(counts.sum())
         if total == 0:
             logger.warning("plot_pie_chart: total count is zero for column '%s'", column)
-            raise ValueError("No data to plot (all categories have zero count).")
+            return None
 
         # Colors by category using the selected colormap
         try:
@@ -309,7 +309,7 @@ def plot_pie_chart(
             )
         except Exception as e:
             logger.exception("plot_pie_chart: pie rendering failed: %s", e)
-            raise
+            return None
 
         # Styling
         try:
@@ -331,7 +331,7 @@ def plot_pie_chart(
 
     except Exception as e:
         logger.exception("plot_pie_chart failed: %s", e)
-        raise
+        return None
 
 
 def plot_bar(
@@ -372,12 +372,12 @@ def plot_bar(
     try:
         if df is None or df.empty:
             logger.warning("plot_bar: received empty DataFrame")
-            raise ValueError("Input DataFrame is empty.")
+            return None
 
         missing = [c for c in [axis_column, value_column] if c not in df.columns]
         if missing:
             logger.error("plot_bar: missing required columns: %s (available=%s)", missing, list(df.columns))
-            raise KeyError(f"Missing required column(s): {missing}")
+            return None
         if hue_column is not None and hue_column not in df.columns:
             logger.warning("plot_bar: hue_column '%s' not found; proceeding without hue.", hue_column)
             hue_column = None
@@ -392,7 +392,7 @@ def plot_bar(
             logger.info("plot_bar: dropped %d rows with non-numeric '%s'", dropped, value_column)
         if clean_df.empty:
             logger.error("plot_bar: no valid numeric data to plot after cleaning '%s'", value_column)
-            raise ValueError("No valid numeric data to plot.")
+            return None
 
         plt.figure(figsize=(6.5, 4.0))
         try:
@@ -438,7 +438,7 @@ def plot_bar(
 
     except Exception as e:
         logger.exception("plot_bar failed: %s", e)
-        raise
+        return None
 
 
 def plot_histogram_by_group(
@@ -489,7 +489,7 @@ def plot_histogram_by_group(
     try:
         if df is None or df.empty:
             logger.warning("plot_histogram_by_group: empty DataFrame")
-            raise ValueError("Input DataFrame is empty.")
+            return None
 
         for col in [value_column, group_column]:
             if col not in df.columns:
@@ -498,7 +498,7 @@ def plot_histogram_by_group(
                     col,
                     list(df.columns),
                 )
-                raise KeyError(f"Missing required column: {col}")
+                return None
 
         # Ensure numeric value column
         work = df[[value_column, group_column]].copy()
@@ -506,7 +506,7 @@ def plot_histogram_by_group(
         work = work.dropna(subset=[value_column, group_column])
         if work.empty:
             logger.warning("plot_histogram_by_group: no valid rows after cleaning")
-            raise ValueError("No valid rows to plot after cleaning.")
+            return None
 
         removed_outliers_frames: pd.DataFrame = pd.DataFrame()
 
@@ -602,7 +602,7 @@ def plot_histogram_by_group(
 
     except Exception as e:
         logger.exception("plot_histogram_by_group failed: %s", e)
-        raise
+        return None
 
 
 
@@ -628,10 +628,11 @@ def plot_scatter_size_coded(
     """
     if df.empty:
         logger.warning(f"No data to plot for column '{x_col}'")
-        return
-    
+        return None
+
     if x_col not in df.columns or y_col not in df.columns:
-        raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
+        logger.error(f"plot_scatter_size_coded: DataFrame must contain '{x_col}' and '{y_col}'")
+        return None
     counts = df.groupby([x_col, y_col]).size().reset_index(name="count")
     plt.figure(figsize=figsize)
     sc = plt.scatter(
@@ -677,7 +678,8 @@ def plot_scatter_hexbin(
         return
     
     if x_col not in df.columns or y_col not in df.columns:
-        raise KeyError(f"DataFrame must contain '{x_col}' and '{y_col}'")
+        logger.error(f"plot_scatter_hexbin: DataFrame must contain '{x_col}' and '{y_col}'")
+        return None
     x = df[x_col]
     y = df[y_col]
     plt.figure(figsize=figsize)
@@ -764,20 +766,20 @@ def plot_violin(
     try:
         if df is None or df.empty:
             logger.warning("plot_violin: received empty DataFrame")
-            raise ValueError("Input DataFrame is empty.")
+            return None
 
         required = [y] + ([x] if x is not None else []) + ([hue] if hue is not None else [])
         missing = [c for c in required if c not in df.columns]
         if missing:
             logger.error("plot_violin: missing required columns: %s (available=%s)", missing, list(df.columns))
-            raise KeyError(f"Missing required column(s): {missing}")
+            return None
 
         work = df.copy()
         work[y] = pd.to_numeric(work[y], errors="coerce")
         work = work.dropna(subset=[y] + ([x] if x is not None else []) + ([hue] if hue is not None else []))
         if work.empty:
             logger.warning("plot_violin: no valid rows to plot after cleaning")
-            raise ValueError("No valid rows to plot after cleaning.")
+            return None
 
         if filter_outliers:
             try:
@@ -832,7 +834,7 @@ def plot_violin(
                 ax.set_xticklabels([x if isinstance(x, str) else "Values"])
             except Exception as e2:
                 logger.exception("plot_violin: matplotlib fallback failed: %s", e2)
-                raise
+                return None
 
         # Optional points overlay
         if show_points:
@@ -882,7 +884,7 @@ def plot_violin(
 
     except Exception as e:
         logger.exception("plot_violin failed: %s", e)
-        raise
+        return None
 
 
 def plot_points_mean_std(
@@ -956,20 +958,20 @@ def plot_points_mean_std(
     try:
         if df is None or df.empty:
             logger.warning("plot_points_mean_std: received empty DataFrame")
-            raise ValueError("Input DataFrame is empty.")
+            return None
 
         required = [y] + ([x] if x is not None else []) + ([hue] if hue is not None else [])
         missing = [c for c in required if c not in df.columns]
         if missing:
             logger.error("plot_points_mean_std: missing required columns: %s (available=%s)", missing, list(df.columns))
-            raise KeyError(f"Missing required column(s): {missing}")
+            return None
 
         work = df.copy()
         work[y] = pd.to_numeric(work[y], errors="coerce")
         work = work.dropna(subset=[y] + ([x] if x is not None else []) + ([hue] if hue is not None else []))
         if work.empty:
             logger.warning("plot_points_mean_std: no valid rows to plot after cleaning")
-            raise ValueError("No valid rows to plot after cleaning.")
+            return None
 
         if filter_outliers:
             try:
@@ -1109,4 +1111,4 @@ def plot_points_mean_std(
 
     except Exception as e:
         logger.exception("plot_points_mean_std failed: %s", e)
-        raise
+        return None
