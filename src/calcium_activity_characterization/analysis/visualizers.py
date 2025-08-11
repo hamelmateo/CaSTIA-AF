@@ -23,6 +23,7 @@ def plot_histogram(
     y_axis_boundaries: Optional[tuple[float, float]] = None,
     filter_outliers: bool = False,
     outliers_bounds: Optional[tuple[float, float]] = None,
+    outliers_bygroup: Optional[str] = None,
     return_outliers: bool = False,
 ) -> Optional[pd.DataFrame]:
     """
@@ -42,6 +43,7 @@ def plot_histogram(
         filter_outliers (bool, optional): If True, remove outliers using asymmetric-IQR before plotting.
         outliers_bounds (tuple[float, float], optional): Quantile bounds for outlier detection (lower, upper).
             If None, defaults to (0.25, 0.75).
+        outliers_bygroup (Optional[str], optional): Column name to group by for outlier detection.
         return_outliers (bool, optional): If True, return DataFrame of removed outliers.
 
     Returns:
@@ -71,7 +73,7 @@ def plot_histogram(
             q_lower, q_upper = (outliers_bounds if outliers_bounds is not None else (0.25, 0.75))
             try:
                 filtered_df, outliers, lower_bound, upper_bound = detect_asymmetric_iqr_outliers(
-                    df.copy(), column, q_lower, q_upper
+                    df.copy(), column, q_lower, q_upper, outliers_bygroup
                 )
                 data = filtered_df[column].dropna()
                 removed_outliers_frames = outliers.copy()
@@ -456,6 +458,7 @@ def plot_histogram_by_group(
     y_axis_boundaries: Optional[tuple[float, float]] = None,
     filter_outliers: bool = False,
     outliers_bounds: Optional[tuple[float, float]] = None,
+    outliers_bygroup: Optional[str] = None,
     return_outliers: bool = False,
 ) -> Optional[pd.DataFrame]:
     """
@@ -477,6 +480,7 @@ def plot_histogram_by_group(
         filter_outliers (bool, optional): If True, remove outliers using asymmetric-IQR before plotting.
         outliers_bounds (tuple[float, float], optional): Quantile bounds (lower, upper) for outlier detection.
             If None, defaults to (0.25, 0.75).
+        outliers_bygroup (Optional[str], optional): Column name to group by for outlier detection.
         return_outliers (bool, optional): If True, return a DataFrame of removed outliers.
 
     Returns:
@@ -515,7 +519,7 @@ def plot_histogram_by_group(
             q_lower, q_upper = (outliers_bounds if outliers_bounds is not None else (0.25, 0.75))
             try:
                 filtered_df, outliers, lower_bound, upper_bound = detect_asymmetric_iqr_outliers(
-                    work, value_column, q_lower, q_upper
+                    work, value_column, q_lower, q_upper, outliers_bygroup
                 )
                 logger.info(
                     "plot_histogram_by_group: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
@@ -702,7 +706,7 @@ def plot_violin(
     hue_order: Optional[list] = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
-    palette: Union[str, list, dict] = "muted",
+    palette: Optional[Union[str, list, dict]] = "muted",
     bw: Optional[Union[float, str]] = None,
     inner: Optional[str] = "quartile",
     cut: float = 0.0,
@@ -720,6 +724,7 @@ def plot_violin(
     x_axis_boundaries: Optional[tuple[float, float]] = None,
     log_y: bool = False,
     filter_outliers: bool = False,
+    outliers_bygroup: Optional[str] = None,
     outliers_bounds: Optional[tuple[float, float]] = None,
 ) -> None:
     """
@@ -754,6 +759,7 @@ def plot_violin(
         x_axis_boundaries: Optional x-limits (xmin, xmax) — useful when x is numeric.
         log_y: If True, set y-axis to logarithmic scale.
         filter_outliers: If True, remove outliers using asymmetric-IQR before plotting.
+        outliers_bygroup: 
         outliers_bounds: Quantile bounds (lower, upper) for outlier detection; default (0.25, 0.75).
 
     Returns:
@@ -784,7 +790,7 @@ def plot_violin(
         if filter_outliers:
             try:
                 ql, qu = outliers_bounds if outliers_bounds is not None else (0.25, 0.75)
-                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu)
+                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu, outliers_bygroup)
                 logger.info(
                     "plot_violin: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
                     len(outliers), work.shape[0], y, lb, ub
@@ -795,6 +801,9 @@ def plot_violin(
 
         fig, ax = plt.subplots(figsize=figsize)
 
+        if hue is None:
+            hue=x
+            legend=False
         # Build common kwargs; seaborn changed some params across versions, so we guard optional ones
         violin_kwargs = dict(
             data=work,
@@ -803,13 +812,14 @@ def plot_violin(
             hue=hue,
             order=order,
             hue_order=hue_order,
-            palette=palette,
             inner=inner,
             cut=cut,
+            palette=palette,
             linewidth=linewidth,
             width=width,
             dodge=dodge,
             ax=ax,
+            legend=legend if hue is None else None
         )
         # Bandwidth: only pass if user specified, to avoid version warnings
         if bw is not None:
@@ -899,7 +909,7 @@ def plot_points_mean_std(
     ylabel: Optional[str] = None,
     palette: Union[str, list, dict, None] = "muted",
     dodge: bool = False,
-    point_style: str = "strip",  # 'strip' or 'swarm'
+    point_style: str = "swarm",  # 'strip' or 'swarm'
     point_size: float = 3.5,
     point_alpha: float = 0.85,
     jitter: float = 0.2,
@@ -911,6 +921,7 @@ def plot_points_mean_std(
     log_y: bool = False,
     filter_outliers: bool = False,
     outliers_bounds: Optional[tuple[float, float]] = None,
+    outliers_bygroup: Optional[str] = None,
     legend: bool = True,
     show_mean_labels: bool = False,
 ) -> None:
@@ -945,6 +956,7 @@ def plot_points_mean_std(
         log_y: If True, set y-axis to logarithmic scale.
         filter_outliers: If True, remove outliers using asymmetric-IQR before plotting.
         outliers_bounds: Quantile bounds (lower, upper) for outlier detection; default (0.25, 0.75).
+        outliers_bygroup: Optional grouping variable for outlier detection.
         legend: Whether to show legend for the hue summary layer.
         show_mean_labels: If True, annotate each summary point with the mean value.
 
@@ -976,7 +988,7 @@ def plot_points_mean_std(
         if filter_outliers:
             try:
                 ql, qu = outliers_bounds if outliers_bounds is not None else (0.25, 0.75)
-                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu)
+                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu, outliers_bygroup)
                 logger.info(
                     "plot_points_mean_std: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
                     len(outliers), work.shape[0], y, lb, ub
@@ -1018,6 +1030,9 @@ def plot_points_mean_std(
             logger.exception("plot_points_mean_std: points layer failed: %s", e)
 
         # --- Mean ± std overlay ---
+        if hue is None:
+            hue = x
+            legend = False
         try:
             # New seaborn API (>=0.12): errorbar='sd'
             sns.pointplot(
@@ -1033,6 +1048,7 @@ def plot_points_mean_std(
                 markers='o',
                 capsize=capsize,
                 ax=ax,
+                legend=legend if hue is None else None,
             )
         except TypeError:
             # Backward compatibility: older seaborn versions use estimator + ci='sd'
@@ -1051,6 +1067,7 @@ def plot_points_mean_std(
                 markers='o',
                 capsize=capsize,
                 ax=ax,
+                legend=legend if hue is None else None,
             )
         except Exception as e:
             logger.exception("plot_points_mean_std: summary overlay failed: %s", e)

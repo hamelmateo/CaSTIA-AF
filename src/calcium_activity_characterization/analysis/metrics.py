@@ -1,6 +1,6 @@
 import numpy as np
 from calcium_activity_characterization.logger import logger
-from typing import Literal
+from typing import Literal, Optional
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -271,33 +271,115 @@ def compute_peak_frequency_over_time(
     
 
 def detect_asymmetric_iqr_outliers(
-    df: pd.DataFrame = None,
-    column: str = None,
+    df: pd.DataFrame | None = None,
+    column: str | None = None,
     k_lower: float = 1.5,
-    k_upper: float = 3.0
+    k_upper: float = 3.0,
+    groupby_col: Optional[str] = None,
+    verbose: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame, float, float]:
     """
-    Detect outliers using asymmetric IQR fences.
+    Detect outliers using asymmetric IQR fences, optionally **per group**.
+
+    If `groupby_col` is provided, the IQR and bounds are computed independently for
+    each group, and inliers/outliers are concatenated. The function also returns a
+    *global* lower/upper bound computed as the min/max across groups for convenience.
 
     Args:
-        df (pd.DataFrame): DataFrame to analyze.
-        column (str): Column name to check for outliers.
-        k_lower (float): Multiplier for lower bound (default 1.5).
-        k_upper (float): Multiplier for upper bound (default 3.0).
-        return_rows (bool): If True, return full rows for outliers (requires df).
+        df: DataFrame to analyze (must contain `column`; and `groupby_col` if used).
+        column: Numeric column name to check for outliers.
+        k_lower: Multiplier for the lower IQR fence (default 1.5).
+        k_upper: Multiplier for the upper IQR fence (default 3.0).
+        groupby_col: Column to group by when computing fences. If None, computes on
+            the full population.
+        verbose: If True, logs detailed per-group/global info.
 
     Returns:
-        tuple: (inliers, outliers, lower_bound, upper_bound)
+        Tuple:
+            - inliers (pd.DataFrame): rows within fences (group-wise if applicable)
+            - outliers (pd.DataFrame): rows outside fences (group-wise if applicable)
+            - lower_bound (float): global lower fence = min of per-group lowers
+            - upper_bound (float): global upper fence = max of per-group uppers
     """
-    data = df[column]
-    q1 = data.quantile(0.25)
-    q3 = data.quantile(0.75)
-    iqr = q3 - q1
+    try:
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            raise ValueError("Input `df` must be a non-empty pandas DataFrame.")
+        if column is None:
+            raise ValueError("Parameter `column` must be provided.")
+        if column not in df.columns:
+            raise KeyError(f"Column '{column}' not found in DataFrame.")
+        if groupby_col is not None and groupby_col not in df.columns:
+            raise KeyError(f"groupby_col '{groupby_col}' not found in DataFrame.")
 
-    lower_bound = q1 - k_lower * iqr
-    upper_bound = q3 + k_upper * iqr
+        work = df.copy()
+        work[column] = pd.to_numeric(work[column], errors="coerce")
+        work = work.dropna(subset=[column])
+        if work.empty:
+            logger.warning("detect_asymmetric_iqr_outliers: no valid numeric rows in '%s'.", column)
+            return work, work, float("nan"), float("nan")
 
-    df_outliers = df[(df[column] < lower_bound) | (df[column] > upper_bound)]
-    df_inliers = df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+        def _bounds(series: pd.Series) -> tuple[float, float]:
+            q1 = series.quantile(0.25)
+            q3 = series.quantile(0.75)
+            iqr = q3 - q1
+            lower = q1 - k_lower * iqr
+            upper = q3 + k_upper * iqr
+            return float(lower), float(upper)
 
-    return df_inliers, df_outliers, lower_bound, upper_bound
+        if groupby_col is None:
+            lower, upper = _bounds(work[column])
+            mask_out = (work[column] < lower) | (work[column] > upper)
+            df_outliers = work.loc[mask_out]
+            df_inliers = work.loc[~mask_out]
+            if verbose:
+                logger.info(
+                    "Global fences on '%s' -> lower=%.5g, upper=%.5g; "
+                    "outliers=%d / %d rows",
+                    column, lower, upper, len(df_outliers), len(work)
+                )
+            return df_inliers, df_outliers, lower, upper
+
+        inliers_list: list[pd.DataFrame] = []
+        outliers_list: list[pd.DataFrame] = []
+        lowers: list[float] = []
+        uppers: list[float] = []
+
+        for key, g in work.groupby(groupby_col, dropna=False):
+            if g.empty:
+                continue
+            lower_g, upper_g = _bounds(g[column])
+            lowers.append(lower_g)
+            uppers.append(upper_g)
+
+            mask_out_g = (g[column] < lower_g) | (g[column] > upper_g)
+            outliers_g = g.loc[mask_out_g]
+            inliers_g = g.loc[~mask_out_g]
+            inliers_list.append(inliers_g)
+            outliers_list.append(outliers_g)
+
+            if verbose:
+                logger.info(
+                    "Group '%s' -> lower=%.5g, upper=%.5g; "
+                    "outliers=%d / %d rows",
+                    key, lower_g, upper_g, len(outliers_g), len(g)
+                )
+
+        df_inliers = pd.concat(inliers_list, axis=0, ignore_index=False) if inliers_list else work.iloc[0:0]
+        df_outliers = pd.concat(outliers_list, axis=0, ignore_index=False) if outliers_list else work.iloc[0:0]
+
+        global_lower = float(np.nanmin(lowers)) if lowers else float("nan")
+        global_upper = float(np.nanmax(uppers)) if uppers else float("nan")
+
+        if verbose:
+            logger.info(
+                "Grouped by '%s' -> global lower=%.5g, upper=%.5g; "
+                "total outliers=%d / %d",
+                groupby_col, global_lower, global_upper, len(df_outliers), len(work)
+            )
+
+        return df_inliers, df_outliers, global_lower, global_upper
+
+    except Exception as exc:
+        logger.exception("detect_asymmetric_iqr_outliers failed: %s", exc)
+        empty = df.iloc[0:0] if isinstance(df, pd.DataFrame) else pd.DataFrame()
+        return empty, empty, float("nan"), float("nan")

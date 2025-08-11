@@ -38,6 +38,7 @@ from calcium_activity_characterization.utilities.plotter import (
     plot_metric_on_overlay
 )
 from calcium_activity_characterization.utilities.image_utils import render_cell_outline_overlay
+from calcium_activity_characterization.utilities.graph_utils import filter_graph_by_edge_weight_percentile
 
 
 class CalciumPipeline:
@@ -441,7 +442,15 @@ class CalciumPipeline:
 
         # Analyze cell cell interaction
         cell_connection_network = self.population.compute_cell_connection_network_graph()
-        plot_cell_connection_network(cell_connection_network, self.population.nuclei_mask, self.output_dir / "cell-mapping" / "cell_connection_network.png")
+        filtered_cell_connection_network = None
+        for percentile in [0, 75, 95]:
+            filtered_cell_connection_network = filter_graph_by_edge_weight_percentile(cell_connection_network, percentile, preserve_nodes=True)
+            plot_cell_connection_network(filtered_cell_connection_network, 
+                                         self.population.nuclei_mask, 
+                                         self.output_dir / "cell-mapping" / "cell_connection_network" / f"cell_connection_network_{percentile}.png"
+                                        )
+        
+
 
         # Global events early peakers mapping
         percent = 0.10
