@@ -57,10 +57,16 @@ def find_all_is_folders(root_dir: Path) -> list[tuple[str, Path]]:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input-root", type=str, required=True)
-    parser.add_argument("--notebook", type=str, required=True)
-    parser.add_argument("--output-dir", type=str, required=True)
-    args = parser.parse_args()
+    #parser.add_argument("--input-root", type=str, required=True)
+    #parser.add_argument("--notebook", type=str, required=True)
+    #parser.add_argument("--output-dir", type=str, required=True)
+    #args = parser.parse_args()
+
+    args = argparse.Namespace(
+        input_root="D:/Mateo",
+        notebook="notebooks/image_sequence_analysis.ipynb",
+        output_dir="notebooks/export"
+        )
 
     for label, dataset_path in find_all_is_folders(Path(args.input_root)):
         output_dir = Path(args.output_dir) / label

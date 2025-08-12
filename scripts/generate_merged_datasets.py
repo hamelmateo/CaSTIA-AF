@@ -19,7 +19,7 @@ def compile_dataset_metadata(
     try:
         # Add dataset label to each entry
         for entry in image_sequences:
-            entry["dataset"] = f"{entry['date']}__{entry['image_sequence']}"
+            entry["dataset"] = f"{entry['date']}_{entry['image_sequence']}"
 
         df = pd.DataFrame(image_sequences)
         output_folder.mkdir(parents=True, exist_ok=True)
