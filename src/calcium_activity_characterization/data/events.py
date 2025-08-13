@@ -298,14 +298,20 @@ class SequentialEvent(Event):
         Populates event_phi_time and event_phi_recruit in CellCellCommunication objects.
         """
         try:
-            times = [comm.cause_start_time for comm in self.communications if comm.cause_start_time is not None]
-            if not times:
-                logger.warning(f"[Event {self.id}] No valid cause_start_time values; cannot compute phases.")
+            caused_times = [comm.cause_start_time for comm in self.communications if comm.cause_start_time is not None]
+            origin_times = [comm.origin_start_time for comm in self.communications if comm.origin_start_time is not None]
+            if not caused_times or not origin_times:
+                logger.warning(f"[Event {self.id}] No valid cause_start_time or origin_start_time values; cannot compute phases.")
                 return
-            t_start, t_end = min(times), max(times)
+            t_start, t_end = min(origin_times), max(caused_times)
 
-            # Recruitment times per cell (derived from framewise peaking labels)
-            recruitment_times = self.first_peak_time_by_label()
+            recruitment_times = {}
+            for comm in self.communications:
+                cid = comm.cause[0]
+                t = comm.cause_start_time
+                if cid not in recruitment_times or t < recruitment_times[cid]:
+                    recruitment_times[cid] = t
+
             sorted_recruitment = sorted(recruitment_times.items(), key=lambda x: x[1])
             total_cells = len(sorted_recruitment)
 
@@ -321,8 +327,9 @@ class SequentialEvent(Event):
                     logger.warning(f"[Event {self.id}] Zero duration (t_start == t_end); set event_time_phase to 0.0")
 
                 # φ_recruit
-                recruited_cells = [cid for cid, rt in sorted_recruitment if rt <= comm.cause_start_time]
-                comm.event_recruitment_phase = len(recruited_cells) / total_cells if total_cells > 0 else 0.0
+                recruited_cells = [cid for cid, rt in sorted_recruitment if rt < comm.cause_start_time]
+                event_rphi = len(recruited_cells) / (total_cells-1) if (total_cells > 1 and  len(recruited_cells) > 0) else 0.0
+                comm.event_recruitment_phase = event_rphi
 
         except Exception as e:
             logger.error(f"[Event {self.id}] Error computing event phases: {e}")

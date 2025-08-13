@@ -11,6 +11,7 @@ Usage example:
 import numpy as np
 import networkx as nx
 from scipy.spatial import Voronoi
+from typing import Iterable
 
 from calcium_activity_characterization.data.cells import Cell
 from calcium_activity_characterization.data.traces import Trace
@@ -117,6 +118,8 @@ class Population:
         for cell in filtered_cells:
             if pruned_graph.has_node(cell.label):
                 pruned_graph.nodes[cell.label]['pos'] = cell.centroid
+
+        cls._assign_neighbors_from_graph(filtered_cells, pruned_graph)
 
         return cls(nuclei_mask,filtered_cells, pruned_graph)
 
@@ -445,6 +448,7 @@ class Population:
         for cell in self.cells:
             if cell.label in first_peaking_cells:
                 first_peaking_cells_mapping[cell.label] = 1
+                cell.occurences_global_events_as_early_peaker += 1
             else:
                 first_peaking_cells_mapping[cell.label] = 0
 
@@ -476,7 +480,7 @@ class Population:
             
         return pre_event_peakers_mapping
 
-    def map_high_cell_communication_speed(self, speed_threshold: float = 15) -> tuple[dict[int, int], dict[int, int]]:
+    def map_high_cell_communication_speed(self, speed_threshold: float = 15) -> tuple[dict[int, int], dict[int, int], dict[int, int]]:
         """
         Map high cell-cell communication speeds within the population.
 
@@ -484,10 +488,11 @@ class Population:
             speed_threshold (float): The speed threshold to identify high-speed communications.
 
         Returns:
-            tuple[dict[int, int], dict[int, int]]: Two dictionaries mapping cell labels to their high-speed communication counts.
+            tuple[dict[int, int], dict[int, int], dict[int, int]]: Three dictionaries mapping cell labels to their high-speed communication counts.
         """
         high_speed_cells_all_comms: dict[int, int] = {}
         high_speed_cells: dict[int, int] = {}
+        high_speed_origin_cells: dict[int, int] = {}
 
         for event in self.events:
             if event.__class__.__name__ != "SequentialEvent":
@@ -496,6 +501,7 @@ class Population:
                 if communication.speed > speed_threshold:
                     high_speed_cells_all_comms[communication.origin[0]] = high_speed_cells_all_comms.get(communication.origin[0], 0) + 1
                     high_speed_cells_all_comms[communication.cause[0]] = high_speed_cells_all_comms.get(communication.cause[0], 0) + 1
+                    high_speed_origin_cells[communication.origin[0]] = high_speed_origin_cells.get(communication.origin[0], 0) + 1
                     if event.n_cells_involved > 2:
                         high_speed_cells[communication.origin[0]] = high_speed_cells.get(communication.origin[0], 0) + 1
                         high_speed_cells[communication.cause[0]] = high_speed_cells.get(communication.cause[0], 0) + 1
@@ -503,8 +509,12 @@ class Population:
             for cell in self.cells:
                 high_speed_cells_all_comms.setdefault(cell.label, 0)
                 high_speed_cells.setdefault(cell.label, 0)
+                high_speed_origin_cells.setdefault(cell.label, 0)
 
-        return high_speed_cells_all_comms, high_speed_cells
+                cell.occurences_high_speed_communications = high_speed_cells_all_comms[cell.label]
+                cell.occurences_high_speed_communications_as_origin = high_speed_origin_cells[cell.label]
+
+        return high_speed_cells_all_comms, high_speed_cells, high_speed_origin_cells
 
     @staticmethod
     def build_spatial_neighbor_graph(cells: list[Cell]) -> nx.Graph:
@@ -539,3 +549,44 @@ class Population:
             graph.add_edge(label_i, label_j, method="voronoi")
 
         return graph
+    
+    @staticmethod
+    def _assign_neighbors_from_graph(cells: list["Cell"], graph: nx.Graph) -> None:
+        """
+        Populate `cell.neighbors` for each Cell from the given neighbor graph.
+
+        The graph must have nodes equal to cell labels (ints). Missing nodes are ignored
+        with a warning; self-loops are not added to the attribute.
+
+        Args:
+            cells: List of Cell instances to update.
+            graph: NetworkX graph whose nodes are cell labels and edges denote adjacency.
+
+        Returns:
+            None
+        """
+        try:
+            if not isinstance(graph, nx.Graph):
+                raise TypeError("graph must be an instance of networkx.Graph")
+
+            # Fast lookup from label -> Cell
+            label_to_cell: dict[int, Cell] = {c.label: c for c in cells}
+
+            # Assign neighbors only for cells present in the graph
+            for label, cell in label_to_cell.items():
+                if not graph.has_node(label):
+                    logger.warning("Population._assign_neighbors_from_graph: graph missing node for cell %s", label)
+                    cell.set_neighbors([])
+                    continue
+
+                # Use graph.neighbors(label) which yields adjacent nodes
+                try:
+                    nbrs_iter: Iterable[int] = graph.neighbors(label)
+                    # Defensive copy and validation handled by Cell.set_neighbors
+                    cell.set_neighbors(list(nbrs_iter))
+                except Exception as e:
+                    logger.exception("Failed retrieving neighbors for cell %s: %s", label, e)
+                    cell.set_neighbors([])
+
+        except Exception as exc:
+            logger.exception("Population._assign_neighbors_from_graph failed: %s", exc)

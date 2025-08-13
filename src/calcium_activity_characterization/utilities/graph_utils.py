@@ -9,14 +9,7 @@ from __future__ import annotations
 import numpy as np
 import networkx as nx
 
-# Fallback logger if your module doesn't define one
-try:
-    logger  # type: ignore[name-defined]
-except NameError:  # pragma: no cover
-    import logging
-    logger = logging.getLogger("calcium")
-    if not logger.handlers:
-        logging.basicConfig(level=logging.INFO)
+from calcium_activity_characterization.logger import logger
 
 
 def filter_graph_by_edge_weight_percentile(

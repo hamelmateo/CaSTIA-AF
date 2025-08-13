@@ -170,63 +170,68 @@ class CalciumPipeline:
         """
         #TODO: Complete docstring
         """
-        if not self.raw_cells_path.exists():
-            nuclei_mask = None
-
-            if self.saved_processing_config_path.exists():
-                logger.info(f"Loading image processing config from {self.saved_processing_config_path}")
-                proc_config = ImageProcessingConfig.from_json(self.saved_processing_config_path)
-            else:
-                proc_config = self.config.image_processing_hoechst
-                logger.info(f"No saved image processing config found. Using default config.")
-
-            processor = ImageProcessor(config=proc_config)
-            if not self.nuclei_mask_path.exists():
-                if self.saved_seg_config_path.exists():
-                    logger.info(f"Loading segmentation config from {self.saved_seg_config_path}")
-                    seg_config = SegmentationConfig.from_json(self.saved_seg_config_path)
-                else:
-                    seg_config = self.config.segmentation
-                    logger.info(f"No saved segmentation config found. Using default config.")
-                full_nuclei_mask = segmented(
-                    processor.process_all(
-                        self.hoechst_img_path,
-                        self.hoechst_file_pattern
-                    ),
-                    seg_config
-                )
-                save_tif_image(full_nuclei_mask, self.full_nuclei_mask_path)
-            else:
-                full_nuclei_mask = load_existing_img(self.full_nuclei_mask_path)
-
-            unfiltered_cells = Cell.from_segmentation_mask(full_nuclei_mask, self.config.cell_filtering)
-            cells = [cell for cell in unfiltered_cells if cell.is_valid]
-
-            graph = Population.build_spatial_neighbor_graph(cells)
-            
-            nuclei_mask = processor._crop_image(full_nuclei_mask)
-            save_tif_image(nuclei_mask, self.nuclei_mask_path)
-
-            self.population = Population.from_roi_filtered(
-                nuclei_mask=nuclei_mask,
-                cells=cells,
-                graph=graph,
-                roi_scale=self.config.image_processing_hoechst.roi_scale,
-                img_shape=full_nuclei_mask.shape,
-                border_margin=self.config.cell_filtering.border_margin
-            )
-
-            processor.config.pipeline.cropping = True
-            cropped_hoechst = processor.process_all(self.hoechst_img_path, self.hoechst_file_pattern)[0]
-
-            self.save_cell_outline_overlay(self.overlay_path, self.population.cells, cropped_hoechst)
-            plot_spatial_neighbor_graph(self.population.neighbor_graph, cropped_hoechst, self.spatial_neighbor_graph_path)
-
-            save_pickle_file(self.population, self.raw_cells_path)
-
-            logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
-        else:
+        if self.raw_cells_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.raw_cells_path)
+            return
+
+        nuclei_mask = None
+
+        if self.saved_processing_config_path.exists():
+            logger.info(f"Loading image processing config from {self.saved_processing_config_path}")
+            proc_config = ImageProcessingConfig.from_json(self.saved_processing_config_path)
+        else:
+            proc_config = self.config.image_processing_hoechst
+            logger.info(f"No saved image processing config found. Using default config.")
+
+        processor = ImageProcessor(config=proc_config)
+
+        if self.nuclei_mask_path.exists():
+            full_nuclei_mask = load_existing_img(self.full_nuclei_mask_path)
+        
+        else:
+            if self.saved_seg_config_path.exists():
+                logger.info(f"Loading segmentation config from {self.saved_seg_config_path}")
+                seg_config = SegmentationConfig.from_json(self.saved_seg_config_path)
+            else:
+                seg_config = self.config.segmentation
+                logger.info(f"No saved segmentation config found. Using default config.")
+            full_nuclei_mask = segmented(
+                processor.process_all(
+                    self.hoechst_img_path,
+                    self.hoechst_file_pattern
+                ),
+                seg_config
+            )
+            save_tif_image(full_nuclei_mask, self.full_nuclei_mask_path)       
+
+        unfiltered_cells = Cell.from_segmentation_mask(full_nuclei_mask, self.config.cell_filtering)
+        cells = [cell for cell in unfiltered_cells if cell.is_valid]
+
+        graph = Population.build_spatial_neighbor_graph(cells)
+        
+        nuclei_mask = processor._crop_image(full_nuclei_mask)
+        save_tif_image(nuclei_mask, self.nuclei_mask_path)
+
+        self.population = Population.from_roi_filtered(
+            nuclei_mask=nuclei_mask,
+            cells=cells,
+            graph=graph,
+            roi_scale=self.config.image_processing_hoechst.roi_scale,
+            img_shape=full_nuclei_mask.shape,
+            border_margin=self.config.cell_filtering.border_margin
+        )
+
+        processor.config.pipeline.cropping = True
+        cropped_hoechst = processor.process_all(self.hoechst_img_path, self.hoechst_file_pattern)[0]
+
+        self.save_cell_outline_overlay(self.overlay_path, self.population.cells, cropped_hoechst)
+        plot_spatial_neighbor_graph(self.population.neighbor_graph, cropped_hoechst, self.spatial_neighbor_graph_path)
+
+        save_pickle_file(self.population, self.raw_cells_path)
+
+        logger.info(f"Kept {len(cells)} active cells out of {len(unfiltered_cells)} total cells.")
+            
 
 
     def save_cell_outline_overlay(self, output_path: Path, cells: list[Cell], hoechst_img: np.ndarray) -> None:
@@ -281,17 +286,19 @@ class CalciumPipeline:
         Compute raw calcium traces for all cells in the population.
         If raw traces already exist, load them from file.
         """
-        if not self.raw_traces_path.exists():
-            extractor = TraceExtractor(
-                cells=self.population.cells,
-                images_dir=self.fitc_img_path,
-                config=self.config.trace_extraction,
-                processor=ImageProcessor(self.config.image_processing_fitc)
-            )
-            extractor.compute(self.fitc_file_pattern)
-            save_pickle_file(self.population, self.raw_traces_path)
-        else:
+        if self.raw_traces_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.raw_traces_path)
+            return
+        
+        extractor = TraceExtractor(
+            cells=self.population.cells,
+            images_dir=self.fitc_img_path,
+            config=self.config.trace_extraction,
+            processor=ImageProcessor(self.config.image_processing_fitc)
+        )
+        extractor.compute(self.fitc_file_pattern)
+        save_pickle_file(self.population, self.raw_traces_path)
 
 
     def _signal_processing_pipeline(self) -> None:
@@ -299,8 +306,8 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        #if self.processed_traces_path.exists():
-        if False:  # Disable reloading for debugging purposes
+        if self.processed_traces_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.processed_traces_path)
             return
 
@@ -329,8 +336,8 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        #if self.binary_traces_path.exists():
-        if False:  # Disable reloading for debugging purposes
+        if self.binary_traces_path.exists():
+        #if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.binary_traces_path)
             return
         
@@ -473,53 +480,34 @@ class CalciumPipeline:
                                overlap_early_peakers,
                                self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_early_peakers_overlay.png",
                                title=f"Mapping of Overlapping Early Peakers in Global Events",
-                               colorbar_label="Overlapping Early Peakers in Global Events",
+                               colorbar_label="Number of occurences as Early Peakers in Global Events",
                                vmin=0,
                                vmax=len([event for event in self.population.events if event.__class__.__name__ == "GlobalEvent"])
                                )
 
-        # Global events pre-event peakers mapping
-        percent = 0.10
-        overlap_pre_event_peakers = Counter()
-        for event in self.population.events:
-            if event.__class__.__name__ == "GlobalEvent":
-                pre_event_peakers = self.population.get_pre_event_peakers_of_global_event(percent, event.id)
-                plot_metric_on_overlay(self.population.nuclei_mask,
-                                    cell_pixel_coords,
-                                    pre_event_peakers,
-                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_pre_event_peakers_overlay.png",
-                                    title=f"Mapping of Pre-Event Peakers in Global Events {event.id}",
-                                    colorbar_label="Pre-Event Peakers in Global Events",
-                                    show_colorbar=False
-                                    )
-                overlap_pre_event_peakers.update(pre_event_peakers)
-        
-        plot_metric_on_overlay(self.population.nuclei_mask,
-                                cell_pixel_coords,
-                                overlap_pre_event_peakers,
-                                self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_pre_event_peakers_overlay.png",
-                                title=f"Mapping of Overlapping Pre-Event Peakers in Global Events",
-                                colorbar_label="Overlapping Pre-Event Peakers in Global Events",
-                                vmin=0,
-                                vmax=len([event for event in self.population.events if event.__class__.__name__ == "GlobalEvent"])
-                                )
-
         # Analyze multi-modal distribution in cell-cell communications speed
         speed_threshold = 45 # px/frame ~ 15 um/s
-        high_speed_cells_all_comms, high_speed_cells = self.population.map_high_cell_communication_speed(speed_threshold)
+        high_speed_cells_all_comms, high_speed_cells, high_speed_origin_cells = self.population.map_high_cell_communication_speed(speed_threshold)
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_cells_all_comms,
                                self.output_dir / "cell-mapping" / "high_speed_cells_overlay.png",
                                title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame",
-                               colorbar_label="High Speed Cells"
+                               colorbar_label="Number of occurences with high speed communications"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_cells,
                                self.output_dir / "cell-mapping" / "high_speed_cells_in_large_events_overlay.png",
                                title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame in large events",
-                               colorbar_label="High Speed Cells"
+                               colorbar_label="Number of occurences with high speed communications"
+                               )
+        plot_metric_on_overlay(self.population.nuclei_mask,
+                               cell_pixel_coords,
+                               high_speed_origin_cells,
+                               self.output_dir / "cell-mapping" / "high_speed_origin_cells_overlay.png",
+                               title=f"Mapping of Cells with High Speed Origin Communications > {speed_threshold} px/frame",
+                               colorbar_label="Number of occurences with high speed origin communications"
                                )
 
     def _export_normalized_datasets(self) -> None:

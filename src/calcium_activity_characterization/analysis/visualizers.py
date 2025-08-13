@@ -345,7 +345,7 @@ def plot_bar(
     ylabel: str = "Count",
     xlabel: str = "Dataset",
     rotation: int = 45,
-    palette: str = "muted",
+    palette: Optional[str] = "muted",
 ) -> None:
     """
     Plot a single bar chart from a tidy DataFrame.
@@ -397,6 +397,9 @@ def plot_bar(
             return None
 
         plt.figure(figsize=(6.5, 4.0))
+        if hue_column is None:
+            hue_column = axis_column
+
         try:
             sns.barplot(
                 data=clean_df,

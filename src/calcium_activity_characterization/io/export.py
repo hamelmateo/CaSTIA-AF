@@ -8,6 +8,7 @@ import os
 import csv
 from pathlib import Path
 import pickle
+import json
 import numpy as np
 from tqdm import tqdm
 import tifffile
@@ -96,9 +97,10 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "Cell ID", "Centroid X coordinate (um)", "Centroid Y coordinate (um)",
-                "Number of peaks", "Is active", "Occurences in global events", "Occurences in sequential events", 
-                "Occurences in individual events", "Occurences in sequential events as origin",
-                "Peak frequency (Hz)", "Periodicity score"
+                "Number of peaks", "Is active", "Occurences in global events", "Occurences in global events as early peaker", 
+                "Occurences in sequential events", "Occurences in sequential events as origin", 
+                "Occurences in individual events", "Peak frequency (Hz)", "Periodicity score",
+                "Neighbor count", "Neighbors (labels)"
             ])
             writer.writeheader()
             for cell in tqdm(self.population.cells, desc="Exporting cells", unit="cell"):
@@ -107,6 +109,12 @@ class NormalizedDataExporter:
                 #np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_smoothed.npy", cell.trace.versions["processed"])
                 #np.save(self.cell_trace_dir / f"cell_{cell.label:04d}_binary.npy", cell.trace.binary)
 
+                # JSON-serialize list of ints; compact separators keep file small
+                neighbors_json = json.dumps(
+                    [int(n) for n in (cell.neighbors or [])],
+                    ensure_ascii=False, separators=(",", ":")
+                )
+
                 writer.writerow({
                     "Cell ID": int(cell.label),
                     "Centroid X coordinate (um)": format(cell.centroid[1]*self.pixel_to_micron_x, '.2f'),
@@ -114,11 +122,14 @@ class NormalizedDataExporter:
                     "Number of peaks": len(cell.trace.peaks),
                     "Is active": bool(cell.is_active),
                     "Occurences in global events": int(cell.occurences_global_events),
+                    "Occurences in global events as early peaker": int(cell.occurences_global_events_as_early_peaker),
                     "Occurences in sequential events": int(cell.occurences_sequential_events),
-                    "Occurences in individual events": int(cell.occurences_individual_events),
                     "Occurences in sequential events as origin": int(cell.occurences_sequential_events_as_origin),
+                    "Occurences in individual events": int(cell.occurences_individual_events),
                     "Peak frequency (Hz)": format(cell.trace.metadata.get("peak_frequency", 0), '.2g'),
                     "Periodicity score": (format(score, '.2g') if (score := cell.trace.metadata.get("periodicity_score")) is not None else None),
+                    "Neighbor count": int(len(cell.neighbors)),
+                    "Neighbors (labels)": neighbors_json
                 })
 
     def export_events(self) -> None:
@@ -185,7 +196,7 @@ class NormalizedDataExporter:
         path = self.output_dir / "communications.csv"
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
-                "Communication ID", "Event ID", "Origin cell ID", "Cause cell ID", "Start time (s)", "End time (s)",
+                "Communication ID", "Event ID", "Origin cell ID", "Origin cell peak ID", "Cause cell ID", "Cause cell peak ID", "Start time (s)", "End time (s)",
                 "Duration (s)", "Distance (um)", "Speed (um/s)", "Event time phase (fraction of event duration)", "Event recruitment phase (fraction of involved cells)"
             ])
             writer.writeheader()
@@ -196,7 +207,9 @@ class NormalizedDataExporter:
                             "Communication ID": int(comm.id),
                             "Event ID": int(event.id),
                             "Origin cell ID": int(comm.origin[0]),
+                            "Origin cell peak ID": int(comm.origin[1]),
                             "Cause cell ID": int(comm.cause[0]),
+                            "Cause cell peak ID": int(comm.cause[1]),
                             "Start time (s)": format(comm.origin_start_time/self.frame_rate, '.1f'),
                             "End time (s)": format(comm.cause_start_time/self.frame_rate, '.1f'),
                             "Duration (s)": format((comm.duration)/self.frame_rate, '.1f'),

@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Iterable
 from calcium_activity_characterization.logger import logger
 
 from calcium_activity_characterization.data.traces import Trace
@@ -20,10 +21,11 @@ class Cell:
         is_valid (bool): Whether the cell passes quality control (e.g., pixel count >= threshold).
         is_active (bool): Whether the cell is classified as active based on detected peaks.
         occurences_global_events (int): Number of unique global events this cell is involved in.
+        occurences_global_events_as_early_peaker (int): Number of global events where this cell is
         occurences_sequential_events (int): Number of unique sequential events this cell is involved in
-        occurences_individual_events (int): Number of individual event peaks in this cell.
         occurences_sequential_events_as_origin (int): Number of sequential events where this cell is
             the origin of the event.
+        occurences_individual_events (int): Number of individual event peaks in this cell.
     """
 
     def __init__(
@@ -38,10 +40,14 @@ class Cell:
         self.pixel_coords = pixel_coords if pixel_coords is not None else np.empty((0, 2), dtype=int)
         self.is_valid: bool = len(self.pixel_coords) >= object_size_thresholds.min and len(self.pixel_coords) <= object_size_thresholds.max
         self.is_active: bool = False
+
+        self.neighbors: list[int] = []  # List of neighboring cell labels
+
         self.occurences_global_events: int = 0
+        self.occurences_global_events_as_early_peaker: int = 0
         self.occurences_sequential_events: int = 0
-        self.occurences_individual_events: int = 0
         self.occurences_sequential_events_as_origin: int = 0
+        self.occurences_individual_events: int = 0
 
         self.trace: Trace = Trace()
 
@@ -77,6 +83,30 @@ class Cell:
         self.pixel_coords[:, 1] -= start_w
         cy, cx = self.centroid
         self.centroid = (cy - start_h, cx - start_w)
+
+    def set_neighbors(self, neighbor_labels: Iterable[int]) -> None:
+        """
+        Set the list of direct neighbor labels for this cell.
+
+        Args:
+            neighbor_labels: Iterable of integer cell labels.
+
+        Returns:
+            None
+        """
+        try:
+            cleaned = []
+            for n in neighbor_labels:
+                if n is None:
+                    continue
+                if not isinstance(n, (int, np.integer)):
+                    raise TypeError(f"Neighbor label must be int, got {type(n)} ({n!r})")
+                if n != self.label:  # avoid self-loop in attribute
+                    cleaned.append(int(n))
+            # Keep unique, sorted for stability in diffs/logs
+            self.neighbors = sorted(set(cleaned))
+        except Exception as e:
+            logger.exception("Cell.set_neighbors failed for cell %s: %s", self.label, e)
 
     def count_occurences_global_events(self) -> int:
         """
