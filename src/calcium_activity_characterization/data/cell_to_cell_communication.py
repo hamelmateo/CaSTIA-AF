@@ -138,7 +138,7 @@ def _resolve_copeaking_group(
 
     # Sort external origins by time (decreasing) and label
     if external_origins:
-        external_origins.sort(key=lambda x: (-x[2], x[0]))
+        external_origins.sort(key=lambda x: (x[2], x[0]))
         origin_label, origin_id, origin_time = external_origins[0]
 
         # Create communications from external origin to direct neighbors copeaking cells
@@ -236,13 +236,13 @@ def _resolve_individual_peaks(
                 continue
 
             best_candidate = None
-            best_dt = float("inf")
+            best_dt = 0
             for neighbor in neighbor_graph.neighbors(cell.label):
                 for neighbor_peak in label_to_cell[neighbor].trace.peaks:
                     if neighbor_peak.in_event:
                         continue
                     dt = peak.communication_time - neighbor_peak.communication_time
-                    if 0 < dt <= max_time_gap and dt < best_dt:
+                    if 0 < dt <= max_time_gap and dt > best_dt:
                         best_candidate = (neighbor, neighbor_peak.id, neighbor_peak.communication_time)
                         best_dt = dt
 
