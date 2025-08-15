@@ -61,7 +61,7 @@ def merge_all_datasets(
     for entry in image_sequences:
         try:
             base_path = Path(entry["path"])
-            label = f"{entry['date']}__{entry['image_sequence']}"
+            label = f"{entry['date']}_{entry['image_sequence']}"
 
             for filetype, collector in zip(
                 ["peaks", "cells", "events", "communications"],

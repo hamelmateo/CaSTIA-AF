@@ -6,7 +6,7 @@ import seaborn as sns
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Literal
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
 
@@ -927,6 +927,9 @@ def plot_points_mean_std(
     outliers_bygroup: Optional[str] = None,
     legend: bool = True,
     show_mean_labels: bool = False,
+
+    # NEW: control whether to draw raw points
+    show_points: bool = True,
 ) -> None:
     """
     Plot raw points (strip or swarm) with a mean point and standard deviation whiskers per group.
@@ -962,6 +965,7 @@ def plot_points_mean_std(
         outliers_bygroup: Optional grouping variable for outlier detection.
         legend: Whether to show legend for the hue summary layer.
         show_mean_labels: If True, annotate each summary point with the mean value.
+        show_points: If False, hide the raw points layer and show only mean ± std.
 
     Returns:
         None
@@ -975,7 +979,7 @@ def plot_points_mean_std(
             logger.warning("plot_points_mean_std: received empty DataFrame")
             return None
 
-        required = [y] + ([x] if x is not None else []) + ([hue] if hue is not None else [])
+        required = [y] + ([x] if x is not None else []) + ([hue] if (hue is not None and show_points) else [])
         missing = [c for c in required if c not in df.columns]
         if missing:
             logger.error("plot_points_mean_std: missing required columns: %s (available=%s)", missing, list(df.columns))
@@ -983,7 +987,8 @@ def plot_points_mean_std(
 
         work = df.copy()
         work[y] = pd.to_numeric(work[y], errors="coerce")
-        work = work.dropna(subset=[y] + ([x] if x is not None else []) + ([hue] if hue is not None else []))
+        drop_cols = [y] + ([x] if x is not None else []) + ([hue] if (hue is not None and show_points) else [])
+        work = work.dropna(subset=drop_cols)
         if work.empty:
             logger.warning("plot_points_mean_std: no valid rows to plot after cleaning")
             return None
@@ -1001,104 +1006,112 @@ def plot_points_mean_std(
                 logger.exception("plot_points_mean_std: outlier filtering failed — continuing without: %s", e)
 
         fig, ax = plt.subplots(figsize=figsize)
-
-        # --- Raw points layer ---
-        try:
-            if point_style == "swarm":
-                sns.swarmplot(
-                    data=work,
-                    x=x,
-                    y=y,
-                    hue=hue if dodge else None,
-                    dodge=dodge,
-                    palette=palette if (hue is not None) else None,
-                    size=point_size,
-                    alpha=point_alpha,
-                    ax=ax,
-                )
-            else:
-                sns.stripplot(
-                    data=work,
-                    x=x,
-                    y=y,
-                    hue=hue if dodge else None,
-                    dodge=dodge,
-                    palette=palette if (hue is not None) else None,
-                    size=point_size,
-                    jitter=jitter,
-                    alpha=point_alpha,
-                    ax=ax,
-                )
-        except Exception as e:
-            logger.exception("plot_points_mean_std: points layer failed: %s", e)
+        # --- Raw points layer (optional) ---
+        if show_points:
+            try:
+                if point_style == "swarm":
+                    sns.swarmplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        hue=hue if dodge else None,
+                        dodge=dodge,
+                        palette=palette if (hue is not None) else None,
+                        size=point_size,
+                        alpha=point_alpha,
+                        ax=ax,
+                        legend=legend if hue is None else None
+                    )
+                else:
+                    sns.stripplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        hue=hue if dodge else None,
+                        dodge=dodge,
+                        palette=palette if (hue is not None) else None,
+                        size=point_size,
+                        jitter=jitter,
+                        alpha=point_alpha,
+                        ax=ax,
+                        legend=legend if hue is None else None
+                    )
+            except Exception as e:
+                logger.exception("plot_points_mean_std: points layer failed: %s", e)
 
         # --- Mean ± std overlay ---
-        if hue is None:
-            hue = x
-            legend = False
         try:
-            # New seaborn API (>=0.12): errorbar='sd'
-            sns.pointplot(
-                data=work,
-                x=x,
-                y=y,
-                hue=hue,
-                order=order,
-                hue_order=hue_order,
-                dodge=dodge,
-                palette=palette,
-                errorbar='sd',
-                markers='o',
-                capsize=capsize,
-                ax=ax,
-                legend=legend if hue is None else None,
-            )
-        except TypeError:
-            # Backward compatibility: older seaborn versions use estimator + ci='sd'
-            import numpy as _np
-            sns.pointplot(
-                data=work,
-                x=x,
-                y=y,
-                hue=hue,
-                order=order,
-                hue_order=hue_order,
-                dodge=dodge,
-                palette=palette,
-                estimator=_np.mean,
-                ci='sd',
-                markers='o',
-                capsize=capsize,
-                ax=ax,
-                legend=legend if hue is None else None,
-            )
+            # In the summary, we want per-(x,hue) if hue exists; otherwise per-x.
+            summary_hue = hue if hue is not None else None
+
+            try:
+                # New seaborn API (>=0.12): errorbar='sd'
+                sns.pointplot(
+                    data=work,
+                    x=x,
+                    y=y,
+                    hue=summary_hue,
+                    order=order,
+                    hue_order=hue_order,
+                    dodge=dodge if summary_hue is not None else False,
+                    palette=palette,
+                    errorbar='sd',
+                    markers='o',
+                    capsize=capsize,
+                    ax=ax,
+                )
+            except TypeError:
+                # Backward compatibility: older seaborn versions use estimator + ci='sd'
+                import numpy as _np
+                sns.pointplot(
+                    data=work,
+                    x=x,
+                    y=y,
+                    hue=summary_hue,
+                    order=order,
+                    hue_order=hue_order,
+                    dodge=dodge if summary_hue is not None else False,
+                    palette=palette,
+                    estimator=_np.mean,
+                    ci='sd',
+                    markers='o',
+                    capsize=capsize,
+                    ax=ax,
+                )
         except Exception as e:
             logger.exception("plot_points_mean_std: summary overlay failed: %s", e)
 
-        if not legend:
-            try:
-                ax.get_legend().remove()
-            except Exception:
+        # Legend handling
+        try:
+            leg = ax.get_legend()
+            if summary_hue is None or not legend:
+                if leg is not None:
+                    leg.remove()
+            else:
+                # keep legend (summary hue)
                 pass
+        except Exception as e:
+            logger.exception("plot_points_mean_std: legend handling failed: %s", e)
 
+        # Optional mean labels
         if show_mean_labels:
             try:
-                # Compute per-group means to annotate
-                group_cols = ([] if x is None else [x]) + ([] if hue is None else [hue])
+                group_cols = ([] if x is None else [x]) + ([] if summary_hue is None else [summary_hue])
                 means = work.groupby(group_cols, dropna=False)[y].mean().reset_index()
                 # Resolve category order for positioning
                 x_levels = order if (order is not None) else (sorted(work[x].unique()) if x is not None else [None])
-                h_levels = hue_order if (hue_order is not None) else (sorted(work[hue].unique()) if hue is not None else [None])
+                h_levels = hue_order if (hue_order is not None) else (sorted(work[summary_hue].unique()) if summary_hue is not None else [None])
                 for _, row in means.iterrows():
                     xpos = x_levels.index(row[x]) if x is not None else 0
-                    if hue is not None and dodge:
-                        i = h_levels.index(row[hue])
+                    if summary_hue is not None and dodge:
+                        i = h_levels.index(row[summary_hue])
                         n = max(len(h_levels), 1)
                         xpos = xpos - 0.4 + (i + 0.5) * (0.8 / n)
                     ax.text(xpos, row[y], f"{row[y]:.2f}", ha='center', va='bottom', fontsize=8, color='black')
             except Exception as e:
                 logger.exception("plot_points_mean_std: annotating means failed: %s", e)
 
+        # Axes & scales
         ax.set_title(title)
         ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
         ax.set_ylabel(ylabel if ylabel is not None else y)
@@ -1132,3 +1145,309 @@ def plot_points_mean_std(
     except Exception as e:
         logger.exception("plot_points_mean_std failed: %s", e)
         return None
+
+def plot_points_mean_std_continuous(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    *,
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    hue: Optional[str] = None,           # optional — used only for raw scatter coloring
+    palette: Union[str, list, dict, None] = "muted",
+    point_size: float = 25.0,            # matplotlib scatter size (points^2)
+    point_alpha: float = 0.85,
+    jitter_x: float = 0.0,               # add small horizontal jitter to raw points
+    figsize: tuple[float, float] = (7.0, 4.5),
+    x_axis_boundaries: Optional[tuple[float, float]] = None,
+    y_axis_boundaries: Optional[tuple[float, float]] = None,
+    log_y: bool = False,
+
+    # Mean ± std overlay controls
+    strategy: str = "exact",             # "exact" (group by exact x), or "bins" (group into numeric bins)
+    round_x_decimals: Optional[int] = None,
+    bins: Optional[int] = None,
+    bin_width: Optional[float] = None,
+    error_cap_size: float = 3.0,
+    error_line_width: float = 1.5,
+    summary_marker_size: float = 45.0,
+    style: str = "whitegrid",
+
+    # NEW: control whether to draw raw points
+    show_points: bool = True,
+
+    # NEW: outlier filtering
+    filter_outliers: bool = False,
+    outliers_bounds: Optional[tuple[float, float]] = None,
+    outliers_bygroup: Optional[str] = None,
+) -> None:
+    """
+    Plot raw points (continuous x) with a mean point and standard deviation error bars per x grouping.
+
+    Args:
+        ...
+        show_points: If False, hide the raw scatter and only show mean ± std.
+        filter_outliers: If True, remove outliers before plotting.
+        outliers_bounds: Quantile bounds for outlier detection; default (0.25, 0.75).
+        outliers_bygroup: Optional grouping variable for outlier detection.
+    """
+    try:
+        if df is None or df.empty:
+            logger.warning("plot_points_mean_std_continuous: received empty DataFrame")
+            return None
+
+        required = [x, y] + ([hue] if (hue is not None and show_points) else [])
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            logger.error("plot_points_mean_std_continuous: missing required columns: %s (available=%s)",
+                         missing, list(df.columns))
+            return None
+
+        work = df.copy()
+        work[x] = pd.to_numeric(work[x], errors="coerce")
+        work[y] = pd.to_numeric(work[y], errors="coerce")
+        if hue is not None and show_points:
+            work[hue] = work[hue].astype("category")
+
+        work = work.dropna(subset=[x, y])
+        if work.empty:
+            logger.warning("plot_points_mean_std_continuous: no valid rows to plot after cleaning")
+            return None
+
+        # --- Outlier filtering ---
+        if filter_outliers:
+            try:
+                ql, qu = outliers_bounds if outliers_bounds is not None else (0.25, 0.75)
+                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu, outliers_bygroup)
+                logger.info(
+                    "plot_points_mean_std_continuous: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
+                    len(outliers), work.shape[0], y, lb, ub
+                )
+                work = filtered_df
+            except Exception as e:
+                logger.exception("plot_points_mean_std_continuous: outlier filtering failed — continuing without: %s", e)
+
+        sns.set(style=style)
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # ----- Raw points -----
+        if show_points:
+            x_vals = work[x].to_numpy()
+            y_vals = work[y].to_numpy()
+
+            if jitter_x and jitter_x > 0:
+                rng = np.random.default_rng(seed=42)
+                x_vals = x_vals + rng.uniform(-jitter_x, jitter_x, size=x_vals.shape)
+
+            if hue is not None:
+                sns.scatterplot(
+                    data=work,
+                    x=x,
+                    y=y,
+                    hue=hue,
+                    palette=palette,
+                    alpha=point_alpha,
+                    s=point_size,
+                    ax=ax,
+                    legend=True,
+                )
+            else:
+                ax.scatter(x_vals, y_vals, alpha=point_alpha, s=point_size, color="black")
+
+        # ----- Mean ± std overlay -----
+        if strategy == "exact":
+            gx = work.copy()
+            if round_x_decimals is not None:
+                gx[x] = gx[x].round(round_x_decimals)
+            grouped = gx.groupby(x, dropna=False)[y]
+            centers = grouped.mean().index.to_numpy(dtype=float)
+            means = grouped.mean().to_numpy()
+            stds = grouped.std(ddof=0).fillna(0.0).to_numpy()
+        elif strategy == "bins":
+            x_min, x_max = float(work[x].min()), float(work[x].max())
+            if bins is None:
+                if bin_width is not None and bin_width > 0:
+                    bins = max(1, int(np.ceil((x_max - x_min) / bin_width)))
+                else:
+                    bins = 10
+            if bin_width is not None and bin_width > 0 and (bins is None or isinstance(bins, int)):
+                edges = np.arange(x_min, x_max + bin_width, bin_width)
+            else:
+                edges = np.linspace(x_min, x_max, int(bins) + 1)
+            binned = work.copy()
+            binned["_bin"] = pd.cut(binned[x], bins=edges, include_lowest=True)
+            grouped = binned.groupby("_bin")[y]
+            means = grouped.mean().to_numpy()
+            stds = grouped.std(ddof=0).fillna(0.0).to_numpy()
+            centers = np.array([(iv.left + iv.right) / 2.0 for iv in grouped.mean().index.to_numpy()])
+        else:
+            logger.error("plot_points_mean_std_continuous: invalid strategy '%s'", strategy)
+            return None
+
+        try:
+            ax.errorbar(
+                centers,
+                means,
+                yerr=stds,
+                fmt="o",
+                ms=np.sqrt(summary_marker_size),
+                capsize=error_cap_size,
+                linewidth=error_line_width,
+                zorder=3,
+                color="red"
+            )
+        except Exception as e:
+            logger.exception("plot_points_mean_std_continuous: errorbar overlay failed: %s", e)
+
+        if not show_points:
+            leg = ax.get_legend()
+            if leg is not None:
+                try:
+                    leg.remove()
+                except Exception as e:
+                    logger.exception("plot_points_mean_std_continuous: removing legend failed: %s", e)
+
+        ax.set_title(title)
+        ax.set_xlabel(xlabel if xlabel is not None else x)
+        ax.set_ylabel(ylabel if ylabel is not None else y)
+
+        if x_axis_boundaries is not None:
+            try:
+                ax.set_xlim(x_axis_boundaries)
+            except Exception as e:
+                logger.exception("plot_points_mean_std_continuous: setting x-limits failed: %s", e)
+        if y_axis_boundaries is not None:
+            try:
+                ax.set_ylim(y_axis_boundaries)
+            except Exception as e:
+                logger.exception("plot_points_mean_std_continuous: setting y-limits failed: %s", e)
+
+        if log_y:
+            try:
+                ax.set_yscale("log")
+            except Exception as e:
+                logger.exception("plot_points_mean_std_continuous: setting log y failed: %s", e)
+
+        plt.tight_layout()
+        plt.show()
+
+    except Exception as e:
+        logger.exception("plot_points_mean_std_continuous failed: %s", e)
+        return None
+
+def plot_xy_with_regression(
+    data: pd.DataFrame,
+    x_col: str = "Number of cells",
+    y_col: str = "Number of global events",
+    *,
+    corr_method: Literal["pearson", "spearman", "kendall"] = "pearson",
+    annotate_r: bool = True,
+    r_text_format: str = "{method_cap} r = {corr:.2f}",
+    r_position: tuple[float, float] = (0.05, 0.95),
+    r_fontsize: int = 12,
+    r_bbox: Optional[dict[str, any]] = None,
+    order: int = 1,
+    ci: int = 95,
+    robust: bool = False,
+    truncate: bool = True,
+    hue: Optional[str] = None,
+    height: float = 8.0,
+    aspect: float = 1.0,
+    markers: Union[str, tuple[str, ...]] = "o",
+    palette: str = "muted",
+    scatter_kws: Optional[dict[str, any]] = None,
+    line_kws: Optional[dict[str, any]] = None,
+    title: str = "Influence of the number of cells over cells global events activity",
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    xlim: Optional[tuple[float, float]] = None,
+    ylim: Optional[tuple[float, float]] = None,
+    style: str = "whitegrid",
+    dropna: bool = True
+) -> None:
+    """
+    Creates a scatter + regression plot between two numeric columns and annotates with correlation.
+    Displays the plot directly without returning anything.
+
+    Args:
+        data: Input DataFrame containing x and y columns.
+        x_col: Column name for x-axis values.
+        y_col: Column name for y-axis values.
+        corr_method: Correlation method ('pearson', 'spearman', 'kendall').
+        annotate_r: Whether to annotate the correlation.
+        r_text_format: Text format for correlation.
+        r_position: Position of correlation text in Axes coordinates.
+        r_fontsize: Font size for annotation text.
+        r_bbox: Bounding box style for annotation.
+        order: Polynomial order for regression line.
+        ci: Confidence interval for regression.
+        robust: Whether to use robust regression.
+        truncate: Truncate regression line to data range.
+        hue: Optional column name for color grouping.
+        height: Figure height.
+        aspect: Aspect ratio (width = height * aspect).
+        markers: Marker style(s).
+        palette: Seaborn palette name.
+        scatter_kws: Keyword arguments for scatter plot.
+        line_kws: Keyword arguments for regression line.
+        title: Plot title.
+        xlabel: Optional override for x-axis label.
+        ylabel: Optional override for y-axis label.
+        xlim: Optional x-axis limits.
+        ylim: Optional y-axis limits.
+        style: Seaborn style.
+        dropna: Drop NA values before plotting.
+    """
+    sns.set(style=style)
+
+    if scatter_kws is None:
+        scatter_kws = {"alpha": 0.6, "s": 80, "color": "blue", "edgecolor": "black"}
+    if line_kws is None:
+        line_kws = {"color": "red", "linewidth": 2, "linestyle": "--"}
+    if r_bbox is None:
+        r_bbox = dict(boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white")
+
+    if dropna:
+        data = data.dropna(subset=[x_col, y_col])
+
+    corr = data[x_col].corr(data[y_col], method=corr_method)
+
+    g = sns.lmplot(
+        data=data,
+        x=x_col,
+        y=y_col,
+        hue=hue,
+        height=height,
+        aspect=aspect,
+        ci=ci,
+        robust=robust,
+        order=order,
+        truncate=truncate,
+        scatter_kws=scatter_kws,
+        line_kws=line_kws,
+        markers=markers,
+        palette=palette
+    )
+
+    if annotate_r:
+        g.ax.text(
+            r_position[0],
+            r_position[1],
+            r_text_format.format(method_cap=corr_method.capitalize(), corr=corr),
+            transform=g.ax.transAxes,
+            fontsize=r_fontsize,
+            verticalalignment='top',
+            bbox=r_bbox
+        )
+
+    g.set_axis_labels(xlabel if xlabel else x_col, ylabel if ylabel else y_col)
+    g.fig.suptitle(title, fontsize=14, y=1.02)
+
+    if xlim:
+        g.set(xlim=xlim)
+    if ylim:
+        g.set(ylim=ylim)
+
+    plt.tight_layout()
+    plt.show()
