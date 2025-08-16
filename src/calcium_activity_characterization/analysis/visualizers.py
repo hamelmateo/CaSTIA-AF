@@ -6,7 +6,7 @@ import seaborn as sns
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
-from typing import Optional, Callable, Union, Literal
+from typing import Optional, Callable, Union, Literal, Iterable
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
 
@@ -1451,3 +1451,229 @@ def plot_xy_with_regression(
 
     plt.tight_layout()
     plt.show()
+
+def plot_heatmap(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str = "",
+    *,
+    value: Optional[str] = None,
+    stat: Literal["count", "mean", "sum", "median"] = "count",
+    bins_x: Union[int, np.ndarray] = 30,
+    bins_y: Union[int, np.ndarray] = 30,
+    range_x: Optional[tuple[float, float]] = None,
+    range_y: Optional[tuple[float, float]] = None,
+    dropna: bool = True,
+    # transforms
+    log_scale: bool = False,                      # log1p on heat values
+    normalize: Optional[Literal["row", "col"]] = None,  # min-max per row/col
+    clip_quantiles: Optional[tuple[float, float]] = None,
+    # plotting
+    cmap: Union[str, list] = "viridis",
+    robust: bool = False,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    center: Optional[float] = None,
+    annot: bool = False,
+    fmt: str = ".2f",
+    cbar: bool = True,
+    linewidths: float = 0.0,
+    linecolor: Optional[str] = None,
+    square: bool = False,
+    xtick_rotation: int = 0,
+    ytick_rotation: int = 0,
+    figsize: tuple[float, float] = (7.0, 5.0),
+) -> Optional[plt.Axes]:
+    """
+    Plot a 2D binned heatmap (histogram heatmap) from numeric x/y columns.
+
+    Args:
+        df: Input DataFrame with numeric columns `x` and `y`.
+        x: Name of the numeric column for the x-axis.
+        y: Name of the numeric column for the y-axis.
+        title: Plot title.
+        value: Optional numeric column used with stat {"mean","sum","median"}.
+        stat: Aggregation within each bin. "count" ignores `value`.
+        bins_x: Number of bins or explicit bin edges (array-like) for x.
+        bins_y: Number of bins or explicit bin edges (array-like) for y.
+        range_x: Optional (min,max) for x binning (useful when providing counts consistently across subsets).
+        range_y: Optional (min,max) for y binning.
+        dropna: If True, drop rows where x/y (and value, if used) are NaN.
+        log_scale: If True, applies log1p to the binned matrix before coloring.
+        normalize: Optional min-max normalization per row or column on the binned matrix.
+        clip_quantiles: Optional (low,high) quantiles to clip the matrix values before plotting.
+        cmap: Colormap.
+        robust: Seaborn robust scaling for color limits.
+        vmin, vmax, center: Color scaling parameters for seaborn.heatmap.
+        annot: If True, annotate each cell with its numeric value.
+        fmt: Format string for annotations.
+        cbar: Show colorbar.
+        linewidths: Grid line width between cells.
+        linecolor: Grid line color between cells.
+        square: Force square cells.
+        xtick_rotation, ytick_rotation: Tick label rotations (deg).
+        figsize: Figure size.
+
+    Returns:
+        matplotlib.axes.Axes on success, else None.
+
+    Raises:
+        KeyError: If required columns are missing.
+        ValueError: If resulting binned matrix is empty or invalid.
+    """
+    try:
+        if df is None or df.empty:
+            logger.warning("plot_binned_heatmap: received empty DataFrame")
+            return None
+
+        missing = [col for col in [x, y] if col not in df.columns]
+        if missing:
+            logger.error("plot_binned_heatmap: missing columns: %s (available=%s)", missing, list(df.columns))
+            return None
+
+        work = df[[x, y] + ([value] if value else [])].copy()
+        # Coerce numeric
+        work[x] = pd.to_numeric(work[x], errors="coerce")
+        work[y] = pd.to_numeric(work[y], errors="coerce")
+        if value:
+            work[value] = pd.to_numeric(work[value], errors="coerce")
+
+        if dropna:
+            work = work.dropna(subset=[x, y] + ([value] if value else []))
+        if work.empty:
+            logger.warning("plot_binned_heatmap: no valid data after cleaning")
+            return None
+
+        # Compute bins
+        try:
+            x_min = work[x].min() if range_x is None else range_x[0]
+            x_max = work[x].max() if range_x is None else range_x[1]
+            y_min = work[y].min() if range_y is None else range_y[0]
+            y_max = work[y].max() if range_y is None else range_y[1]
+
+            x_bins = np.linspace(x_min, x_max, bins_x + 1) if isinstance(bins_x, int) else np.asarray(bins_x)
+            y_bins = np.linspace(y_min, y_max, bins_y + 1) if isinstance(bins_y, int) else np.asarray(bins_y)
+        except Exception as e:
+            logger.exception("plot_binned_heatmap: bin computation failed: %s", e)
+            return None
+
+        # Bin indices
+        try:
+            x_idx = np.digitize(work[x].to_numpy(), x_bins) - 1
+            y_idx = np.digitize(work[y].to_numpy(), y_bins) - 1
+            valid = (x_idx >= 0) & (x_idx < len(x_bins) - 1) & (y_idx >= 0) & (y_idx < len(y_bins) - 1)
+            x_idx, y_idx = x_idx[valid], y_idx[valid]
+            if value:
+                vals = work.loc[valid, value].to_numpy()
+            else:
+                vals = None
+        except Exception as e:
+            logger.exception("plot_binned_heatmap: digitize failed: %s", e)
+            return None
+
+        # Aggregate into a 2D matrix
+        H = np.zeros((len(y_bins) - 1, len(x_bins) - 1), dtype=float)
+        counts = np.zeros_like(H)
+
+        try:
+            for xi, yi, v in zip(x_idx, y_idx, (vals if vals is not None else np.ones_like(x_idx, dtype=float))):
+                if stat == "count":
+                    H[yi, xi] += 1.0
+                elif stat == "sum":
+                    H[yi, xi] += float(v)
+                    counts[yi, xi] += 1.0
+                elif stat in {"mean", "median"}:
+                    # accumulate lists for mean/median; slower but flexible for small/med data
+                    if not isinstance(H[yi, xi], list):
+                        H[yi, xi] = []  # type: ignore[assignment]
+                    # Use a Python list to collect values
+            if stat in {"mean", "median"}:
+                # Rebuild with lists
+                lists = [[[] for _ in range(H.shape[1])] for _ in range(H.shape[0])]
+                for xi, yi, v in zip(x_idx, y_idx, vals if vals is not None else np.zeros_like(x_idx, dtype=float)):
+                    lists[yi][xi].append(float(v))
+                H = np.array([
+                    [
+                        (np.nan if len(cell) == 0 else (np.mean(cell) if stat == "mean" else np.median(cell)))
+                        for cell in row
+                    ] for row in lists
+                ], dtype=float)
+            elif stat == "sum":
+                # Convert sums to sums; counts kept for optional future use
+                pass
+        except Exception as e:
+            logger.exception("plot_binned_heatmap: aggregation failed: %s", e)
+            return None
+
+        if stat == "count" and H.sum() == 0:
+            logger.warning("plot_binned_heatmap: all bins empty (no points fell into ranges)")
+        if np.all(~np.isfinite(H)):
+            logger.error("plot_binned_heatmap: resulting matrix has no finite values")
+            return None
+
+        # Optional transforms
+        try:
+            if clip_quantiles is not None:
+                ql, qh = clip_quantiles
+                finite_vals = H[np.isfinite(H)]
+                if finite_vals.size:
+                    lo, hi = np.quantile(finite_vals, [ql, qh])
+                    H = np.clip(H, lo, hi)
+            if log_scale:
+                with np.errstate(invalid="ignore"):
+                    H = np.log1p(H)
+
+            if normalize in {"row", "col"}:
+                if normalize == "row":
+                    for i in range(H.shape[0]):
+                        row = H[i, :]
+                        mn, mx = np.nanmin(row), np.nanmax(row)
+                        if np.isfinite(mn) and np.isfinite(mx) and mx > mn:
+                            H[i, :] = (row - mn) / (mx - mn)
+                else:
+                    for j in range(H.shape[1]):
+                        col = H[:, j]
+                        mn, mx = np.nanmin(col), np.nanmax(col)
+                        if np.isfinite(mn) and np.isfinite(mx) and mx > mn:
+                            H[:, j] = (col - mn) / (mx - mn)
+        except Exception as e:
+            logger.exception("plot_binned_heatmap: transform step failed: %s", e)
+
+        # Build axis labels from bin centers
+        x_centers = (x_bins[:-1] + x_bins[1:]) / 2.0
+        y_centers = (y_bins[:-1] + y_bins[1:]) / 2.0
+        mat = pd.DataFrame(H, index=y_centers, columns=x_centers)
+
+        # Plot
+        try:
+            fig, ax = plt.subplots(figsize=figsize)
+            g = sns.heatmap(
+                data=mat,
+                cmap=cmap,
+                robust=robust,
+                vmin=vmin, vmax=vmax, center=center,
+                annot=annot, fmt=fmt,
+                cbar=cbar,
+                linewidths=linewidths,
+                linecolor=linecolor,
+                square=square,
+                ax=ax,
+            )
+            ax.set_title(title)
+            ax.set_xlabel(x)
+            ax.set_ylabel(y)
+
+            ax.invert_yaxis()  # so that low y is at bottom
+
+            plt.setp(ax.get_xticklabels(), rotation=xtick_rotation)
+            plt.setp(ax.get_yticklabels(), rotation=ytick_rotation)
+            plt.tight_layout()
+            return ax
+        except Exception as e:
+            logger.exception("plot_binned_heatmap: seaborn.heatmap failed: %s", e)
+            return None
+
+    except Exception as e:
+        logger.exception("plot_binned_heatmap failed: %s", e)
+        return None
