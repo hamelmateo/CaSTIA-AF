@@ -654,7 +654,7 @@ class SequentialEvent(Event):
 
         components = list(nx.connected_components(G))
         events = []
-        counter = n_global_events
+        counter = n_global_events+1
         min_cells = config.min_cell_count
 
         for component in components:
@@ -941,7 +941,7 @@ class GlobalEvent(Event):
 
             # Construct the GlobalEvent
             event = cls(
-                id=i,
+                id=i+1,
                 event_peak_time=events_peak_times[i],
                 label_to_centroid=label_to_centroid,
                 framewise_peaking_labels={
