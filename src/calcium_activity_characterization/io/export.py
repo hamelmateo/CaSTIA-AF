@@ -97,9 +97,9 @@ class NormalizedDataExporter:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=[
                 "Cell ID", "Centroid X coordinate (um)", "Centroid Y coordinate (um)",
-                "Number of peaks", "Is active", "Occurences in global events", "Occurences in global events as early peaker", 
-                "Occurences in sequential events", "Occurences in sequential events as origin", 
-                "Occurences in individual events", "Peak frequency (Hz)", "Periodicity score",
+                "Number of peaks", "Is active", "Occurrences in global events", "Occurrences in global events as early peaker", 
+                "Early peaker event IDs", "Occurrences in sequential events", "Occurrences in sequential events as origin", 
+                "Occurrences in individual events", "Peak frequency (Hz)", "Periodicity score",
                 "Neighbor count", "Neighbors (labels)"
             ])
             writer.writeheader()
@@ -121,11 +121,12 @@ class NormalizedDataExporter:
                     "Centroid Y coordinate (um)": format(cell.centroid[0]*self.pixel_to_micron_y, '.2f'),
                     "Number of peaks": len(cell.trace.peaks),
                     "Is active": bool(cell.is_active),
-                    "Occurences in global events": int(cell.occurences_global_events),
-                    "Occurences in global events as early peaker": int(cell.occurences_global_events_as_early_peaker),
-                    "Occurences in sequential events": int(cell.occurences_sequential_events),
-                    "Occurences in sequential events as origin": int(cell.occurences_sequential_events_as_origin),
-                    "Occurences in individual events": int(cell.occurences_individual_events),
+                    "Occurrences in global events": int(cell.occurences_global_events),
+                    "Occurrences in global events as early peaker": int(cell.occurences_global_events_as_early_peaker),
+                    "Early peaker event IDs": json.dumps([int(e) for e in (cell.early_peaker_event_ID or [])]),
+                    "Occurrences in sequential events": int(cell.occurences_sequential_events),
+                    "Occurrences in sequential events as origin": int(cell.occurences_sequential_events_as_origin),
+                    "Occurrences in individual events": int(cell.occurences_individual_events),
                     "Peak frequency (Hz)": format(cell.trace.metadata.get("peak_frequency", 0), '.2g'),
                     "Periodicity score": (format(score, '.2g') if (score := cell.trace.metadata.get("periodicity_score")) is not None else None),
                     "Neighbor count": int(len(cell.neighbors)),

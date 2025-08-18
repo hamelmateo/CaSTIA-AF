@@ -449,6 +449,7 @@ class Population:
             if cell.label in first_peaking_cells:
                 first_peaking_cells_mapping[cell.label] = 1
                 cell.occurences_global_events_as_early_peaker += 1
+                cell.early_peaker_event_ID.append(event.id)
             else:
                 first_peaking_cells_mapping[cell.label] = 0
 

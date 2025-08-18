@@ -9,6 +9,48 @@ from matplotlib import cm
 from typing import Optional, Callable, Union, Literal, Iterable
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
+from contextlib import contextmanager
+import matplotlib as mpl
+from matplotlib.colors import ListedColormap, BoundaryNorm
+from matplotlib.ticker import PercentFormatter
+import json
+
+
+@contextmanager
+def illustrator_text_context(prefer_font: str = "Arial", keep_text: bool = True):
+    """
+    RC context to keep text editable in Adobe Illustrator for SVG/PDF exports.
+
+    Args:
+        prefer_font (str): A system font Illustrator will find (e.g., 'Arial' or 'Helvetica').
+        keep_text (bool): If True, keep fonts as text (not outlines).
+
+    Notes:
+        - SVG: svg.fonttype='none' preserves text as text.
+        - PDF: pdf.fonttype=42 embeds TrueType; Illustrator reads it as text.
+        - TeX rendering is disabled to avoid outlines.
+        - Only rcParams supported by the current Matplotlib are applied.
+    """
+    desired_rc = {
+        "svg.fonttype": "none" if keep_text else "path",
+        # "svg.embed_char_paths": False,  # DO NOT set; not supported on your version
+        "pdf.fonttype": 42,              # TrueType
+        "ps.fonttype": 42,               # TrueType (if ever exporting PS/EPS)
+        "text.usetex": False,            # avoid TeX (often outlines)
+        "mathtext.default": "regular",
+        "font.family": "sans-serif",
+        "font.sans-serif": [prefer_font, "Helvetica", "DejaVu Sans", "Liberation Sans"],
+        "axes.unicode_minus": False,     # safer minus glyph in AI
+    }
+
+    # Filter to only keys supported by this Matplotlib build
+    safe_rc = {k: v for k, v in desired_rc.items() if k in mpl.rcParams}
+    missing = set(desired_rc) - set(safe_rc)
+    if missing:
+        logger.info("Skipping unsupported rcParams for this Matplotlib: %s", sorted(missing))
+
+    with mpl.rc_context(safe_rc):
+        yield
 
 
 def plot_histogram(
@@ -25,6 +67,8 @@ def plot_histogram(
     outliers_bounds: Optional[tuple[float, float]] = None,
     outliers_bygroup: Optional[str] = None,
     return_outliers: bool = False,
+    save_svg_path: str | Path | None = None,
+    export_format: str = "svg",
 ) -> Optional[pd.DataFrame]:
     """
     Plot a **single** histogram for `column` using the provided DataFrame `df`.
@@ -131,29 +175,30 @@ def plot_histogram(
             except Exception as e:
                 logger.exception("Failed to set log scale for y-axis: %s", e)
 
-        # Stats box
-        try:
-            stats_text = (
-                f"Mean: {data.mean():.3g}\n"
-                f"Std: {data.std(ddof=1):.3g}\n"
-                f"Min: {data.min():.3g}\n"
-                f"Max: {data.max():.3g}\n"
-                f"Count: {data.size}"
-            )
-            ax.text(
-                0.98,
-                0.98,
-                stats_text,
-                transform=ax.transAxes,
-                fontsize=9,
-                va="top",
-                ha="right",
-                bbox=dict(facecolor="white", alpha=0.8, boxstyle="round"),
-            )
-        except Exception as e:
-            logger.exception("Failed to add stats textbox: %s", e)
-
         plt.tight_layout()
+
+        # --- Save (flatten on white to avoid PDF darkening) ---
+        if save_svg_path is not None:
+            try:
+                out_path = Path(save_svg_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    out_path,
+                    format=fmt,
+                    dpi=300,
+                    bbox_inches="tight",
+                    facecolor="white",
+                    edgecolor="white",
+                    transparent=True,
+                    metadata={"Creator": "plot_violin"},
+                )
+                logger.info("plot_violin: figure saved to %s (%s)", out_path, fmt)
+            except Exception as e:
+                logger.exception("plot_violin: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
         plt.show()
 
         if return_outliers:
@@ -199,7 +244,7 @@ def visualize_image(
         ValueError: If image cannot be loaded or is empty.
     """
     try:
-        dataset_name, source_path = next(iter(image_source.items()))
+        _, source_path = next(iter(image_source.items()))
         img_path = Path(source_path) / image_name
 
         try:
@@ -214,7 +259,7 @@ def visualize_image(
 
         fig, ax = plt.subplots(figsize=figsize)
         ax.imshow(img, aspect="auto")
-        ax.set_title(f"{title} - {dataset_name}")
+        ax.set_title(title)
         if not show_axes:
             ax.axis("off")
 
@@ -230,32 +275,38 @@ def plot_pie_chart(
     df: pd.DataFrame,
     column: str,
     title: str = "Category Distribution",
-    value_label_formatter: Optional[Callable[[float], str]] = None,
-    label_prefix: Optional[str] = None,
+    value_label_formatter: Callable[[float], str] | None = None,
+    label_prefix: str | None = None,
     palette: str = "tab10",
-    figsize: tuple = (6, 5)
-) -> None:
+    figsize: tuple[float, float] = (6, 5),
+    save_svg_path: Path | str | None = None,
+    show: bool = True,
+    *,
+    editable_text: bool = True,
+    prefer_font: str = "Arial",
+    export_format: str = "svg",  # "svg" or "pdf"
+) -> Path | None:
     """
-    Plot a **single** pie chart showing the distribution of a categorical column for the entire DataFrame.
-
-    This refactors the prior per-dataset faceted version into a one-figure renderer. All rows in `df` are
-    considered together—no grouping by `dataset` is performed.
+    Plot a single pie chart for the distribution of a categorical column and
+    optionally save it as an SVG.
 
     Args:
         df (pd.DataFrame): DataFrame containing the categorical column.
         column (str): Categorical column to summarize (e.g., 'in_event', 'is_active').
         title (str): Figure title.
-        value_label_formatter (callable, optional): Formatter for the percentage text drawn on slices.
-            Signature must be ``f(pct: float) -> str`` where ``pct`` is the percentage (0-100).
-        label_prefix (str, optional): Optional prefix prepended to category labels.
-        palette (str): Name of a matplotlib colormap for slice colors (default: 'tab10').
+        value_label_formatter (Callable[[float], str] | None): Formatter for the percentage text
+            drawn on slices. Signature must be f(pct: float) -> str where pct is in [0, 100].
+        label_prefix (str | None): Optional prefix prepended to category labels.
+        palette (str): Matplotlib colormap name for slice colors (default: 'tab10').
+        figsize (tuple[float, float]): Figure size in inches.
+        save_svg_path (Path | str | None): If provided, saves the figure as an SVG to this path.
+        show (bool): Whether to display the figure window (plt.show()).
 
     Returns:
-        None
+        Path | None: Path to the saved SVG if saved successfully; otherwise None.
 
     Raises:
-        KeyError: If `column` is not present in `df`.
-        ValueError: If `df` is empty or the column has no valid values.
+        None: Errors are logged and the function returns early for robustness.
     """
     try:
         if df is None or df.empty:
@@ -270,11 +321,10 @@ def plot_pie_chart(
             logger.warning("plot_pie_chart: column '%s' has no non-NaN values", column)
             return None
 
-        # Determine unique categories and colors (stable ordering)
+        # Stable category order
         try:
             all_categories = sorted(series.unique().tolist())
         except Exception:
-            # Fallback in case of un-orderable mixed types
             all_categories = list(pd.unique(series))
 
         counts = series.value_counts().reindex(all_categories).fillna(0).astype(int)
@@ -284,6 +334,7 @@ def plot_pie_chart(
             return None
 
         # Colors by category using the selected colormap
+        colors = None
         try:
             cmap = cm.get_cmap(palette)
             denom = max(len(all_categories) - 1, 1)
@@ -291,27 +342,30 @@ def plot_pie_chart(
             colors = [color_map[c] for c in counts.index]
         except Exception as e:
             logger.exception("plot_pie_chart: failed to build colors from palette '%s': %s", palette, e)
-            colors = None  # Let matplotlib choose defaults
 
-        # Labels shown around the pie (category + counts). If a custom formatter is supplied,
-        # we follow the previous behavior and skip outer labels to reduce clutter.
+        # Labels around the pie (category + counts). If a custom formatter is supplied,
+        # we skip outer labels to reduce clutter.
         labels = [
             f"{label_prefix + ' ' if label_prefix else ''}{k} ({v})" for k, v in counts.items()
         ]
         pie_labels = labels if value_label_formatter is None else None
 
-        fig, ax = plt.subplots(figsize=figsize)
-        try:
-            wedges, texts, autotexts = ax.pie(
-                counts,
-                labels=pie_labels,
-                autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
-                startangle=90,
-                colors=colors,
-            )
-        except Exception as e:
-            logger.exception("plot_pie_chart: pie rendering failed: %s", e)
-            return None
+        # === wrap the plotting & saving inside the rc context ===
+        with illustrator_text_context(prefer_font=prefer_font, keep_text=editable_text):
+            fig, ax = plt.subplots(figsize=figsize)
+            try:
+                wedges, texts, autotexts = ax.pie(
+                    counts,
+                    labels=pie_labels,
+                    autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
+                    startangle=90,
+                    colors=colors,
+                    wedgeprops=dict(linewidth=0.0, edgecolor="black"),  # print-friendly
+                )
+            except Exception as e:
+                logger.exception("plot_pie_chart: pie rendering failed: %s", e)
+                plt.close(fig)
+                return None
 
         # Styling
         try:
@@ -319,7 +373,7 @@ def plot_pie_chart(
                 for autotext in autotexts:
                     autotext.set_color("black")
                     autotext.set_fontsize(9)
-            if texts is not None:
+            if pie_labels is not None and texts is not None:
                 for text in texts:
                     text.set_color("black")
                     text.set_fontsize(9)
@@ -327,13 +381,167 @@ def plot_pie_chart(
             logger.exception("plot_pie_chart: label styling failed: %s", e)
 
         ax.set_title(title)
-        ax.axis('equal')  # ensure pie is a circle
+        ax.axis("equal")
         plt.tight_layout()
-        plt.show()
+
+        saved_path: Path | None = None
+        if save_svg_path is not None:
+            try:
+                saved_path = Path(save_svg_path)
+                saved_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    saved_path,
+                    format=fmt,
+                    transparent=True,
+                    bbox_inches="tight",
+                    metadata={"Creator": "plot_pie_chart"},
+                )
+            except Exception as e:
+                logger.exception("plot_pie_chart: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+                saved_path = None
+
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+
+        return saved_path
+    
+    except Exception as e:
+        logger.exception("plot_pie_chart: unexpected error: %s", e)
+        return None
+
+
+def plot_category_distribution_by_dataset(
+    df: pd.DataFrame,
+    category_col: str,
+    dataset_col: str,
+    title: str = "Category Distribution by Dataset",
+    normalize: bool = True,
+    palette: str = "tab10",
+    figsize: tuple[float, float] = (8.0, 5.0),
+    save_path: str | Path | None = None,
+    export_format: str = "svg",
+    show: bool = True,
+) -> Path | None:
+    """Plot a multi-dataset "bar pie" as 100% stacked columns.
+
+    Each dataset is a vertical bar split into colored segments whose heights
+    correspond to the category distribution within that dataset. This is the
+    bar-chart analog of multiple pie charts, allowing side-by-side comparison.
+
+    Args:
+        df: Input DataFrame containing at least *category_col* and *dataset_col*.
+        category_col: Column name with category labels (e.g., "phenotype").
+        dataset_col: Column name indicating dataset/group (e.g., "Dataset").
+        title: Figure title.
+        normalize: If True, bars are scaled to 100% within each dataset (recommended).
+        palette: Matplotlib colormap name used to color categories consistently.
+        figsize: Figure size in inches.
+        save_path: If provided, write the figure to this path.
+        export_format: Either "svg" or "pdf".
+        show: If True, display the figure; otherwise close it after saving.
+
+    Returns:
+        Path | None: The saved figure path if written; otherwise None.
+    """
+    try:
+        if df is None or df.empty:
+            logger.warning("plot_category_distribution_by_dataset: empty DataFrame")
+            return None
+        for col in (category_col, dataset_col):
+            if col not in df.columns:
+                logger.error("plot_category_distribution_by_dataset: missing column '%s' in DataFrame", col)
+                return None
+
+        data = df[[dataset_col, category_col]].dropna()
+        if data.empty:
+            logger.warning("plot_category_distribution_by_dataset: no non-NaN rows after dropna")
+            return None
+
+        # Build counts matrix: rows=categories, cols=datasets
+        counts = (
+            data.groupby([dataset_col, category_col])
+                .size()
+                .unstack(fill_value=0)
+                .T  # categories as rows for consistent stacking order
+        )
+        # Determine plotting order
+        datasets = counts.columns.tolist()
+        categories = counts.index.tolist()
+
+        # Normalize to proportions per dataset
+        if normalize:
+            col_sums = counts.sum(axis=0).replace(0, np.nan)
+            props = counts.div(col_sums, axis=1).fillna(0.0)
+        else:
+            props = counts.astype(float)
+
+        # Colors per category
+        try:
+            from matplotlib import cm as _cm
+            cmap = _cm.get_cmap(palette)
+            denom = max(len(categories) - 1, 1)
+            color_map = {cat: cmap(i / denom) for i, cat in enumerate(categories)}
+        except Exception as e:
+            logger.exception("plot_category_distribution_by_dataset: failed to build colors from palette '%s': %s", palette, e)
+            # fallback: grayscale ramp
+            color_map = {cat: (i / max(len(categories)-1, 1),) * 3 for i, cat in enumerate(categories)}
+
+        # Plot stacked vertical bars
+        fig, ax = plt.subplots(figsize=figsize)
+        x = np.arange(len(datasets))
+        bottoms = np.zeros(len(datasets))
+        for cat in categories:
+            heights = props.loc[cat, datasets].to_numpy()
+            bars = ax.bar(x, heights, bottom=bottoms, color=color_map[cat], edgecolor="none")
+            bottoms += heights
+
+        # Axes & labels
+        ax.set_xticks(x)
+        ax.set_xticklabels(datasets, rotation=0)
+        if normalize:
+            ax.set_ylabel("Percentage")
+            ax.set_ylim(0, 1)
+            ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+        else:
+            ax.set_ylabel("Count")
+        ax.set_title(title)
+        ax.set_xlim(-0.5, len(datasets) - 0.5)
+        ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
+
+        # Legend outside on the right
+        handles = [plt.Line2D([0], [0], color=color_map[cat], lw=6) for cat in categories]
+        ax.legend(handles, categories, title="Category", bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0.)
+
+        plt.tight_layout()
+
+        out_path: Path | None = None
+        if save_path is not None:
+            try:
+                out_path = Path(save_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(out_path, format=fmt, bbox_inches="tight", metadata={"Creator": "plot_category_distribution_by_dataset"})
+            except Exception as e:
+                logger.exception("plot_category_distribution_by_dataset: failed to save %s to '%s': %s", export_format, save_path, e)
+                out_path = None
+
+        if show:
+            plt.show()
+        else:
+            plt.close(fig)
+        return out_path
 
     except Exception as e:
-        logger.exception("plot_pie_chart failed: %s", e)
+        logger.exception("plot_category_distribution_by_dataset: unexpected error: %s", e)
         return None
+
 
 
 def plot_bar(
@@ -346,6 +554,8 @@ def plot_bar(
     xlabel: str = "Dataset",
     rotation: int = 45,
     palette: Optional[str] = "muted",
+    save_svg_path: str | Path | None = None,  # you already added this
+    export_format: str = "svg",  # "svg" or "pdf"
 ) -> None:
     """
     Plot a single bar chart from a tidy DataFrame.
@@ -439,6 +649,25 @@ def plot_bar(
             logger.exception("plot_bar: failed to rotate xticks: %s", e)
 
         plt.tight_layout()
+
+        # Save (SVG/PDF) with editable text
+        if save_svg_path is not None:
+            try:
+                svg_path = Path(save_svg_path)
+                svg_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    svg_path,
+                    format=fmt,
+                    transparent=True,
+                    bbox_inches="tight",
+                    metadata={"Creator": "plot_histogram_by_group"},
+                )
+            except Exception as e:
+                logger.exception("plot_histogram_by_group: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
         plt.show()
 
     except Exception as e:
@@ -452,18 +681,23 @@ def plot_histogram_by_group(
     group_column: str,
     title: str,
     ylabel: str = "Count",
-    bin_width: Optional[float] = None,
-    bin_count: Optional[int] = None,
-    log_scale_datasets: list[str] = [],  # if non-empty, use log y-scale to keep API compatible
+    bin_width: float | None = None,
+    bin_count: int | None = None,
+    log_scale_datasets: list[str] = [],
     palette: str = "muted",
     multiple: str = "dodge",
-    x_axis_boundaries: Optional[tuple[float, float]] = None,
-    y_axis_boundaries: Optional[tuple[float, float]] = None,
+    x_axis_boundaries: tuple[float, float] | None = None,
+    y_axis_boundaries: tuple[float, float] | None = None,
     filter_outliers: bool = False,
-    outliers_bounds: Optional[tuple[float, float]] = None,
-    outliers_bygroup: Optional[str] = None,
+    outliers_bounds: tuple[float, float] | None = None,
+    outliers_bygroup: str | None = None,
     return_outliers: bool = False,
-) -> Optional[pd.DataFrame]:
+    save_svg_path: str | Path | None = None,  # you already added this
+    *,
+    editable_text: bool = True,
+    prefer_font: str = "Arial",
+    export_format: str = "svg",  # "svg" or "pdf"
+) -> pd.DataFrame | None:
     """
     Plot a **single** histogram of `value_column` for the entire DataFrame, colored by `group_column`.
 
@@ -550,27 +784,27 @@ def plot_histogram_by_group(
         else:
             bins = bin_count if bin_count is not None else 30
 
-        fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        try:
-            sns.histplot(
-                data=work,
-                x=value_column,
-                hue=group_column,
-                bins=bins,
-                multiple=multiple,
-                kde=False,
-                ax=ax,
-                palette=palette,
-                edgecolor=None,
-            )
-        except Exception as e:
-            logger.exception("plot_histogram_by_group: seaborn.histplot failed: %s", e)
-            # Minimal fallback: draw a plain histogram without hue
-            ax.hist(work[value_column].values, bins=bins)
+        with illustrator_text_context(prefer_font=prefer_font, keep_text=editable_text):
+            fig, ax = plt.subplots(figsize=(5, 4))
+            try:
+                sns.histplot(
+                    data=work,
+                    x=value_column,
+                    hue=group_column,
+                    bins=bins,
+                    multiple=multiple,
+                    kde=False,
+                    ax=ax,
+                    palette=palette,
+                    edgecolor=None,
+                )
+            except Exception as e:
+                logger.exception("plot_histogram_by_group: seaborn.histplot failed: %s", e)
+                ax.hist(work[value_column].values, bins=bins)
 
-        ax.set_title(title)
-        ax.set_xlabel(value_column)
-        ax.set_ylabel(ylabel)
+            ax.set_title(title)
+            ax.set_xlabel(value_column)
+            ax.set_ylabel(ylabel)
 
         # Optional axis limits
         if x_axis_boundaries is not None:
@@ -592,6 +826,25 @@ def plot_histogram_by_group(
                 logger.exception("plot_histogram_by_group: failed to set log y-scale: %s", e)
 
         plt.tight_layout()
+
+        # Save (SVG/PDF) with editable text
+        if save_svg_path is not None:
+            try:
+                svg_path = Path(save_svg_path)
+                svg_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    svg_path,
+                    format=fmt,
+                    transparent=True,
+                    bbox_inches="tight",
+                    metadata={"Creator": "plot_histogram_by_group"},
+                )
+            except Exception as e:
+                logger.exception("plot_histogram_by_group: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
         plt.show()
 
         if return_outliers:
@@ -699,19 +952,20 @@ def plot_scatter_hexbin(
     plt.tight_layout()
     plt.show()
 
+
 def plot_violin(
     df: pd.DataFrame,
-    x: Optional[str],
+    x: str | None,
     y: str,
     title: str,
-    hue: Optional[str] = None,
-    order: Optional[list] = None,
-    hue_order: Optional[list] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    palette: Optional[Union[str, list, dict]] = "muted",
-    bw: Optional[Union[float, str]] = None,
-    inner: Optional[str] = "quartile",
+    hue: str | None = None,
+    order: list[str] | None = None,
+    hue_order: list[str] | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    palette: str | list | dict | None = "muted",
+    bw: float | str | None = None,
+    inner: str | None = "quartile",
     cut: float = 0.0,
     linewidth: float = 0.8,
     width: float = 0.8,
@@ -723,54 +977,56 @@ def plot_violin(
     jitter: float = 0.2,
     figsize: tuple[float, float] = (7.0, 4.5),
     x_tick_rotation: int = 0,
-    y_axis_boundaries: Optional[tuple[float, float]] = None,
-    x_axis_boundaries: Optional[tuple[float, float]] = None,
+    y_axis_boundaries: tuple[float, float] | None = None,
+    x_axis_boundaries: tuple[float, float] | None = None,
     log_y: bool = False,
     filter_outliers: bool = False,
-    outliers_bygroup: Optional[str] = None,
-    outliers_bounds: Optional[tuple[float, float]] = None,
+    outliers_bygroup: str | None = None,
+    outliers_bounds: tuple[float, float] | None = None,
+    save_svg_path: str | Path | None = None,
+    export_format: str = "svg",
+
+    # --- Box overlay (classic "violin + box" style) ---
+    overlay_box: bool = True,
+    box_whis: float | tuple[float, float] = 1.5,   # Tukey whiskers by default
+    box_linewidth: float = 1.2,
+    showfliers: bool = False,
+
+    # --- Matching colors / lines ---
+    match_box_to_violin: bool = True,              # box fill matches violin fill color(s)
+    shared_line_color: str | tuple[float, ...] = "0.35",  # one grey for all lines
+    box_alpha: float = 1.0,                         # opacity for the IQR box
 ) -> None:
     """
-    Render a flexible, single-figure violin plot with optional hue split, bandwidth control,
-    and overlayed points.
+    Render a violin plot with optional classic box overlay (median/IQR + whiskers), with the
+    option to match the box fill to the violin color and use a unified grey for all linework.
 
     Args:
-        df: Tidy DataFrame containing at least the `y` column, and `x`/`hue` if used.
-        x: Categorical column for the x-axis (set to None for a single violin of all data).
-        y: Numeric column to plot on the y-axis.
-        title: Figure title.
-        hue: Optional categorical column to split violins.
-        order: Explicit order for `x` categories.
-        hue_order: Explicit order for `hue` categories.
-        xlabel: X-axis label (defaults to `x` if None).
-        ylabel: Y-axis label (defaults to `y` if None).
-        palette: Seaborn/Matplotlib palette name, list of colors, or dict mapping.
-        bw: KDE bandwidth (float) or a method string like 'scott'/'silverman'. If None, seaborn default is used.
-        inner: Inner representation: None|'box'|'quartile'|'point'|'stick'.
-        cut: How far the density extends beyond extreme datapoints.
-        linewidth: Line width of violin edges.
-        width: Width of each violin.
-        alpha: Face opacity of the violins (0–1).
-        dodge: If True, draw separate violins for hue levels at each category.
-        show_points: If True, overlay points (strip/swarm) to show raw samples.
-        point_style: 'strip' (faster) or 'swarm' (collision-avoiding).
-        point_size: Marker size for point overlay.
-        jitter: Horizontal jitter for strip points.
-        figsize: Figure size in inches.
-        x_tick_rotation: Degrees to rotate x tick labels.
-        y_axis_boundaries: Optional y-limits (ymin, ymax).
-        x_axis_boundaries: Optional x-limits (xmin, xmax) — useful when x is numeric.
-        log_y: If True, set y-axis to logarithmic scale.
-        filter_outliers: If True, remove outliers using asymmetric-IQR before plotting.
-        outliers_bygroup: 
-        outliers_bounds: Quantile bounds (lower, upper) for outlier detection; default (0.25, 0.75).
+        df: Tidy DataFrame; must contain `y` (and `x`/`hue` if used).
+        x: Categorical column for x-axis; None -> single violin of all data.
+        y: Numeric column for y-axis.
+        title: Plot title.
+        hue: Optional grouping column within each x level.
+        order, hue_order: Explicit orders.
+        xlabel, ylabel: Axis labels; default to column names if None.
+        palette: Seaborn palette / list / dict.
+        bw, inner, cut, linewidth, width, alpha, dodge: Violin styling.
+        show_points, point_style, point_size, jitter: Raw points overlay.
+        figsize, x_tick_rotation, y_axis_boundaries, x_axis_boundaries, log_y: Layout/axes.
+        filter_outliers, outliers_bygroup, outliers_bounds: Optional pre-filtering.
+        save_svg_path, export_format: Saving (svg/pdf, flattened on white).
+
+        overlay_box: Draw boxplot inside violins.
+        box_whis: Whisker rule; 1.5 = Tukey.
+        box_linewidth: Width of box/whisker/median lines.
+        showfliers: Draw outlier fliers (dots) from boxplot layer.
+
+        match_box_to_violin: If True, the IQR box fill color(s) match the violin color(s).
+        shared_line_color: Grey used for *all* linework (violin edges + box lines).
+        box_alpha: Opacity of the IQR box fill.
 
     Returns:
         None
-
-    Raises:
-        KeyError: If required columns are missing.
-        ValueError: If the DataFrame is empty or the plotting subset is empty.
     """
     try:
         if df is None or df.empty:
@@ -793,7 +1049,10 @@ def plot_violin(
         if filter_outliers:
             try:
                 ql, qu = outliers_bounds if outliers_bounds is not None else (0.25, 0.75)
-                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu, outliers_bygroup)
+                # Expect a helper in your codebase:
+                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(  # type: ignore[name-defined]
+                    work, y, ql, qu, outliers_bygroup
+                )
                 logger.info(
                     "plot_violin: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
                     len(outliers), work.shape[0], y, lb, ub
@@ -804,67 +1063,111 @@ def plot_violin(
 
         fig, ax = plt.subplots(figsize=figsize)
 
-        if hue is None:
-            hue=x
-            legend=False
-        # Build common kwargs; seaborn changed some params across versions, so we guard optional ones
-        violin_kwargs = dict(
+        # --- Draw violins ---
+        violin_kwargs: dict[str, object] = dict(
             data=work,
             x=x,
             y=y,
             hue=hue,
             order=order,
             hue_order=hue_order,
-            inner=inner,
+            inner=None if overlay_box else inner,  # avoid doubled quartile lines when we draw our box
             cut=cut,
             palette=palette,
             linewidth=linewidth,
             width=width,
             dodge=dodge,
             ax=ax,
-            legend=legend if hue is None else None
         )
-        # Bandwidth: only pass if user specified, to avoid version warnings
         if bw is not None:
             violin_kwargs["bw"] = bw
 
         try:
-            v = sns.violinplot(**violin_kwargs)
-            # Apply alpha to collections
+            sns.violinplot(**violin_kwargs)
+            # apply opacity to the violin bodies
             for coll in ax.collections:
                 try:
                     coll.set_alpha(alpha)
+                    coll.set_edgecolor(shared_line_color)  # unified grey edge
                 except Exception:
                     pass
         except Exception as e:
             logger.exception("plot_violin: seaborn.violinplot failed, attempting matplotlib fallback: %s", e)
-            # Very simple fallback — single violin using matplotlib; no hue support
             try:
                 parts = ax.violinplot(dataset=[work[y].values], showmeans=False, showmedians=True)
-                for pc in parts['bodies']:
+                for pc in parts["bodies"]:
                     pc.set_alpha(alpha)
+                    pc.set_edgecolor(shared_line_color)
                 ax.set_xticks([1])
                 ax.set_xticklabels([x if isinstance(x, str) else "Values"])
             except Exception as e2:
                 logger.exception("plot_violin: matplotlib fallback failed: %s", e2)
                 return None
 
-        # Optional points overlay
+        # --- Box overlay (median/IQR + Tukey whiskers), matching colors/lines ---
+        if overlay_box:
+            try:
+                box_width = max(0.05, min(0.95, width * 0.15))
+
+                # If we want the box face(s) to match the violin(s), let the palette set the colors.
+                # (Don't pass a facecolor in boxprops; we set alpha separately.)
+                box_palette = palette if match_box_to_violin else None
+
+                bp_ax = sns.boxplot(
+                    data=work,
+                    x=x,
+                    y=y,
+                    hue=hue if dodge else None,
+                    order=order,
+                    hue_order=hue_order,
+                    whis=box_whis,
+                    showcaps=False,
+                    showfliers=showfliers,
+                    dodge=dodge,
+                    width=box_width,
+                    palette=box_palette,  # <- matches violin fill colors
+                    ax=ax,
+                    boxprops=dict(
+                        edgecolor=shared_line_color,
+                        linewidth=box_linewidth,
+                        alpha=box_alpha,      # keep palette color but apply our alpha
+                    ),
+                    whiskerprops=dict(color=shared_line_color, linewidth=box_linewidth),
+                    capprops=dict(color=shared_line_color, linewidth=box_linewidth),
+                    medianprops=dict(color=shared_line_color, linewidth=box_linewidth),
+                    zorder=5,
+                )
+
+                # If match_box_to_violin is False, make the boxes white fill but grey lines:
+                if not match_box_to_violin:
+                    for patch in ax.artists:  # each box is a PathPatch
+                        try:
+                            patch.set_facecolor("white")
+                            patch.set_edgecolor(shared_line_color)
+                            patch.set_alpha(box_alpha)
+                        except Exception:
+                            pass
+
+            except Exception as e:
+                logger.exception("plot_violin: box overlay failed: %s", e)
+
+        # --- Optional raw points on top ---
         if show_points:
             try:
                 if point_style == "swarm":
                     sns.swarmplot(
                         data=work, x=x, y=y, hue=hue if dodge else None, dodge=dodge,
-                        size=point_size, ax=ax, color="k", alpha=min(1.0, alpha + 0.05)
+                        size=point_size, ax=ax, color="k", alpha=min(1.0, alpha + 0.05), zorder=6
                     )
                 else:
                     sns.stripplot(
                         data=work, x=x, y=y, hue=hue if dodge else None, dodge=dodge,
-                        size=point_size, jitter=jitter, ax=ax, color="k", alpha=min(1.0, alpha + 0.05)
+                        size=point_size, jitter=jitter, ax=ax, color="k", alpha=min(1.0, alpha + 0.05), zorder=6
                     )
             except Exception as e:
                 logger.exception("plot_violin: point overlay failed: %s", e)
 
+        # --- Labels / axes ---
         ax.set_title(title)
         ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
         ax.set_ylabel(ylabel if ylabel is not None else y)
@@ -893,6 +1196,29 @@ def plot_violin(
                 logger.exception("plot_violin: setting log y failed: %s", e)
 
         plt.tight_layout()
+
+        # --- Save (flatten on white to avoid PDF darkening) ---
+        if save_svg_path is not None:
+            try:
+                out_path = Path(save_svg_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    out_path,
+                    format=fmt,
+                    dpi=300,
+                    bbox_inches="tight",
+                    facecolor="white",
+                    edgecolor="white",
+                    transparent=True,
+                    metadata={"Creator": "plot_violin"},
+                )
+                logger.info("plot_violin: figure saved to %s (%s)", out_path, fmt)
+            except Exception as e:
+                logger.exception("plot_violin: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
         plt.show()
 
     except Exception as e:
@@ -927,9 +1253,9 @@ def plot_points_mean_std(
     outliers_bygroup: Optional[str] = None,
     legend: bool = True,
     show_mean_labels: bool = False,
-
-    # NEW: control whether to draw raw points
     show_points: bool = True,
+    save_svg_path: str | Path | None = None,  # you already added this
+    export_format: str = "svg",  # "svg" or "pdf"
 ) -> None:
     """
     Plot raw points (strip or swarm) with a mean point and standard deviation whiskers per group.
@@ -1140,6 +1466,24 @@ def plot_points_mean_std(
                 logger.exception("plot_points_mean_std: setting log y failed: %s", e)
 
         plt.tight_layout()
+        if save_svg_path is not None:
+            try:
+                svg_path = Path(save_svg_path)
+                svg_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    svg_path,
+                    format=fmt,
+                    transparent=True,
+                    bbox_inches="tight",
+                    metadata={"Creator": "plot_histogram_by_group"},
+                )
+            except Exception as e:
+                logger.exception("plot_histogram_by_group: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
+
         plt.show()
 
     except Exception as e:
@@ -1676,4 +2020,204 @@ def plot_heatmap(
 
     except Exception as e:
         logger.exception("plot_binned_heatmap failed: %s", e)
+        return None
+    
+
+def _parse_event_list(value: any) -> list[str]:
+    """Best-effort parser for an event-ID list cell.
+
+    Accepts Python lists/tuples/sets, JSON-encoded strings, comma-separated strings,
+    or scalar (which will yield a single-item list). All items are converted to str.
+
+    Args:
+        value: Cell content to parse.
+
+    Returns:
+        list[str]: Parsed list of event IDs as strings. Empty on failure.
+    """
+    try:
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            return []
+        # Already a list-like
+        if isinstance(value, (list, tuple, set)):
+            return [str(x) for x in value]
+        # JSON string like "[1, 2, 3]" or "[\"E1\", \"E2\"]"
+        if isinstance(value, str):
+            v = value.strip()
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return [str(x) for x in parsed]
+                except Exception:
+                    # fallthrough to comma-split
+                    pass
+            # Comma-separated fallback: "1,2,3" -> ["1","2","3"]
+            if "," in v:
+                return [s.strip() for s in v.split(",") if s.strip()]
+            # Single scalar string -> [value]
+            if v:
+                return [v]
+        # Single scalar -> [value]
+        return [str(value)]
+    except Exception:
+        logger.exception("Failed to parse event list value: %r", value)
+        return []
+
+def plot_early_peakers_heatmap(
+    cells: pd.DataFrame,
+    *,
+    cell_col: str = "Cell ID",
+    occurrences_col: str = "Occurrences in global events as early peaker",
+    events_col: str = "Early peaker event IDs",
+    event_ids: list[str] | None = None,
+    total_events: int | None = None,
+    output_svg: str | Path = "early_peakers_heatmap.svg",
+    title: str = "Early Peakers Participation",
+    show_labels: bool = False,
+    return_labels: bool = False,
+) -> np.ndarray | tuple[np.ndarray, list[str], list[str]] | None:
+    """Plot and save a black/white heatmap of early-peaker participation by **event ID**.
+
+    This version uses a per-cell column of event IDs (JSON/list) to place black squares
+    exactly where a given cell was an early peaker for a specific event. Columns are the
+    set of unique event IDs across all cells (or the provided *event_ids* order), and rows
+    are the cells with at least one early-peaker occurrence.
+
+    Args:
+        cells: DataFrame with per-cell metadata.
+        cell_col: Column holding cell identifiers.
+        occurrences_col: Column holding the precomputed count of times a cell is an early peaker.
+        events_col: Column holding the event-ID lists (can be JSON string or Python list).
+        event_ids: Optional explicit ordering of event IDs (items will be converted to str).
+            If None, will derive from *events_col* (sorted lexicographically as strings).
+        total_events: **Deprecated**. Ignored when *event_ids* or *events_col* are present.
+            Kept for backward compatibility; logged as a warning if provided.
+        output_svg: Path to the SVG file to write.
+        title: Title string for the figure.
+        show_labels: If True, draw row/column tick labels. Off by default to keep figures compact.
+        return_labels: If True, return a tuple of (matrix, row_labels, col_labels). Otherwise just the matrix.
+
+    Returns:
+        numpy.ndarray | tuple[numpy.ndarray, list[str], list[str]] | None:
+            Binary matrix of shape [n_cells_with_occ>0, n_events]. If *return_labels* is True,
+            returns (matrix, row_labels (cell IDs), col_labels (event IDs as str)). Returns None on error or when no data.
+    """
+    try:
+        # Validate required columns
+        for col in (cell_col, occurrences_col, events_col):
+            if col not in cells.columns:
+                raise KeyError(
+                    f"Missing required column '{col}' in cells DataFrame. Available: {list(cells.columns)}"
+                )
+
+        # Filter to cells with >0 occurrences
+        df = cells[[cell_col, occurrences_col, events_col]].copy()
+        df = df[df[occurrences_col].astype(float) > 0]
+        if df.empty:
+            logger.warning("No cells with '%s' > 0. Nothing to plot.", occurrences_col)
+            return None
+
+        # Normalize types
+        df[occurrences_col] = df[occurrences_col].round().astype(int).clip(lower=0)
+        # Parse event lists
+        df["__event_list__"] = df[events_col].apply(_parse_event_list)
+        # Sort rows by occurrence count then cell ID for reproducibility
+        df.sort_values(by=[occurrences_col, cell_col], ascending=[False, True], inplace=True)
+
+        # Determine column order (event IDs)
+        if event_ids is not None:
+            col_labels = [str(e) for e in event_ids]
+        else:
+            # Union of all events across cells
+            all_events: set[str] = set()
+            for lst in df["__event_list__"]:
+                all_events.update(lst)
+            if not all_events:
+                logger.warning("No event IDs found in '%s'. Nothing to plot.", events_col)
+                return None
+            col_labels = sorted(all_events)  # lexicographic; customize if needed
+
+        if total_events is not None:
+            logger.warning(
+                "'total_events' is deprecated and ignored. Using %d unique event IDs.",
+                len(col_labels),
+            )
+
+        # Build the binary matrix
+        row_labels = df[cell_col].astype(str).tolist()
+        n_rows = len(row_labels)
+        n_cols = len(col_labels)
+        index_by_event = {ev: j for j, ev in enumerate(col_labels)}
+
+        matrix = np.zeros((n_rows, n_cols), dtype=int)
+        for i, ev_list in enumerate(df["__event_list__"]):
+            for ev in ev_list:
+                j = index_by_event.get(ev)
+                if j is not None:
+                    matrix[i, j] = 1
+
+        logger.info(
+            "Early peakers event-matrix: %d cells x %d events; black squares: %d",
+            n_rows,
+            n_cols,
+            int(matrix.sum()),
+        )
+
+        # --- Plot ---
+        # Heuristic sizing: keep things readable without exploding figure size
+        # Base cell size; scale modestly with counts
+        cell_h = 0.05  # inches per cell row
+        cell_w = 0.05  # inches per event column
+        fig_w = max(3.0, n_cols * cell_w)
+        fig_h = max(3.0, n_rows * cell_h)
+
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+        cmap = ListedColormap(["white", "black"])
+        norm = BoundaryNorm([0, 0.5, 1], ncolors=2)
+        ax.imshow(
+            matrix,
+            cmap=cmap,
+            norm=norm,
+            aspect="auto",
+            interpolation="none",
+            origin="upper",
+        )
+
+        # Grid lines at every cell
+        ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
+        ax.grid(which="minor", color="black", linestyle="-", linewidth=0.6)
+
+        # Labels (optional; can get crowded)
+        if show_labels:
+            ax.set_xticks(np.arange(n_cols))
+            ax.set_yticks(np.arange(n_rows))
+            ax.set_xticklabels(col_labels, rotation=90, fontsize=8)
+            ax.set_yticklabels(row_labels, fontsize=8)
+            ax.tick_params(axis="both", which="both", length=0)
+        else:
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.set_title(title)
+
+        plt.subplots_adjust(left=0, right=1, top=0.95, bottom=0)
+        plt.margins(0)
+
+        output_path = Path(output_svg)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(output_path, format="svg", bbox_inches="tight", pad_inches=0)
+        plt.show()
+        plt.close(fig)
+        logger.info("Saved early peakers heatmap SVG to: %s", output_path)
+
+        if return_labels:
+            return matrix, row_labels, col_labels
+        return matrix
+
+    except Exception as e:
+        logger.exception("Failed to create/save early peakers heatmap: %s", e)
         return None

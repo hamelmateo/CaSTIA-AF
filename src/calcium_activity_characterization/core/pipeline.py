@@ -336,8 +336,8 @@ class CalciumPipeline:
         """
         Run peak detection on all active cells using parameters from config and binarize the traces.
         """
-        if self.binary_traces_path.exists():
-        #if False:  # Disable reloading for debugging purposes
+        #if self.binary_traces_path.exists():
+        if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.binary_traces_path)
             return
         
@@ -412,39 +412,39 @@ class CalciumPipeline:
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                global_counts,
-                               self.output_dir / "cell-mapping" / "cell_occurences_in_global_events_overlay.png",
-                               title="Mapping of Cell Occurences in Global Events",
-                               colorbar_label="Occurences of Global Events"
+                               self.output_dir / "cell-mapping" / "cell_occurrences_in_global_events_overlay.pdf",
+                               title="Mapping of Cell Occurrences in Global Events",
+                               colorbar_label="Occurrences of Global Events"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask, 
                                cell_pixel_coords, 
                                seq_counts, 
-                               self.output_dir / "cell-mapping" / "cell_occurences_in_sequential_events_overlay.png",
-                               title="Mapping of Cell Occurences in Sequential Events",
-                               colorbar_label="Occurences of Sequential Events"
+                               self.output_dir / "cell-mapping" / "cell_occurrences_in_sequential_events_overlay.pdf",
+                               title="Mapping of Cell Occurrences in Sequential Events",
+                               colorbar_label="Occurrences of Sequential Events"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask, 
                                cell_pixel_coords, 
                                individual_counts, 
-                               self.output_dir / "cell-mapping" / "cell_occurences_in_individual_events_overlay.png",
-                               title="Mapping of Cell Occurences in Individual Events",
-                               colorbar_label="Occurences of Individual Events"
+                               self.output_dir / "cell-mapping" / "cell_occurrences_in_individual_events_overlay.pdf",
+                               title="Mapping of Cell Occurrences in Individual Events",
+                               colorbar_label="Occurrences of Individual Events"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask, 
                                cell_pixel_coords, 
                                origin_counts, 
-                               self.output_dir / "cell-mapping" / "cell_occurences_in_origin_seq_events_overlay.png",
-                               title="Mapping of Cell Occurences as Origin in Sequential Events",
-                               colorbar_label="Occurences as Origin in Sequential Events"
+                               self.output_dir / "cell-mapping" / "cell_occurrences_in_origin_seq_events_overlay.pdf",
+                               title="Mapping of Cell Occurrences as Origin in Sequential Events",
+                               colorbar_label="Occurrences as Origin in Sequential Events"
                                )
 
         large_seq_counts = self.population.filter_large_sequential_events(min_cells=3)
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                large_seq_counts,
-                               self.output_dir / "cell-mapping" / "cell_occurences_in_large_sequential_events_overlay.png",
-                               title="Mapping of Cell Occurences in Large Sequential Events",
-                               colorbar_label="Occurences in Large Sequential Events"
+                               self.output_dir / "cell-mapping" / "cell_occurrences_in_large_sequential_events_overlay.pdf",
+                               title="Mapping of Cell Occurrences in Large Sequential Events",
+                               colorbar_label="Occurrences in Large Sequential Events"
                                )
 
         # Analyze cell cell interaction
@@ -468,7 +468,7 @@ class CalciumPipeline:
                 plot_metric_on_overlay(self.population.nuclei_mask,
                                     cell_pixel_coords,
                                     early_peakers,
-                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.png",
+                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.pdf",
                                     title=f"Mapping of the {percent * 100:.1f}% Early Peakers in Global Events {event.id}",
                                     colorbar_label="Early Peakers in Global Events",
                                     show_colorbar=False
@@ -478,9 +478,9 @@ class CalciumPipeline:
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                overlap_early_peakers,
-                               self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_early_peakers_overlay.png",
+                               self.output_dir / "cell-mapping" / "global_events" / f"global_event_overlap_early_peakers_overlay.pdf",
                                title=f"Mapping of Overlapping Early Peakers in Global Events",
-                               colorbar_label="Number of occurences as Early Peakers in Global Events",
+                               colorbar_label="Number of occurrences as Early Peakers in Global Events",
                                vmin=0,
                                vmax=len([event for event in self.population.events if event.__class__.__name__ == "GlobalEvent"])
                                )
@@ -491,23 +491,23 @@ class CalciumPipeline:
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_cells_all_comms,
-                               self.output_dir / "cell-mapping" / "high_speed_cells_overlay.png",
+                               self.output_dir / "cell-mapping" / "high_speed_cells_overlay.pdf",
                                title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame",
-                               colorbar_label="Number of occurences with high speed communications"
+                               colorbar_label="Number of occurrences with high speed communications"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_cells,
-                               self.output_dir / "cell-mapping" / "high_speed_cells_in_large_events_overlay.png",
+                               self.output_dir / "cell-mapping" / "high_speed_cells_in_large_events_overlay.pdf",
                                title=f"Mapping of Cells with Communication Speed > {speed_threshold} px/frame in large events",
-                               colorbar_label="Number of occurences with high speed communications"
+                               colorbar_label="Number of occurrences with high speed communications"
                                )
         plot_metric_on_overlay(self.population.nuclei_mask,
                                cell_pixel_coords,
                                high_speed_origin_cells,
-                               self.output_dir / "cell-mapping" / "high_speed_origin_cells_overlay.png",
+                               self.output_dir / "cell-mapping" / "high_speed_origin_cells_overlay.pdf",
                                title=f"Mapping of Cells with High Speed Origin Communications > {speed_threshold} px/frame",
-                               colorbar_label="Number of occurences with high speed origin communications"
+                               colorbar_label="Number of occurrences with high speed origin communications"
                                )
 
     def _export_normalized_datasets(self) -> None:

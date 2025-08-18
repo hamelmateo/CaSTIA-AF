@@ -45,6 +45,7 @@ class Cell:
 
         self.occurences_global_events: int = 0
         self.occurences_global_events_as_early_peaker: int = 0
+        self.early_peaker_event_ID: list[int] = []
         self.occurences_sequential_events: int = 0
         self.occurences_sequential_events_as_origin: int = 0
         self.occurences_individual_events: int = 0

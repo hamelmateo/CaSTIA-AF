@@ -14,23 +14,35 @@ def plot_raster(
     cut_trace: int = 0
 ) -> None:
     """
-    Plot a raster plot from a list of binary traces, with optional x-axis shift.
+    Plot a raster plot from a list of binary traces, with optional x-axis shift,
+    and save it as an SVG file.
 
     Args:
-        output_path (Path): File path to save the plot.
-        binary_traces (list[list[int] | np.ndarray]): list of binary activity traces.
-        cut_trace (int): Offset to add to x-axis labels for synchronization.
+        output_path: Desired file path. If its suffix is not `.svg`, the file will be
+            saved next to it with the same stem but `.svg` extension.
+        binary_traces: List of binary activity traces (0/1) per cell.
+        cut_trace: Offset to add to x-axis labels for synchronization.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: Re-raises any unexpected error after logging.
     """
     try:
+        # Ensure folder exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if not binary_traces:
             logger.warning("No binary traces provided for raster plot.")
             return
 
+        # Force SVG destination (even if user passed .png)
+        svg_path = output_path if output_path.suffix.lower() == ".svg" else output_path.with_suffix(".svg")
+
         binarized_matrix = np.array(binary_traces)
         _, ax = plt.subplots(figsize=(12, 6))
-        ax.imshow(binarized_matrix, aspect='auto', cmap='Greys', interpolation='nearest')
+        ax.imshow(binarized_matrix, aspect="auto", cmap="Greys", interpolation="nearest")
         ax.set_title("Binarized Activity Raster Plot")
         ax.set_ylabel("Cell Index")
         ax.set_xlabel("Time")
@@ -40,12 +52,13 @@ def plot_raster(
         ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
 
         plt.tight_layout()
-        plt.savefig(output_path, dpi=600)
+        # Save as SVG (vector)
+        plt.savefig(svg_path, format="svg", transparent=True, bbox_inches="tight", metadata={"Creator": "plot_raster"})
         plt.close()
-        logger.info(f"Raster plot saved to {output_path}")
+        logger.info("Raster plot saved to %s", svg_path)
 
     except Exception as e:
-        logger.error(f"Failed to generate raster plot: {e}")
+        logger.exception("Failed to generate raster plot: %s", e)
         raise
 
 def plot_raster_heatmap(
@@ -688,8 +701,8 @@ def plot_metric_on_overlay(
             overlay[y, x] = norm_value
 
     plt.figure(figsize=(10, 10))
-    plt.imshow(mask, cmap="gray", alpha=0.6)
-    im = plt.imshow(overlay, cmap=cmap, alpha=0.8, vmin=vmin_plot, vmax=vmax_plot)
+    plt.imshow(mask, cmap="gray", alpha=1)
+    im = plt.imshow(overlay, cmap=cmap, alpha=0.9, vmin=vmin_plot, vmax=vmax_plot)
 
     if show_colorbar:
         cbar = plt.colorbar(im, fraction=0.046, pad=0.04, aspect=20, shrink=0.8)
@@ -698,6 +711,6 @@ def plot_metric_on_overlay(
     plt.title(title)
     plt.axis("off")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=300)
+    plt.savefig(output_path, format="pdf", dpi=300, transparent=True, bbox_inches="tight", metadata={"Creator": "plot_metrics_on_overlay"})
     plt.close()
     logger.info(f"{title} figure saved at {output_path}")
