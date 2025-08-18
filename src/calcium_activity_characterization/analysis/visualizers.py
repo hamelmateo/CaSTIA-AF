@@ -1228,93 +1228,75 @@ def plot_violin(
 
 def plot_points_mean_std(
     df: pd.DataFrame,
-    x: Optional[str],
+    x: str | None,
     y: str,
     title: str,
-    hue: Optional[str] = None,
-    order: Optional[list] = None,
-    hue_order: Optional[list] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    palette: Union[str, list, dict, None] = "muted",
-    dodge: bool = False,
-    point_style: str = "swarm",  # 'strip' or 'swarm'
+    *,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    show_points: bool = True,
+    point_style: str = "swarm",           # 'strip' or 'swarm'
     point_size: float = 3.5,
     point_alpha: float = 0.85,
-    jitter: float = 0.2,
-    capsize: float = 0.1,
+    filter_outliers: bool = False,
+    outliers_bounds: tuple[float, float] | None = None,
+    outliers_bygroup: str | None = None,
     figsize: tuple[float, float] = (7.0, 4.5),
     x_tick_rotation: int = 0,
-    y_axis_boundaries: Optional[tuple[float, float]] = None,
-    x_axis_boundaries: Optional[tuple[float, float]] = None,
+    y_axis_boundaries: tuple[float, float] | None = None,
+    x_axis_boundaries: tuple[float, float] | None = None,
     log_y: bool = False,
-    filter_outliers: bool = False,
-    outliers_bounds: Optional[tuple[float, float]] = None,
-    outliers_bygroup: Optional[str] = None,
-    legend: bool = True,
-    show_mean_labels: bool = False,
-    show_points: bool = True,
-    save_svg_path: str | Path | None = None,  # you already added this
-    export_format: str = "svg",  # "svg" or "pdf"
+    mean_color: str | None = None,               # Single color for all mean±std
+    mean_palette: str | list[str] | None = None, # NEW: color each x-category (e.g., "tab10")
+    save_svg_path: str | Path | None = None,
+    export_format: str = "svg",
 ) -> None:
     """
-    Plot raw points (strip or swarm) with a mean point and standard deviation whiskers per group.
-
-    This helper mirrors the API of your violin plot: it supports optional hue splitting with
-    dodging, custom palettes, axis labels, and robust error handling. The mean±std overlay is
-    rendered using ``seaborn.pointplot`` (with fallbacks for different seaborn versions).
+    Plot optional raw points plus a mean±std overlay per x-category.
+    - No connecting line between category means.
+    - `mean_palette` colors each category differently; otherwise use `mean_color` (or default).
 
     Args:
-        df: Tidy DataFrame containing at least the `y` column, and `x`/`hue` if used.
-        x: Categorical column for the x-axis (set to None to aggregate across all rows).
-        y: Numeric column to plot on the y-axis.
+        df: Tidy DataFrame with columns `y` and optionally `x`.
+        x: Categorical column for x-axis (None => one aggregated group).
+        y: Numeric column to plot.
         title: Figure title.
-        hue: Optional categorical column to split groups.
-        order: Explicit category order for `x`.
-        hue_order: Explicit category order for `hue`.
-        xlabel: X-axis label (defaults to `x` if None).
-        ylabel: Y-axis label (defaults to `y` if None).
-        palette: Seaborn/Matplotlib palette name, list, or dict (mapping hue levels to colors).
-        dodge: If True, draw separate summaries for hue levels at each category.
-        point_style: 'strip' or 'swarm' for the raw points layer.
-        point_size: Marker size of the raw points layer.
-        point_alpha: Opacity of the raw points layer.
-        jitter: Horizontal jitter for strip points (ignored for swarm).
-        capsize: Size of the error bar caps (in axis fraction units).
-        figsize: Figure size in inches.
-        x_tick_rotation: Degrees to rotate x tick labels.
-        y_axis_boundaries: Optional y-limits (ymin, ymax).
-        x_axis_boundaries: Optional x-limits (xmin, xmax).
-        log_y: If True, set y-axis to logarithmic scale.
-        filter_outliers: If True, remove outliers using asymmetric-IQR before plotting.
-        outliers_bounds: Quantile bounds (lower, upper) for outlier detection; default (0.25, 0.75).
-        outliers_bygroup: Optional grouping variable for outlier detection.
-        legend: Whether to show legend for the hue summary layer.
-        show_mean_labels: If True, annotate each summary point with the mean value.
-        show_points: If False, hide the raw points layer and show only mean ± std.
+        xlabel: X label (defaults to `x` if None).
+        ylabel: Y label (defaults to `y` if None).
+        show_points: If True, show raw points beneath the summary.
+        point_style: 'strip' or 'swarm' for the raw points.
+        point_size: Marker size for raw points.
+        point_alpha: Alpha for raw points.
+        filter_outliers: Apply asymmetric-IQR filtering via `detect_asymmetric_iqr_outliers`.
+        outliers_bounds: Bounds tuple forwarded to outlier detector.
+        outliers_bygroup: Optional group column for outlier detector.
+        figsize: Figure size.
+        x_tick_rotation: Rotation of x tick labels.
+        y_axis_boundaries: Optional (ymin, ymax).
+        x_axis_boundaries: Optional (xmin, xmax).
+        log_y: Log-scale y if True.
+        mean_color: Single color for all means (ignored when `mean_palette` is set).
+        mean_palette: Palette name or list to color each x-category differently.
+        save_svg_path: If set, save the figure to this path.
+        export_format: "svg" or "pdf".
 
     Returns:
         None
-
-    Raises:
-        KeyError: If required columns are missing.
-        ValueError: If the DataFrame is empty or no valid rows remain after cleaning.
     """
     try:
         if df is None or df.empty:
             logger.warning("plot_points_mean_std: received empty DataFrame")
             return None
 
-        required = [y] + ([x] if x is not None else []) + ([hue] if (hue is not None and show_points) else [])
-        missing = [c for c in required if c not in df.columns]
+        req = [y] + ([x] if x is not None else [])
+        missing = [c for c in req if c not in df.columns]
         if missing:
-            logger.error("plot_points_mean_std: missing required columns: %s (available=%s)", missing, list(df.columns))
+            logger.error("plot_points_mean_std: missing columns: %s (available=%s)", missing, list(df.columns))
             return None
 
         work = df.copy()
         work[y] = pd.to_numeric(work[y], errors="coerce")
-        drop_cols = [y] + ([x] if x is not None else []) + ([hue] if (hue is not None and show_points) else [])
-        work = work.dropna(subset=drop_cols)
+        work = work.dropna(subset=req)
         if work.empty:
             logger.warning("plot_points_mean_std: no valid rows to plot after cleaning")
             return None
@@ -1324,165 +1306,127 @@ def plot_points_mean_std(
                 ql, qu = outliers_bounds if outliers_bounds is not None else (0.25, 0.75)
                 filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(work, y, ql, qu, outliers_bygroup)
                 logger.info(
-                    "plot_points_mean_std: removed %d outliers out of %d on '%s' (lower=%.5g, upper=%.5g)",
-                    len(outliers), work.shape[0], y, lb, ub
+                    "plot_points_mean_std: removed %d/%d outliers on '%s' (lower=%.5g, upper=%.5g)",
+                    len(outliers), work.shape[0], y, lb, ub,
                 )
                 work = filtered_df
             except Exception as e:
                 logger.exception("plot_points_mean_std: outlier filtering failed — continuing without: %s", e)
 
         fig, ax = plt.subplots(figsize=figsize)
-        # --- Raw points layer (optional) ---
+
+        # Optional raw points
         if show_points:
             try:
                 if point_style == "swarm":
-                    sns.swarmplot(
-                        data=work,
-                        x=x,
-                        y=y,
-                        hue=hue if dodge else None,
-                        dodge=dodge,
-                        palette=palette if (hue is not None) else None,
-                        size=point_size,
-                        alpha=point_alpha,
-                        ax=ax,
-                        legend=legend if hue is None else None
-                    )
+                    sns.swarmplot(data=work, x=x, y=y, size=point_size, alpha=point_alpha, ax=ax)
                 else:
-                    sns.stripplot(
-                        data=work,
-                        x=x,
-                        y=y,
-                        hue=hue if dodge else None,
-                        dodge=dodge,
-                        palette=palette if (hue is not None) else None,
-                        size=point_size,
-                        jitter=jitter,
-                        alpha=point_alpha,
-                        ax=ax,
-                        legend=legend if hue is None else None
-                    )
+                    sns.stripplot(data=work, x=x, y=y, size=point_size, alpha=point_alpha, ax=ax, jitter=True)
             except Exception as e:
                 logger.exception("plot_points_mean_std: points layer failed: %s", e)
 
-        # --- Mean ± std overlay ---
+        # === Mean ± std (no connecting line) ===
         try:
-            # In the summary, we want per-(x,hue) if hue exists; otherwise per-x.
-            summary_hue = hue if hue is not None else None
+            # If a palette is provided, color each x-category separately by mapping hue=x
+            if mean_palette is not None:
+                # New seaborn (>=0.12): errorbar="sd"; else fallback to estimator/ci
+                try:
+                    sns.pointplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        hue=x,          # color per category
+                        palette=mean_palette,
+                        dodge=False,        # overplot at same x position
+                        join=False,         # NO LINES
+                        markers="o",
+                        capsize=0.1,
+                        errorbar="sd",
+                        ax=ax,
+                        legend=False,       # suppress duplicate legend
+                    )
+                except TypeError:
+                    sns.pointplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        hue=x,
+                        palette=mean_palette,
+                        dodge=False,
+                        join=False,
+                        markers="o",
+                        capsize=0.1,
+                        estimator=np.mean,
+                        ci="sd",
+                        ax=ax,
+                        legend=False,
+                    )
 
-            try:
-                # New seaborn API (>=0.12): errorbar='sd'
-                sns.pointplot(
-                    data=work,
-                    x=x,
-                    y=y,
-                    hue=summary_hue,
-                    order=order,
-                    hue_order=hue_order,
-                    dodge=dodge if summary_hue is not None else False,
-                    palette=palette,
-                    errorbar='sd',
-                    markers='o',
-                    capsize=capsize,
-                    ax=ax,
-                )
-            except TypeError:
-                # Backward compatibility: older seaborn versions use estimator + ci='sd'
-                import numpy as _np
-                sns.pointplot(
-                    data=work,
-                    x=x,
-                    y=y,
-                    hue=summary_hue,
-                    order=order,
-                    hue_order=hue_order,
-                    dodge=dodge if summary_hue is not None else False,
-                    palette=palette,
-                    estimator=_np.mean,
-                    ci='sd',
-                    markers='o',
-                    capsize=capsize,
-                    ax=ax,
-                )
+            else:
+                # Single-color (or default) seaborn pointplot, with join=False to avoid lines
+                try:
+                    sns.pointplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        errorbar="sd",
+                        markers="o",
+                        capsize=0.1,
+                        linestyles='none',       
+                        ax=ax,
+                        color=mean_color,    # None -> default
+                    )
+                except TypeError:
+                    # Older seaborn
+                    sns.pointplot(
+                        data=work,
+                        x=x,
+                        y=y,
+                        estimator=np.mean,
+                        ci="sd",
+                        markers="o",
+                        capsize=0.1,
+                        join=False,          # <- no connecting line
+                        ax=ax,
+                        color=mean_color,
+                    )
         except Exception as e:
             logger.exception("plot_points_mean_std: summary overlay failed: %s", e)
 
-        # Legend handling
+        # Labels / limits / scales
         try:
-            leg = ax.get_legend()
-            if summary_hue is None or not legend:
-                if leg is not None:
-                    leg.remove()
-            else:
-                # keep legend (summary hue)
-                pass
-        except Exception as e:
-            logger.exception("plot_points_mean_std: legend handling failed: %s", e)
-
-        # Optional mean labels
-        if show_mean_labels:
-            try:
-                group_cols = ([] if x is None else [x]) + ([] if summary_hue is None else [summary_hue])
-                means = work.groupby(group_cols, dropna=False)[y].mean().reset_index()
-                # Resolve category order for positioning
-                x_levels = order if (order is not None) else (sorted(work[x].unique()) if x is not None else [None])
-                h_levels = hue_order if (hue_order is not None) else (sorted(work[summary_hue].unique()) if summary_hue is not None else [None])
-                for _, row in means.iterrows():
-                    xpos = x_levels.index(row[x]) if x is not None else 0
-                    if summary_hue is not None and dodge:
-                        i = h_levels.index(row[summary_hue])
-                        n = max(len(h_levels), 1)
-                        xpos = xpos - 0.4 + (i + 0.5) * (0.8 / n)
-                    ax.text(xpos, row[y], f"{row[y]:.2f}", ha='center', va='bottom', fontsize=8, color='black')
-            except Exception as e:
-                logger.exception("plot_points_mean_std: annotating means failed: %s", e)
-
-        # Axes & scales
-        ax.set_title(title)
-        ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
-        ax.set_ylabel(ylabel if ylabel is not None else y)
-
-        if x_tick_rotation:
-            try:
+            ax.set_title(title)
+            ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
+            ax.set_ylabel(ylabel if ylabel is not None else y)
+            if x_tick_rotation:
                 plt.setp(ax.get_xticklabels(), rotation=x_tick_rotation)
-            except Exception as e:
-                logger.exception("plot_points_mean_std: rotating xticklabels failed: %s", e)
-
-        if y_axis_boundaries is not None:
-            try:
+            if y_axis_boundaries is not None:
                 ax.set_ylim(y_axis_boundaries)
-            except Exception as e:
-                logger.exception("plot_points_mean_std: setting y-axis boundaries failed: %s", e)
-        if x_axis_boundaries is not None:
-            try:
+            if x_axis_boundaries is not None:
                 ax.set_xlim(x_axis_boundaries)
-            except Exception as e:
-                logger.exception("plot_points_mean_std: setting x-axis boundaries failed: %s", e)
-
-        if log_y:
-            try:
+            if log_y:
                 ax.set_yscale("log")
-            except Exception as e:
-                logger.exception("plot_points_mean_std: setting log y failed: %s", e)
+        except Exception as e:
+            logger.exception("plot_points_mean_std: axis setup failed: %s", e)
 
         plt.tight_layout()
+
         if save_svg_path is not None:
             try:
-                svg_path = Path(save_svg_path)
-                svg_path.parent.mkdir(parents=True, exist_ok=True)
+                out_path = Path(save_svg_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
                 fmt = export_format.lower()
                 if fmt not in {"svg", "pdf"}:
                     fmt = "svg"
                 plt.savefig(
-                    svg_path,
+                    out_path,
                     format=fmt,
                     transparent=True,
                     bbox_inches="tight",
-                    metadata={"Creator": "plot_histogram_by_group"},
+                    metadata={"Creator": "plot_points_mean_std"},
                 )
             except Exception as e:
-                logger.exception("plot_histogram_by_group: failed to save %s to '%s': %s", export_format, save_svg_path, e)
-
+                logger.exception("plot_points_mean_std: failed to save %s to '%s': %s", export_format, save_svg_path, e)
 
         plt.show()
 
@@ -1802,35 +1746,37 @@ def plot_heatmap(
     y: str,
     title: str = "",
     *,
-    value: Optional[str] = None,
+    value: str | None = None,
     stat: Literal["count", "mean", "sum", "median"] = "count",
-    bins_x: Union[int, np.ndarray] = 30,
-    bins_y: Union[int, np.ndarray] = 30,
-    range_x: Optional[tuple[float, float]] = None,
-    range_y: Optional[tuple[float, float]] = None,
+    bins_x: int | np.ndarray = 30,
+    bins_y: int | np.ndarray = 30,
+    range_x: tuple[float, float] | None = None,
+    range_y: tuple[float, float] | None = None,
     dropna: bool = True,
     # transforms
-    log_scale: bool = False,                      # log1p on heat values
-    normalize: Optional[Literal["row", "col"]] = None,  # min-max per row/col
-    clip_quantiles: Optional[tuple[float, float]] = None,
+    log_scale: bool = False,
+    normalize: Literal["row", "col"] | None = None,
+    clip_quantiles: tuple[float, float] | None = None,
     # plotting
-    cmap: Union[str, list] = "viridis",
+    cmap: str | list = "viridis",
     robust: bool = False,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    center: Optional[float] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    center: float | None = None,
     annot: bool = False,
     fmt: str = ".2f",
     cbar: bool = True,
     linewidths: float = 0.0,
-    linecolor: Optional[str] = None,
+    linecolor: str | None = None,
     square: bool = False,
     xtick_rotation: int = 0,
     ytick_rotation: int = 0,
     figsize: tuple[float, float] = (7.0, 5.0),
-) -> Optional[plt.Axes]:
+    save_svg_path: str | Path | None = None,
+    export_format: str = "svg",
+) -> plt.Axes | None:
     """
-    Plot a 2D binned heatmap (histogram heatmap) from numeric x/y columns.
+    Plot a 2D binned heatmap from numeric x/y columns using pandas cut + aggregation.
 
     Args:
         df: Input DataFrame with numeric columns `x` and `y`.
@@ -1841,12 +1787,12 @@ def plot_heatmap(
         stat: Aggregation within each bin. "count" ignores `value`.
         bins_x: Number of bins or explicit bin edges (array-like) for x.
         bins_y: Number of bins or explicit bin edges (array-like) for y.
-        range_x: Optional (min,max) for x binning (useful when providing counts consistently across subsets).
+        range_x: Optional (min,max) for x binning.
         range_y: Optional (min,max) for y binning.
         dropna: If True, drop rows where x/y (and value, if used) are NaN.
         log_scale: If True, applies log1p to the binned matrix before coloring.
         normalize: Optional min-max normalization per row or column on the binned matrix.
-        clip_quantiles: Optional (low,high) quantiles to clip the matrix values before plotting.
+        clip_quantiles: Optional (low,high) quantiles to clip matrix values before plotting.
         cmap: Colormap.
         robust: Seaborn robust scaling for color limits.
         vmin, vmax, center: Color scaling parameters for seaborn.heatmap.
@@ -1856,170 +1802,168 @@ def plot_heatmap(
         linewidths: Grid line width between cells.
         linecolor: Grid line color between cells.
         square: Force square cells.
-        xtick_rotation, ytick_rotation: Tick label rotations (deg).
+        xtick_rotation, ytick_rotation: Tick rotations in degrees.
         figsize: Figure size.
 
     Returns:
         matplotlib.axes.Axes on success, else None.
-
-    Raises:
-        KeyError: If required columns are missing.
-        ValueError: If resulting binned matrix is empty or invalid.
     """
     try:
+        # Basic checks
         if df is None or df.empty:
-            logger.warning("plot_binned_heatmap: received empty DataFrame")
+            logger.warning("plot_heatmap: received empty DataFrame")
             return None
 
         missing = [col for col in [x, y] if col not in df.columns]
         if missing:
-            logger.error("plot_binned_heatmap: missing columns: %s (available=%s)", missing, list(df.columns))
+            logger.error("plot_heatmap: missing columns: %s (available=%s)", missing, list(df.columns))
             return None
 
-        work = df[[x, y] + ([value] if value else [])].copy()
-        # Coerce numeric
-        work[x] = pd.to_numeric(work[x], errors="coerce")
-        work[y] = pd.to_numeric(work[y], errors="coerce")
-        if value:
-            work[value] = pd.to_numeric(work[value], errors="coerce")
+        work_cols = [x, y] + ([value] if value and stat in {"mean", "sum", "median"} else [])
+        work = df[work_cols].copy()
+        for col in [x, y] + ([value] if value else []):
+            work[col] = pd.to_numeric(work[col], errors="coerce")
 
         if dropna:
-            work = work.dropna(subset=[x, y] + ([value] if value else []))
+            work = work.dropna(subset=[x, y] + ([value] if value and stat != "count" else []))
         if work.empty:
-            logger.warning("plot_binned_heatmap: no valid data after cleaning")
+            logger.warning("plot_heatmap: no valid data after cleaning")
             return None
 
-        # Compute bins
-        try:
-            x_min = work[x].min() if range_x is None else range_x[0]
-            x_max = work[x].max() if range_x is None else range_x[1]
-            y_min = work[y].min() if range_y is None else range_y[0]
-            y_max = work[y].max() if range_y is None else range_y[1]
+        # Build bins
+        x_min = work[x].min() if range_x is None else range_x[0]
+        x_max = work[x].max() if range_x is None else range_x[1]
+        y_min = work[y].min() if range_y is None else range_y[0]
+        y_max = work[y].max() if range_y is None else range_y[1]
 
-            x_bins = np.linspace(x_min, x_max, bins_x + 1) if isinstance(bins_x, int) else np.asarray(bins_x)
-            y_bins = np.linspace(y_min, y_max, bins_y + 1) if isinstance(bins_y, int) else np.asarray(bins_y)
-        except Exception as e:
-            logger.exception("plot_binned_heatmap: bin computation failed: %s", e)
-            return None
+        x_bins = (np.linspace(x_min, x_max, int(bins_x) + 1)
+                  if isinstance(bins_x, int) else np.asarray(bins_x, dtype=float))
+        y_bins = (np.linspace(y_min, y_max, int(bins_y) + 1)
+                  if isinstance(bins_y, int) else np.asarray(bins_y, dtype=float))
 
-        # Bin indices
-        try:
-            x_idx = np.digitize(work[x].to_numpy(), x_bins) - 1
-            y_idx = np.digitize(work[y].to_numpy(), y_bins) - 1
-            valid = (x_idx >= 0) & (x_idx < len(x_bins) - 1) & (y_idx >= 0) & (y_idx < len(y_bins) - 1)
-            x_idx, y_idx = x_idx[valid], y_idx[valid]
-            if value:
-                vals = work.loc[valid, value].to_numpy()
-            else:
-                vals = None
-        except Exception as e:
-            logger.exception("plot_binned_heatmap: digitize failed: %s", e)
-            return None
+        # Bin using left-closed, right-open intervals so labels match left edges (0,1,2…)
+        x_cat = pd.cut(work[x], bins=x_bins, include_lowest=True, right=False, ordered=True)
+        y_cat = pd.cut(work[y], bins=y_bins, include_lowest=True, right=False, ordered=True)
 
-        # Aggregate into a 2D matrix
-        H = np.zeros((len(y_bins) - 1, len(x_bins) - 1), dtype=float)
-        counts = np.zeros_like(H)
+        # Aggregation
+        if stat == "count":
+            mat = pd.crosstab(y_cat, x_cat, dropna=False)
+        else:
+            if not value:
+                logger.error("plot_heatmap: stat %r requires `value` column.", stat)
+                return None
+            aggfunc = {"mean": "mean", "sum": "sum", "median": "median"}[stat]
+            grouped = (work.assign(_xbin=x_cat, _ybin=y_cat)
+                            .groupby(["_ybin", "_xbin"], observed=False)[value]
+                            .agg(aggfunc))
+            mat = grouped.unstack("_xbin")
 
-        try:
-            for xi, yi, v in zip(x_idx, y_idx, (vals if vals is not None else np.ones_like(x_idx, dtype=float))):
-                if stat == "count":
-                    H[yi, xi] += 1.0
-                elif stat == "sum":
-                    H[yi, xi] += float(v)
-                    counts[yi, xi] += 1.0
-                elif stat in {"mean", "median"}:
-                    # accumulate lists for mean/median; slower but flexible for small/med data
-                    if not isinstance(H[yi, xi], list):
-                        H[yi, xi] = []  # type: ignore[assignment]
-                    # Use a Python list to collect values
-            if stat in {"mean", "median"}:
-                # Rebuild with lists
-                lists = [[[] for _ in range(H.shape[1])] for _ in range(H.shape[0])]
-                for xi, yi, v in zip(x_idx, y_idx, vals if vals is not None else np.zeros_like(x_idx, dtype=float)):
-                    lists[yi][xi].append(float(v))
-                H = np.array([
-                    [
-                        (np.nan if len(cell) == 0 else (np.mean(cell) if stat == "mean" else np.median(cell)))
-                        for cell in row
-                    ] for row in lists
-                ], dtype=float)
-            elif stat == "sum":
-                # Convert sums to sums; counts kept for optional future use
-                pass
-        except Exception as e:
-            logger.exception("plot_binned_heatmap: aggregation failed: %s", e)
-            return None
+        # Ensure 2D frame with all bins, even if empty
+        # Convert IntervalIndex to numeric left edges for both axes (your “use the values themselves” request)
+        def _ensure_all_bins(idx: pd.CategoricalIndex) -> list:
+            # idx has .categories which are IntervalIndex
+            return list(idx.categories)
 
-        if stat == "count" and H.sum() == 0:
-            logger.warning("plot_binned_heatmap: all bins empty (no points fell into ranges)")
-        if np.all(~np.isfinite(H)):
-            logger.error("plot_binned_heatmap: resulting matrix has no finite values")
-            return None
+        full_y_intervals = _ensure_all_bins(y_cat.cat)
+        full_x_intervals = _ensure_all_bins(x_cat.cat)
+
+        mat = mat.reindex(index=full_y_intervals, columns=full_x_intervals)
+
+        # Extract left edges for clean integer-like tick labels
+        x_labels = [int(iv.left) for iv in mat.columns]
+        y_labels = [int(iv.left) for iv in mat.index]
+
+        H = mat.to_numpy(dtype=float)
 
         # Optional transforms
-        try:
-            if clip_quantiles is not None:
+        if clip_quantiles is not None:
+            try:
                 ql, qh = clip_quantiles
                 finite_vals = H[np.isfinite(H)]
                 if finite_vals.size:
                     lo, hi = np.quantile(finite_vals, [ql, qh])
                     H = np.clip(H, lo, hi)
-            if log_scale:
-                with np.errstate(invalid="ignore"):
-                    H = np.log1p(H)
+            except Exception as e:
+                logger.exception("plot_heatmap: clip_quantiles failed: %s", e)
 
-            if normalize in {"row", "col"}:
+        if log_scale:
+            with np.errstate(invalid="ignore"):
+                H = np.log1p(H)
+
+        if normalize in {"row", "col"}:
+            try:
                 if normalize == "row":
-                    for i in range(H.shape[0]):
-                        row = H[i, :]
-                        mn, mx = np.nanmin(row), np.nanmax(row)
-                        if np.isfinite(mn) and np.isfinite(mx) and mx > mn:
-                            H[i, :] = (row - mn) / (mx - mn)
-                else:
-                    for j in range(H.shape[1]):
-                        col = H[:, j]
-                        mn, mx = np.nanmin(col), np.nanmax(col)
-                        if np.isfinite(mn) and np.isfinite(mx) and mx > mn:
-                            H[:, j] = (col - mn) / (mx - mn)
-        except Exception as e:
-            logger.exception("plot_binned_heatmap: transform step failed: %s", e)
+                    mn = np.nanmin(H, axis=1, keepdims=True)
+                    mx = np.nanmax(H, axis=1, keepdims=True)
+                    denom = np.where(np.isfinite(mx - mn) & ((mx - mn) > 0), mx - mn, np.nan)
+                    H = (H - mn) / denom
+                else:  # "col"
+                    mn = np.nanmin(H, axis=0, keepdims=True)
+                    mx = np.nanmax(H, axis=0, keepdims=True)
+                    denom = np.where(np.isfinite(mx - mn) & ((mx - mn) > 0), mx - mn, np.nan)
+                    H = (H - mn) / denom
+            except Exception as e:
+                logger.exception("plot_heatmap: normalize failed: %s", e)
 
-        # Build axis labels from bin centers
-        x_centers = (x_bins[:-1] + x_bins[1:]) / 2.0
-        y_centers = (y_bins[:-1] + y_bins[1:]) / 2.0
-        mat = pd.DataFrame(H, index=y_centers, columns=x_centers)
+        # Build a frame back with left-edge labels so seaborn shows 0,1,2… not centers
+        mat_plot = pd.DataFrame(H, index=y_labels, columns=x_labels)
 
-        # Plot
-        try:
-            fig, ax = plt.subplots(figsize=figsize)
-            g = sns.heatmap(
-                data=mat,
-                cmap=cmap,
-                robust=robust,
-                vmin=vmin, vmax=vmax, center=center,
-                annot=annot, fmt=fmt,
-                cbar=cbar,
-                linewidths=linewidths,
-                linecolor=linecolor,
-                square=square,
-                ax=ax,
-            )
-            ax.set_title(title)
-            ax.set_xlabel(x)
-            ax.set_ylabel(y)
+        if stat == "count" and np.nansum(H) == 0:
+            logger.warning("plot_heatmap: all bins empty (no points fell into ranges)")
 
-            ax.invert_yaxis()  # so that low y is at bottom
-
-            plt.setp(ax.get_xticklabels(), rotation=xtick_rotation)
-            plt.setp(ax.get_yticklabels(), rotation=ytick_rotation)
-            plt.tight_layout()
-            return ax
-        except Exception as e:
-            logger.exception("plot_binned_heatmap: seaborn.heatmap failed: %s", e)
+        if not np.isfinite(H).any():
+            logger.error("plot_heatmap: resulting matrix has no finite values")
             return None
 
+        # Plot
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(
+            data=mat_plot,
+            cmap=cmap,
+            robust=robust,
+            vmin=vmin, vmax=vmax, center=center,
+            annot=annot, fmt=fmt,
+            cbar=cbar,
+            linewidths=linewidths,
+            linecolor=linecolor,
+            square=square,
+            ax=ax,
+        )
+        ax.set_title(title)
+        ax.set_xlabel(x)
+        ax.set_ylabel(y)
+
+        # Keep low y at bottom
+        ax.invert_yaxis()
+
+        # Rotate ticks if requested
+        plt.setp(ax.get_xticklabels(), rotation=xtick_rotation)
+        plt.setp(ax.get_yticklabels(), rotation=ytick_rotation)
+
+        plt.tight_layout()
+
+        if save_svg_path is not None:
+            try:
+                out_path = Path(save_svg_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    out_path,
+                    format=fmt,
+                    transparent=True,
+                    bbox_inches="tight",
+                    metadata={"Creator": "plot_points_mean_std"},
+                )
+            except Exception as e:
+                logger.exception("plot_points_mean_std: failed to save %s to '%s': %s", export_format, save_svg_path, e)
+
+        plt.show()
+        return ax
+
     except Exception as e:
-        logger.exception("plot_binned_heatmap failed: %s", e)
+        logger.exception("plot_heatmap failed: %s", e)
         return None
     
 

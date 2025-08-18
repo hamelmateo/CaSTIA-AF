@@ -454,7 +454,7 @@ class CalciumPipeline:
             filtered_cell_connection_network = filter_graph_by_edge_weight_percentile(cell_connection_network, percentile, preserve_nodes=True)
             plot_cell_connection_network(filtered_cell_connection_network, 
                                          self.population.nuclei_mask, 
-                                         self.output_dir / "cell-mapping" / "cell_connection_network" / f"cell_connection_network_{percentile}.png"
+                                         self.output_dir / "cell-mapping" / "cell_connection_network" / f"cell_connection_network_{percentile}.pdf"
                                         )
         
 
@@ -468,7 +468,7 @@ class CalciumPipeline:
                 plot_metric_on_overlay(self.population.nuclei_mask,
                                     cell_pixel_coords,
                                     early_peakers,
-                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.pdf",
+                                    self.output_dir / "cell-mapping" / "global_events" / f"global_event_{event.id}_early_peakers_overlay.png",
                                     title=f"Mapping of the {percent * 100:.1f}% Early Peakers in Global Events {event.id}",
                                     colorbar_label="Early Peakers in Global Events",
                                     show_colorbar=False
