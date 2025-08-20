@@ -15,8 +15,8 @@ from PyQt5.QtWidgets import (
     QLabel, QGraphicsView, QGraphicsScene, QPushButton,
     QSlider, QFileDialog, QLineEdit, QCheckBox
 )
-from PyQt5.QtGui import QPixmap, QImage, QPen, QPolygonF
-from PyQt5.QtCore import Qt, QTimer, QPointF
+from PyQt5.QtGui import QPixmap, QImage, QPen, QPolygonF, QPainter
+from PyQt5.QtCore import Qt, QTimer, QPointF, QRectF
 from matplotlib import cm
 from scipy.spatial import ConvexHull
 from calcium_activity_characterization.data.events import Event, SequentialEvent, GlobalEvent
@@ -50,6 +50,10 @@ class EventViewer(QMainWindow):
         self.hover_timer.start()
 
         self.init_ui()
+
+        # Single-color toggle (default: off)
+        self.single_color_enabled: bool = False
+        self.single_event_color: tuple[int, int, int] = (44, 160, 44)  # #2ca02c
 
     def init_ui(self):
         main_widget = QWidget()
@@ -94,6 +98,11 @@ class EventViewer(QMainWindow):
         self.stop_btn.clicked.connect(self.stop_animation)
         controls_layout.addWidget(self.stop_btn)
 
+        # NEW: Save current view button
+        self.save_btn = QPushButton("Save Current View")
+        self.save_btn.clicked.connect(self.save_current_view)
+        controls_layout.addWidget(self.save_btn)
+
         self.load_btn = QPushButton("Load Folder")
         self.load_btn.clicked.connect(self.load_folder)
         controls_layout.addWidget(self.load_btn)
@@ -118,7 +127,16 @@ class EventViewer(QMainWindow):
 
         self.filter_status = QLabel("Filter: (none)")
         controls_layout.addWidget(self.filter_status)
-        # -------------------------------------
+
+        # --- NEW: Single color toggle ---
+        self.single_color_checkbox = QCheckBox("Use single event color (#2ca02c)")
+        self.single_color_checkbox.setChecked(False)
+        self.single_color_checkbox.stateChanged.connect(self._toggle_single_event_color)
+        controls_layout.addWidget(self.single_color_checkbox)
+
+        self.load_btn = QPushButton("Load Folder")
+        self.load_btn.clicked.connect(self.load_folder)
+        controls_layout.addWidget(self.load_btn)
 
         controls_layout.addWidget(self.hover_label)
         controls_layout.addStretch()
@@ -154,6 +172,13 @@ class EventViewer(QMainWindow):
         else:
             pretty = ",".join(str(i) for i in sorted(self.filtered_event_ids))
             self.filter_status.setText(f"Filter: {pretty}")
+        self.update_frame()
+
+    def _toggle_single_event_color(self, state: int) -> None:
+        """
+        Enable/disable drawing all events with a single color (#2ca02c).
+        """
+        self.single_color_enabled = (state == Qt.Checked)
         self.update_frame()
 
     def _events_to_show(self) -> list[Event]:
@@ -216,7 +241,7 @@ class EventViewer(QMainWindow):
 
         # Use filtered events
         for event in self._events_to_show():
-            color = self.event_colors[event.id]
+            color = self.single_event_color if self.single_color_enabled else self.event_colors[event.id]
             start = event.event_start_time
             end = event.event_end_time
             for label in list({label for label, _ in event.peaks_involved}):
@@ -231,6 +256,8 @@ class EventViewer(QMainWindow):
         qimg = QImage(mask.data, mask.shape[1], mask.shape[0], QImage.Format_RGB888)
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
+
+        self.scene.setSceneRect(0, 0, mask.shape[1], mask.shape[0])
 
         # Draw hulls and direction only for filtered events
         for event in self._events_to_show():
@@ -355,6 +382,39 @@ class EventViewer(QMainWindow):
     def stop_animation(self):
         self.timer.stop()
 
+
+    def save_current_view(self):
+        """
+        Save exactly what is currently displayed (base image + overlays) to an image file.
+        Respects current frame, event filters, and overlay checkboxes.
+        """
+        if self.base_rgb is None:
+            return  # nothing loaded yet
+
+        # --- your fixed save directory ---
+        save_dir = Path("C:/Users/poseidon/OneDrive/Documents/01_ETHZ/Master_Degree/"
+                        "Spring_Semester_2025/Master_Thesis/Report/Figures/"
+                        "Chapter_2/figure_2_0/sequential")
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        # filename based on frame number
+        frame = self.slider.value()
+        filename = f"frame_{frame:04d}.png"
+        path = save_dir / filename
+
+        h, w = self.base_rgb.shape[:2]
+
+        # Render the QGraphicsScene (already has overlays) to QImage
+        image = QImage(w, h, QImage.Format_ARGB32)
+        image.fill(Qt.black)  # background color; or Qt.transparent if you prefer
+
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        self.scene.render(painter, target=QRectF(0, 0, w, h), source=self.scene.sceneRect())
+        painter.end()
+
+        image.save(str(path))
+        print(f"[INFO] Saved current view to {path}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
