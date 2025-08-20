@@ -63,6 +63,7 @@ class Population:
         cells: list[Cell],
         graph: nx.Graph,
         roi_scale: float,
+        roi_centered: bool,
         img_shape: tuple[int, int],
         border_margin: int
     ) -> "Population":
@@ -86,10 +87,16 @@ class Population:
 
         crop_h = int(height * roi_scale)
         crop_w = int(width * roi_scale)
-        start_h = (height - crop_h) // 2
-        start_w = (width - crop_w) // 2
-        end_h = start_h + crop_h
-        end_w = start_w + crop_w
+        if roi_centered:
+            start_h = 0
+            start_w = 0
+            end_h = crop_h
+            end_w = crop_w
+        else:
+            start_h = (height - crop_h) // 2
+            start_w = (width - crop_w) // 2
+            end_h = start_h + crop_h
+            end_w = start_w + crop_w
 
         safe_start_h = start_h + border_margin
         safe_end_h   = end_h   - border_margin

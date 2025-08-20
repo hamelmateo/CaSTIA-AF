@@ -222,6 +222,7 @@ class CalciumPipeline:
             cells=cells,
             graph=graph,
             roi_scale=self.config.image_processing_hoechst.roi_scale,
+            roi_centered=self.config.image_processing_hoechst.roi_centered,
             img_shape=full_nuclei_mask.shape,
             border_margin=self.config.cell_filtering.border_margin
         )
