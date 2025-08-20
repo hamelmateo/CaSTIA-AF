@@ -347,20 +347,20 @@ class Trace:
             save_path (Optional[Path]): If provided, the figure is saved instead of shown.
         """
         if len(self.binary) > 0:
-            plt.figure()
+            plt.figure(figsize=(10, 3))
             plt.plot(self.binary, drawstyle='steps-post')
             plt.title("Binary Trace")
             plt.xlabel("Time")
             plt.ylabel("Binary")
             if save_path:
-                plt.savefig(save_path, dpi=300)
+                plt.savefig(save_path, format="svg", dpi=300, bbox_inches="tight", transparent=True)
                 plt.close()
             else:
                 plt.show()
 
-    def plot_peaks_over_trace(self, save_path: Path | None = None):
+    def plot_peaks_over_trace(self, save_path: Path | None = None) -> None:
         """Plot or save the active trace with detected peaks overlayed.
-        
+
         Args:
             save_path (Optional[Path]): If provided, the figure is saved instead of shown.
         """
@@ -368,10 +368,22 @@ class Trace:
         if len(trace) == 0:
             return
 
-        plt.figure()
+        plt.figure(figsize=(10, 3))
         plt.plot(trace, label=f"Trace: {self.default_version}")
+
         for peak in self.peaks:
-            plt.axvspan(peak.activation_start_time, peak.activation_end_time, color='red', alpha=0.3)
+            # highlight FWHM span
+            plt.axvspan(peak.fhw_start_time, peak.fhw_end_time, color="red", alpha=0.3)
+            # add red dot at peak time
+            plt.scatter(
+                peak.peak_time,
+                trace[peak.peak_time],
+                color="red",
+                s=30,
+                zorder=3,
+                label="Peak" if peak == self.peaks[0] else None,  # add legend only once
+            )
+
         plt.title("Peaks Over Trace")
         plt.xlabel("Time")
         plt.ylabel("Intensity")
@@ -379,7 +391,7 @@ class Trace:
         plt.tight_layout()
 
         if save_path:
-            plt.savefig(save_path, dpi=300)
+            plt.savefig(save_path, format="svg", dpi=300, bbox_inches="tight", transparent=True)
             plt.close()
         else:
             plt.show()
@@ -412,6 +424,35 @@ class Trace:
             plt.close()
         else:
             plt.show()
+
+    def save_versions_as_svg(self, save_path: Path) -> None:
+        """
+        Save each trace version as an individual SVG file.
+
+        Args:
+            save_path (Path): Base path for saving. Each version will be saved
+                as <save_path.stem>_<version_name>.svg inside save_path.parent.
+        """
+        if not self.versions:
+            raise ValueError("No trace versions available to save.")
+
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+
+        for version_name, trace in self.versions.items():
+            fig, ax = plt.subplots(figsize=(10, 3))
+            ax.plot(trace)
+            ax.set_title(f"Trace Version: {version_name}")
+            ax.set_ylabel("Intensity")
+            ax.set_xlabel("Time")
+            ax.grid(True)
+            plt.tight_layout()
+
+            # build file name: e.g. base_stem_versionName.svg
+            filename = f"{save_path.stem}_{version_name}.svg"
+            full_path = save_path.parent / filename
+
+            plt.savefig(full_path, format="svg", bbox_inches="tight", transparent=True, dpi=300)
+            plt.close(fig)
 
     def plot_all_traces(self, save_path: Path | None = None) -> None:
         """Plot or save all traces: raw, versions, binary, and peak overlay.

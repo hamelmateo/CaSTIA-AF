@@ -11,6 +11,10 @@ import numpy as np
 from pathlib import Path
 from collections import Counter
 from skimage.segmentation import find_boundaries
+import matplotlib.pyplot as plt
+from scipy.spatial import Voronoi
+from calcium_activity_characterization.utilities.graph_utils import finite_ridge_segments
+from calcium_activity_characterization.preprocessing.signal_processing import SignalProcessor
 
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.config.presets import GlobalConfig, SegmentationConfig, ImageProcessingConfig
@@ -159,8 +163,8 @@ class CalciumPipeline:
         processing_dir = output_dir / "signal-processing"
         self.traces_processing_steps = processing_dir / "traces-processing-steps"
         self.activity_trace_path = processing_dir / "activity_trace.pdf"
-        self.heatmap_raster_path = processing_dir / "heatmap_raster.png"
-        self.raster_path = processing_dir / "raster_plot.png"
+        self.heatmap_raster_path = processing_dir / "heatmap_raster.svg"
+        self.raster_path = processing_dir / "raster_plot.svg"
 
         # Path for extracted data
         self.datasets_dir = output_dir / "datasets"
@@ -209,7 +213,7 @@ class CalciumPipeline:
         cells = [cell for cell in unfiltered_cells if cell.is_valid]
 
         graph = Population.build_spatial_neighbor_graph(cells)
-        
+
         nuclei_mask = processor._crop_image(full_nuclei_mask)
         save_tif_image(nuclei_mask, self.nuclei_mask_path)
 
@@ -225,6 +229,7 @@ class CalciumPipeline:
         processor.config.pipeline.cropping = True
         cropped_hoechst = processor.process_all(self.hoechst_img_path, self.hoechst_file_pattern)[0]
 
+        self.save_voronoi_overlay(cells=self.population.cells, mask=cropped_hoechst, output_path=self.output_dir / "cell-mapping" / "voronoi_overlay.png")
         self.save_cell_outline_overlay(self.overlay_path, self.population.cells, cropped_hoechst)
         plot_spatial_neighbor_graph(self.population.neighbor_graph, cropped_hoechst, self.spatial_neighbor_graph_path)
 
@@ -281,6 +286,81 @@ class CalciumPipeline:
             raise
 
 
+    def save_voronoi_overlay(self,
+        cells: list[Cell],
+        mask: np.ndarray,
+        output_path: Path,
+        *,
+        line_color: str = "blue",
+        point_color: str = "red",
+        line_width: float = 1.0,
+        line_alpha: float = 0.9,
+        point_size: float = 10.0,
+    ) -> None:
+        """
+        Save a Voronoi diagram overlaid on a grayscale mask (no borders/axes).
+
+        Coordinates:
+            - Assumes each Cell has `centroid` in (row, col) = (y, x).
+            - Internally converts to (x, y) for Voronoi computation.
+
+        Args:
+            cells (list[Cell]): Cells with at least `label` and `centroid` (row, col).
+            mask (np.ndarray): 2D grayscale image (uint16/float) used as background.
+            output_path (Path): Where to save the PNG/TIFF, etc. (extension determines format).
+            line_color (str): Voronoi ridge color.
+            point_color (str): Centroid dot color.
+            line_width (float): Width of Voronoi lines.
+            line_alpha (float): Alpha for Voronoi lines.
+            point_size (float): Size of centroid points.
+
+        Returns:
+            None
+        """
+        try:
+            if mask.ndim != 2:
+                raise ValueError("mask must be a 2D array (grayscale).")
+
+            if not cells:
+                raise ValueError("Empty `cells` list; cannot build Voronoi overlay.")
+
+            # Extract centroids: input is (row, col) => convert to (x, y)
+            centroids_rc = np.array([tuple(c.centroid) for c in cells], dtype=float)  # (N, 2) as (row, col)
+            centroids_xy = centroids_rc[:, [1, 0]]  # (x, y)
+
+            if len(centroids_xy) < 3:
+                raise ValueError("At least 3 cells are required to compute a Voronoi diagram.")
+
+            vor = Voronoi(centroids_xy)
+
+            # Bounding box in image coordinates: x in [0, W-1], y in [0, H-1]
+            H, W = mask.shape
+            bbox = (0.0, float(W - 1), 0.0, float(H - 1))
+            ridges = finite_ridge_segments(vor, bbox)
+
+            # Plot overlay
+            fig, ax = plt.subplots(figsize=(8, 8))
+            ax.imshow(mask, cmap="gray", origin="upper")  # keep image convention (row, col)
+            # draw ridges
+            for x0, y0, x1, y1 in ridges:
+                ax.plot([x0, x1], [y0, y1], linewidth=line_width, alpha=line_alpha, color=line_color)
+
+            # draw centroids
+            ax.scatter(centroids_xy[:, 0], centroids_xy[:, 1], s=point_size, c=point_color)
+
+            ax.set_xlim(0, W - 1)
+            ax.set_ylim(H - 1, 0)  # invert y to match image coordinates (origin upper-left)
+            ax.axis("off")
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(output_path, dpi=300, bbox_inches="tight", pad_inches=0)
+            plt.close(fig)
+            logger.info(f"Voronoi overlay saved to: {output_path}")
+
+        except Exception as e:
+            logger.error(f"Failed to save Voronoi overlay: {e}")
+            raise
+
     def _compute_intensity(self) -> None:
         """
         Compute raw calcium traces for all cells in the population.
@@ -306,8 +386,8 @@ class CalciumPipeline:
         Run signal processing pipeline on all active cells.
         Reloads from file if permitted.
         """
-        if self.processed_traces_path.exists():
-        #if False:  # Disable reloading for debugging purposes
+        #if self.processed_traces_path.exists():
+        if False:  # Disable reloading for debugging purposes
             self.population = load_pickle_file(self.processed_traces_path)
             return
 
@@ -325,11 +405,6 @@ class CalciumPipeline:
                                 [cell.trace.versions["processed"] for cell in self.population.cells], 
                                 cut_trace=self.config.cell_trace_processing.detrending.params.cut_trace_num_points
                                 )
-
-            # Select 25 random cells (or all if fewer than 25)
-            sample_cells = random.sample(self.population.cells, min(25, len(self.population.cells)))
-            for cell in sample_cells:
-                cell.trace.plot_all_traces(self.traces_processing_steps / f"{cell.label}_all_traces.png")
             
 
     def _binarization_pipeline(self) -> None: 
@@ -355,6 +430,18 @@ class CalciumPipeline:
                     [cell.trace.binary for cell in self.population.cells], 
                     self.config.cell_trace_processing.detrending.params.cut_trace_num_points
                     )
+        """
+        # Select 10 random cells (or all if fewer than 10)
+        sample_cells = random.sample(self.population.cells, min(10, len(self.population.cells)))
+        self.config.cell_trace_processing.detrending.params.diagnostics_enabled = True
+        for cell in sample_cells:
+            processor = SignalProcessor(self.config.cell_trace_processing)
+            trace = cell.trace.versions["raw"].copy()
+            processor.run(trace)
+            cell.trace.save_versions_as_svg(self.traces_processing_steps / f"{cell.label}_all_traces.svg")
+            cell.trace.plot_binary_trace(self.traces_processing_steps / f"{cell.label}_binary_trace.svg")
+            cell.trace.plot_peaks_over_trace(self.traces_processing_steps / f"{cell.label}_detected_peaks.svg")
+            """
 
 
     def _initialize_activity_trace(self) -> None:
@@ -402,7 +489,7 @@ class CalciumPipeline:
                     start=event.event_start_time,
                     time_to_50=event.time_to_50,
                     title=f"Event {event.id} cumulative growth curve",
-                    save_path=self.output_dir / "events" / f"event-growth-curve-{event.id}.png"
+                    save_path=self.output_dir / "events" / f"event-growth-curve-{event.id}.svg"
                 )
 
         cell_pixel_coords = {cell.label: cell.pixel_coords for cell in self.population.cells}

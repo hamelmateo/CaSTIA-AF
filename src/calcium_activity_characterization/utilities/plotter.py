@@ -110,7 +110,7 @@ def plot_raster_heatmap(
             ax.set_xticklabels([str(cut_trace + x) for x in ax.get_xticks().astype(int)])
 
         plt.tight_layout()
-        plt.savefig(output_path, dpi=600)
+        plt.savefig(output_path, format="svg", transparent=True, bbox_inches="tight", dpi=600, metadata={"Creator": "plot_raster"})
         plt.close()
         logger.info(f"Processed trace raster plot saved to {output_path}")
 
@@ -139,7 +139,7 @@ def plot_minima_diagnostics(
         discarded3 (list[int]): Reserved for future use.
         output_dir (Path): Path to save the plot.
     """
-    fig, ax = plt.subplots(figsize=(12, 4))
+    fig, ax = plt.subplots(figsize=(10, 3))
     ax.plot(trace, label="Trace", lw=1.5)
 
     if anchor_idx:
@@ -159,10 +159,10 @@ def plot_minima_diagnostics(
     plt.tight_layout()
     output_dir.mkdir(parents=True, exist_ok=True)
     counter = 0
-    while (output_dir / f"local_minimas_filtering_{counter}.png").exists():
+    while (output_dir / f"local_minimas_filtering_{counter}.svg").exists():  # ← .svg
         counter += 1
-    save_path = output_dir / f"local_minimas_filtering_{counter}.png"
-    plt.savefig(save_path)
+    save_path = output_dir / f"local_minimas_filtering_{counter}.svg"        # ← .svg
+    plt.savefig(save_path, format="svg", bbox_inches="tight", transparent=True, dpi=300)                 # ← format + tight bbox
     plt.close()
 
 def plot_final_baseline_fit(
@@ -186,7 +186,7 @@ def plot_final_baseline_fit(
         output_dir (Path): Directory to save plot.
         model_name (str): Label for the model type.
     """
-    fig, axs = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
+    fig, axs = plt.subplots(3, 1, figsize=(10, 10), sharex=True)
 
     axs[0].plot(trace, label="Trace")
     axs[0].scatter(anchor_idx, trace[anchor_idx], c='red', label="Anchors", s=15)
@@ -208,10 +208,10 @@ def plot_final_baseline_fit(
     plt.tight_layout()
     output_dir.mkdir(parents=True, exist_ok=True)
     counter = 0
-    while (output_dir / f"baseline_fit_{counter}.png").exists():
+    while (output_dir / f"baseline_fit_{counter}.svg").exists():  # ← .svg
         counter += 1
-    save_path = output_dir / f"baseline_fit_{counter}.png"
-    plt.savefig(save_path)
+    save_path = output_dir / f"baseline_fit_{counter}.svg"        # ← .svg
+    plt.savefig(save_path, format="svg", bbox_inches="tight", transparent=True, dpi=300)      # ← format + tight bbox
     plt.close()
 
 
@@ -336,18 +336,18 @@ def plot_spatial_neighbor_graph(
     if mask is not None:
         plt.imshow(mask, cmap="gray")
 
-    nx.draw(graph, pos, node_size=30, node_color='red', edge_color='blue', with_labels=False)
-    plt.axis("equal")
-    plt.title("Spatial Neighbor Graph")
+    nx.draw(graph, pos, node_size=20, node_color='red', edge_color='blue', with_labels=False)
+    #plt.axis("equal")
+    #plt.title("Spatial Neighbor Graph")
 
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(output_path, dpi=300)
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, format="png", transparent=True, bbox_inches="tight", pad_inches=0)
         plt.close()
     else:
         plt.tight_layout()
         plt.show()
-
 
 
 def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, title: str, save_path: Path) -> None:
@@ -402,7 +402,7 @@ def plot_event_growth_curve(values: list[float], start: int, time_to_50: int, ti
     ax.legend(loc="best")
 
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=300)
+    fig.savefig(save_path, dpi=300, bbox_inches="tight", format="svg", transparent=True, metadata={"Creator": "plot_event_growth_curve"})
     plt.close(fig)
 
 def plot_cell_connection_network(

@@ -269,7 +269,7 @@ def create_cellmotion_overlay_from_cells(
     boundary0 = find_boundaries(mask0, mode="inner")
     canvas[boundary0] = [80, 80, 80]
 
-    fig, ax = plt.subplots(figsize=(image_shape[1] / 100, image_shape[0] / 100), dpi=100)
+    fig, ax = plt.subplots(figsize=(image_shape[1] / 100, image_shape[0] / 100), dpi=300)
     ax.imshow(canvas)
 
     # Efficient mask for overlapping regions (combined before loops)
@@ -319,18 +319,8 @@ def create_cellmotion_overlay_from_cells(
             )
             ax.add_patch(polygon)
 
-    # Add legend entry for Cell t=0 background fill
-    from matplotlib.patches import Patch
-    legend_elements = [
-        Patch(facecolor="white", edgecolor="black", label="Background"),
-        Patch(facecolor="gray", edgecolor="black", label="Cell t=0"),
-        Patch(facecolor="gray", edgecolor="red", hatch="///", label="Overlap")
-    ]
-    ax.legend(handles=legend_elements, loc="center right", bbox_to_anchor=(1.02, 0.5), fontsize=12)
-
-    ax.set_title("Cell Motion Overlay", fontsize=14)
     ax.axis("off")
-    plt.savefig(output_path, dpi=150, bbox_inches="tight", bbox_extra_artists=[ax.get_legend()])
+    plt.savefig(output_path, dpi=300, format="png", transparent=True, bbox_inches="tight", pad_inches=0)
     plt.close()
 
 
