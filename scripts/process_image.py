@@ -16,7 +16,7 @@ from calcium_activity_characterization.io.export import save_tif_image
 
 
 
-def main(image_path: Path, output_dir: Path) -> None:
+def main(input_dir: Path, output_dir: Path) -> None:
     """
     Process a single TIF image and save it to another directory.
 
@@ -34,6 +34,7 @@ def main(image_path: Path, output_dir: Path) -> None:
         ),
         padding_digits=5,
         roi_scale=0.75,
+        roi_centered=False,
         hot_pixel_cleaning=HotPixelParameters(
             method=HotPixelMethod.CLIP,           # "replace" or "clip"
             static_threshold=50000,                   # used if auto threshold disabled
@@ -46,19 +47,53 @@ def main(image_path: Path, output_dir: Path) -> None:
 
     processor = ImageProcessor(config=config)
 
-    print(f"Processing {image_path.name}...")
-    processed_img = processor.process_single_image(image_path)
-
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Define output path
-    output_path = output_dir / f"processed_{image_path.name}"
+    # Collect all tif images (case-insensitive)
+    #image_paths = list(input_dir.glob("*.tif")) + list(input_dir.glob("*.TIF"))
+    image_paths = [
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01723.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01725.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01727.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01735.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01737.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01739.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01741.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01743.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01745.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01747.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01749.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01751.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01753.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01755.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01757.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01759.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01761.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01763.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01765.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01767.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01769.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01771.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01773.TIF"),
+        Path("D:/Mateo/20250409/Data/IS10/FITC/20250409__w3FITC_t01775.TIF"),
+    ]
 
-    # Save as 16-bit TIFF
-    save_tif_image(processed_img, output_path)
+    if not image_paths:
+        print(f"No .tif images found in {input_dir}")
+        return
 
-    print(f"Processed image saved to: {output_path}")
+    for image_path in image_paths:
+        print(f"Processing {image_path.name}...")
+        processed_img = processor.process_single_image(image_path)
+
+        # Define output path
+        output_path = output_dir / f"processed_{image_path.name}"
+
+        # Save as 16-bit TIFF
+        save_tif_image(processed_img, output_path)
+
+        print(f"Processed image saved to: {output_path}")
 
 
 if __name__ == "__main__":
