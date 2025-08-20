@@ -40,6 +40,7 @@ class ImageProcessor:
         self.pipeline = config.pipeline
         self.padding_digits = config.padding_digits
         self.roi_scale = config.roi_scale
+        self.roi_centered = config.roi_centered
         self.hot_cfg = config.hot_pixel_cleaning
 
     def process_all(self, images_dir: Path, file_pattern: str) -> list[np.ndarray]:
@@ -119,9 +120,13 @@ class ImageProcessor:
         height, width = img.shape[:2]
         crop_h = int(height * self.roi_scale)
         crop_w = int(width * self.roi_scale)
-        start_h = (height - crop_h) // 2
-        start_w = (width - crop_w) // 2
-        return img[start_h:start_h + crop_h, start_w:start_w + crop_w]
+
+        if self.roi_centered:
+            start_h = (height - crop_h) // 2
+            start_w = (width - crop_w) // 2
+            return img[start_h:start_h + crop_h, start_w:start_w + crop_w]
+        else:
+            return img[:crop_h, :crop_w]
 
     def _clean_single_image_gpu(self, img: np.ndarray, image_name: str = "") -> np.ndarray:
         """

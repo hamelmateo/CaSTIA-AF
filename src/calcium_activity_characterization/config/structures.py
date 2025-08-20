@@ -197,6 +197,7 @@ class ImageProcessingConfig:
     pipeline: ImageProcessingPipeline = field(default_factory=ImageProcessingPipeline)
     padding_digits: int = 5
     roi_scale: float = 0.75
+    roi_centered: bool = True
     hot_pixel_cleaning: HotPixelParameters = field(default_factory=HotPixelParameters)
 
 

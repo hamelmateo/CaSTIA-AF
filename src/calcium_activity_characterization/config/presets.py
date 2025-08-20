@@ -8,7 +8,7 @@ from .structures import *
 # FLAGS
 # ===========================
 DEBUG_CONFIG = DebugConfig(
-    debugging=True,
+    debugging=False,
     debugging_file_path="D:/Mateo/20250326/Data/IS1",
     harddrive_path="D:/Mateo"
 )
@@ -51,6 +51,7 @@ HOECHST_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
     ),
     padding_digits=5,
     roi_scale=0.75,
+    roi_centered=False,
     hot_pixel_cleaning=HotPixelParameters(
         method=HotPixelMethod.CLIP,
         use_auto_threshold=False,
@@ -69,6 +70,7 @@ FITC_IMAGE_PROCESSING_CONFIG = ImageProcessingConfig(
     ),
     padding_digits=5,
     roi_scale=0.75,
+    roi_centered=False,
     hot_pixel_cleaning=HOTPIXEL_CONFIG
 )
 
@@ -131,7 +133,7 @@ STANDARD_ZSCORE_SIGNAL_PROCESSING = SignalProcessingConfig(
             fitting_method="linear",
 
             diagnostics_enabled=False,
-            diagnostics_output_dir="D:/Mateo/20250624/Output/IS02/debugging/detrending-diagnostics",
+            diagnostics_output_dir="D:/Mateo/20250326/Output/IS1/signal-processing/detrending-diagnostics",
         )
     )
 )
