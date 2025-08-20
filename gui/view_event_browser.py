@@ -1,6 +1,9 @@
 # view_sequential_selectivity.py
 # Modified to visualize calcium events (not individual peaks)
-# Usage: Run this script and select an output folder containing overlay.TIF and 04_population_events.pkl
+# Usage:
+#   1) Run this script and select an output folder containing overlay.TIF and 04_population_events.pkl
+#   2) (Optional) Enter comma-separated Event IDs in the "Filter Event IDs" box (e.g., 1,4,7) and click "Apply"
+#      to display ONLY those events. Clear the box and click "Apply" to show all events.
 
 import sys
 from pathlib import Path
@@ -19,7 +22,6 @@ from scipy.spatial import ConvexHull
 from calcium_activity_characterization.data.events import Event, SequentialEvent, GlobalEvent
 from math import atan2, cos, sin, radians
 
-
 class EventViewer(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -34,6 +36,9 @@ class EventViewer(QMainWindow):
         self.pixel_to_label = {}  # (y, x) -> label
         self.hover_label = QLabel("Hovered Label: None")
         self.last_hovered_label = None
+
+        # NEW: filtered event ids (None means no filtering)
+        self.filtered_event_ids: set[int] | None = None
 
         self.timer = QTimer()
         self.timer.setInterval(500)
@@ -101,10 +106,61 @@ class EventViewer(QMainWindow):
         self.show_wavefront.setChecked(True)
         controls_layout.addWidget(self.show_wavefront)
 
+        # --- NEW: Event ID filter controls ---
+        controls_layout.addWidget(QLabel("Filter Event IDs (comma-separated):"))
+        self.event_filter_input = QLineEdit()
+        self.event_filter_input.setPlaceholderText("e.g., 1,4,7")
+        controls_layout.addWidget(self.event_filter_input)
+
+        self.apply_filter_btn = QPushButton("Apply")
+        self.apply_filter_btn.clicked.connect(self.apply_event_filter)
+        controls_layout.addWidget(self.apply_filter_btn)
+
+        self.filter_status = QLabel("Filter: (none)")
+        controls_layout.addWidget(self.filter_status)
+        # -------------------------------------
+
         controls_layout.addWidget(self.hover_label)
         controls_layout.addStretch()
         main_layout.addLayout(controls_layout)
         self.setCentralWidget(main_widget)
+
+    def apply_event_filter(self):
+        """
+        Parse the comma-separated list of Event IDs from the input box.
+        If empty or invalid, clear the filter (show all events).
+        """
+        text = self.event_filter_input.text().strip()
+        if not text:
+            self.filtered_event_ids = None
+            self.filter_status.setText("Filter: (none)")
+            self.update_frame()
+            return
+
+        ids: set[int] = set()
+        for part in text.split(","):
+            s = part.strip()
+            if not s:
+                continue
+            try:
+                ids.add(int(s))
+            except ValueError:
+                # Ignore invalid tokens silently (keeps UX simple)
+                pass
+
+        self.filtered_event_ids = ids if ids else None
+        if self.filtered_event_ids is None:
+            self.filter_status.setText("Filter: (none)")
+        else:
+            pretty = ",".join(str(i) for i in sorted(self.filtered_event_ids))
+            self.filter_status.setText(f"Filter: {pretty}")
+        self.update_frame()
+
+    def _events_to_show(self) -> list[Event]:
+        """Return the list of events respecting the current filter."""
+        if self.filtered_event_ids is None:
+            return self.events
+        return [ev for ev in self.events if ev.id in self.filtered_event_ids]
 
     def load_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
@@ -119,6 +175,11 @@ class EventViewer(QMainWindow):
         with open(pkl_path, 'rb') as f:
             self.population = pickle.load(f)
             self.events = self.population.events
+
+        # Reset filter on new load
+        self.filtered_event_ids = None
+        self.event_filter_input.clear()
+        self.filter_status.setText("Filter: (none)")
 
         # Load nuclei mask (grayscale image)
         mask_path_upper = folder / "cell-mapping" / "nuclei_mask.TIF"
@@ -153,8 +214,8 @@ class EventViewer(QMainWindow):
         self.frame_label.setText(f"Frame: {frame}")
         mask = self.base_rgb.copy()
 
-
-        for event in self.events:
+        # Use filtered events
+        for event in self._events_to_show():
             color = self.event_colors[event.id]
             start = event.event_start_time
             end = event.event_end_time
@@ -171,27 +232,27 @@ class EventViewer(QMainWindow):
         self.scene.clear()
         self.scene.addPixmap(QPixmap.fromImage(qimg))
 
-        for event in self.events:
+        # Draw hulls and direction only for filtered events
+        for event in self._events_to_show():
             pen = QPen(Qt.yellow)
             # If event is ongoing at current frame
             if event.event_start_time <= frame <= event.event_end_time:
                 # Find the last available wavefront at or before this frame
                 valid_frames = [f for f in event.wavefront if f <= frame]
-                if not valid_frames:
-                    continue
-
-                last_frame = max(valid_frames)
-                points = event.wavefront[last_frame]
-                if len(points) >= 3:
-                    try:
-                        hull = ConvexHull(points)
-                        polygon = QPolygonF([
-                            QPointF(points[v][1], points[v][0])  # x=col, y=row
-                            for v in hull.vertices
-                        ])
-                        self.scene.addPolygon(polygon, pen)
-                    except Exception as e:
-                        print(f"[Hull Drawing] Failed for event {event.id} at frame {frame}: {e}")
+                if valid_frames:
+                    last_frame = max(valid_frames)
+                    points = event.wavefront[last_frame]
+                    if len(points) >= 3:
+                        try:
+                            hull = ConvexHull(points)
+                            polygon = QPolygonF([
+                                QPointF(points[v][1], points[v][0])  # x=col, y=row
+                                for v in hull.vertices
+                            ])
+                            if self.show_wavefront.isChecked():
+                                self.scene.addPolygon(polygon, pen)
+                        except Exception as e:
+                            print(f"[Hull Drawing] Failed for event {event.id} at frame {frame}: {e}")
 
             if (
                 self.show_direction.isChecked() and
@@ -227,7 +288,6 @@ class EventViewer(QMainWindow):
                         self.scene.addLine(tail_x, tail_y, head_x, head_y, arrow_pen)
                         self.scene.addEllipse(head_x - 3, head_y - 3, 6, 6, QPen(Qt.red), Qt.red)
 
-
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
     def eventFilter(self, obj, event):
@@ -248,7 +308,8 @@ class EventViewer(QMainWindow):
         frame = self.slider.value()
 
         active_event = None
-        for event in self.events:
+        # Respect current filter here too
+        for event in self._events_to_show():
             if label in list({label for label, _ in event.peaks_involved}):
                 for peak in cell.trace.peaks:
                     if event.event_start_time <= peak.communication_time <= event.event_end_time:
