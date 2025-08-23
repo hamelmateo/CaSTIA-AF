@@ -9,54 +9,45 @@ from matplotlib import cm
 from typing import Any, Optional, Callable, Union, Literal, Iterable
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
-from contextlib import contextmanager
-import matplotlib as mpl
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import FuncFormatter
+import matplotlib as mpl
 import json
 
+sns.set_theme(context="paper")  # do this first
 
-@contextmanager
-def illustrator_text_context(prefer_font: str = "Arial", keep_text: bool = True):
-    """
-    RC context to keep text editable in Adobe Illustrator for SVG/PDF exports.
+# Version-safe rc update (only keys supported by your Matplotlib)
+_rc = {
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "svg.fonttype": "none",      # keep SVG text editable
+    "text.usetex": False,
 
-    Args:
-        prefer_font (str): A system font Illustrator will find (e.g., 'Arial' or 'Helvetica').
-        keep_text (bool): If True, keep fonts as text (not outlines).
+    # Lock to Arial only
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Arial"],
+    "axes.unicode_minus": False, # avoid U+2212 (minus) fallback
 
-    Notes:
-        - SVG: svg.fonttype='none' preserves text as text.
-        - PDF: pdf.fonttype=42 embeds TrueType; Illustrator reads it as text.
-        - TeX rendering is disabled to avoid outlines.
-        - Only rcParams supported by the current Matplotlib are applied.
-    """
-    desired_rc = {
-        "svg.fonttype": "none" if keep_text else "path",
-        # "svg.embed_char_paths": False,  # DO NOT set; not supported on your version
-        "pdf.fonttype": 42,              # TrueType
-        "ps.fonttype": 42,               # TrueType (if ever exporting PS/EPS)
-        "text.usetex": False,            # avoid TeX (often outlines)
-        "mathtext.default": "regular",
-        "font.family": "sans-serif",
-        "font.sans-serif": [prefer_font, "Helvetica", "DejaVu Sans", "Liberation Sans"],
-        "axes.unicode_minus": False,     # safer minus glyph in AI
-    }
+    # Mathtext in Arial (if you ever use $...$)
+    "mathtext.fontset": "custom",
+    "mathtext.rm": "Arial",
+    "mathtext.it": "Arial:italic",
+    "mathtext.bf": "Arial:bold",
 
-    # Filter to only keys supported by this Matplotlib build
-    safe_rc = {k: v for k, v in desired_rc.items() if k in mpl.rcParams}
-    missing = set(desired_rc) - set(safe_rc)
-    if missing:
-        logger.info("Skipping unsupported rcParams for this Matplotlib: %s", sorted(missing))
-
-    with mpl.rc_context(safe_rc):
-        yield
+    # Sizes
+    "axes.labelsize": 12,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "legend.fontsize": 10,
+}
+mpl.rcParams.update({k: v for k, v in _rc.items() if k in mpl.rcParams})
 
 
 def plot_histogram(
     df: pd.DataFrame,
     column: str,
-    title: str,
+    title: str | None = None,
+    xlabel: str | None = None,
     ylabel: str = "Count",
     bin_width: Optional[float] = None,
     bin_count: Optional[int] = None,
@@ -152,8 +143,9 @@ def plot_histogram(
             logger.exception("Seaborn histplot failed — falling back to matplotlib: %s", e)
             ax.hist(data.values, bins=bins)
 
-        ax.set_title(title)
-        ax.set_xlabel(column)
+        if title:
+            ax.set_title(title)
+        ax.set_xlabel(xlabel if xlabel is not None else column)
         ax.set_ylabel(ylabel)
 
         # Optional axis limits
@@ -192,7 +184,7 @@ def plot_histogram(
                     bbox_inches="tight",
                     facecolor="white",
                     edgecolor="white",
-                    transparent=True,
+                    transparent=False,
                     metadata={"Creator": "plot_violin"},
                 )
                 logger.info("plot_violin: figure saved to %s (%s)", out_path, fmt)
@@ -222,7 +214,7 @@ def plot_histogram(
 def visualize_image(
     image_source: dict[str, str],
     image_name: str,
-    title: str = "Image Title",
+    title: str | None = None,
     figsize: tuple = (6, 5),
     show_axes: bool = False
 ) -> None:
@@ -259,7 +251,8 @@ def visualize_image(
 
         fig, ax = plt.subplots(figsize=figsize)
         ax.imshow(img, aspect="auto")
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
         if not show_axes:
             ax.axis("off")
 
@@ -274,7 +267,7 @@ def visualize_image(
 def plot_pie_chart(
     df: pd.DataFrame,
     column: str,
-    title: str = "Category Distribution",
+    title: str | None = None,
     value_label_formatter: Callable[[float], str] | None = None,
     label_prefix: str | None = None,
     palette: str = "tab10",
@@ -350,22 +343,20 @@ def plot_pie_chart(
         ]
         pie_labels = labels if value_label_formatter is None else None
 
-        # === wrap the plotting & saving inside the rc context ===
-        with illustrator_text_context(prefer_font=prefer_font, keep_text=editable_text):
-            fig, ax = plt.subplots(figsize=figsize)
-            try:
-                wedges, texts, autotexts = ax.pie(
-                    counts,
-                    labels=pie_labels,
-                    autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
-                    startangle=90,
-                    colors=colors,
-                    wedgeprops=dict(linewidth=0.0, edgecolor="black"),  # print-friendly
-                )
-            except Exception as e:
-                logger.exception("plot_pie_chart: pie rendering failed: %s", e)
-                plt.close(fig)
-                return None
+        fig, ax = plt.subplots(figsize=figsize)
+        try:
+            wedges, texts, autotexts = ax.pie(
+                counts,
+                labels=pie_labels,
+                autopct=value_label_formatter or (lambda p: f"{p:.1f}%" if p > 0 else ""),
+                startangle=90,
+                colors=colors,
+                wedgeprops=dict(linewidth=0.0, edgecolor="black"),  # print-friendly
+            )
+        except Exception as e:
+            logger.exception("plot_pie_chart: pie rendering failed: %s", e)
+            plt.close(fig)
+            return None
 
         # Styling
         try:
@@ -380,7 +371,8 @@ def plot_pie_chart(
         except Exception as e:
             logger.exception("plot_pie_chart: label styling failed: %s", e)
 
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
         ax.axis("equal")
         plt.tight_layout()
 
@@ -395,7 +387,8 @@ def plot_pie_chart(
                 plt.savefig(
                     saved_path,
                     format=fmt,
-                    transparent=True,
+                    transparent=False, 
+                    facecolor="white",
                     bbox_inches="tight",
                     metadata={"Creator": "plot_pie_chart"},
                 )
@@ -419,31 +412,34 @@ def plot_category_distribution_by_dataset(
     df: pd.DataFrame,
     category_col: str,
     dataset_col: str,
-    title: str = "Category Distribution by Dataset",
+    title: str | None = None,
     normalize: bool = True,
     palette: str = "tab10",
     figsize: tuple[float, float] = (8.0, 5.0),
     save_path: str | Path | None = None,
     export_format: str = "svg",
     show: bool = True,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
 ) -> Path | None:
     """Plot a multi-dataset "bar pie" as 100% stacked columns.
 
     Each dataset is a vertical bar split into colored segments whose heights
-    correspond to the category distribution within that dataset. This is the
-    bar-chart analog of multiple pie charts, allowing side-by-side comparison.
+    correspond to the category distribution within that dataset.
 
     Args:
         df: Input DataFrame containing at least *category_col* and *dataset_col*.
-        category_col: Column name with category labels (e.g., "phenotype").
-        dataset_col: Column name indicating dataset/group (e.g., "Dataset").
+        category_col: Column name with category labels.
+        dataset_col: Column name indicating dataset/group.
         title: Figure title.
-        normalize: If True, bars are scaled to 100% within each dataset (recommended).
-        palette: Matplotlib colormap name used to color categories consistently.
+        normalize: If True, scale bars to 100% within each dataset.
+        palette: Matplotlib colormap name.
         figsize: Figure size in inches.
-        save_path: If provided, write the figure to this path.
-        export_format: Either "svg" or "pdf".
-        show: If True, display the figure; otherwise close it after saving.
+        save_path: If provided, save figure.
+        export_format: "svg" or "pdf".
+        show: If True, display the figure.
+        xlabel: X-axis label. If None, no label is set.
+        ylabel: Y-axis label. If None, no label is set.
 
     Returns:
         Path | None: The saved figure path if written; otherwise None.
@@ -454,7 +450,7 @@ def plot_category_distribution_by_dataset(
             return None
         for col in (category_col, dataset_col):
             if col not in df.columns:
-                logger.error("plot_category_distribution_by_dataset: missing column '%s' in DataFrame", col)
+                logger.error("plot_category_distribution_by_dataset: missing column '%s'", col)
                 return None
 
         data = df[[dataset_col, category_col]].dropna()
@@ -462,25 +458,22 @@ def plot_category_distribution_by_dataset(
             logger.warning("plot_category_distribution_by_dataset: no non-NaN rows after dropna")
             return None
 
-        # Build counts matrix: rows=categories, cols=datasets
         counts = (
             data.groupby([dataset_col, category_col])
                 .size()
                 .unstack(fill_value=0)
-                .T  # categories as rows for consistent stacking order
+                .T
         )
-        # Determine plotting order
         datasets = counts.columns.tolist()
         categories = counts.index.tolist()
 
-        # Normalize to proportions per dataset
         if normalize:
             col_sums = counts.sum(axis=0).replace(0, np.nan)
             props = counts.div(col_sums, axis=1).fillna(0.0)
         else:
             props = counts.astype(float)
 
-        # Colors per category
+        # Colors
         try:
             from matplotlib import cm as _cm
             cmap = _cm.get_cmap(palette)
@@ -488,32 +481,36 @@ def plot_category_distribution_by_dataset(
             color_map = {cat: cmap(i / denom) for i, cat in enumerate(categories)}
         except Exception as e:
             logger.exception("plot_category_distribution_by_dataset: failed to build colors from palette '%s': %s", palette, e)
-            # fallback: grayscale ramp
             color_map = {cat: (i / max(len(categories)-1, 1),) * 3 for i, cat in enumerate(categories)}
 
-        # Plot stacked vertical bars
+        # Plot
         fig, ax = plt.subplots(figsize=figsize)
         x = np.arange(len(datasets))
         bottoms = np.zeros(len(datasets))
         for cat in categories:
             heights = props.loc[cat, datasets].to_numpy()
-            bars = ax.bar(x, heights, bottom=bottoms, color=color_map[cat], edgecolor="none")
+            ax.bar(x, heights, bottom=bottoms, color=color_map[cat], edgecolor="none")
             bottoms += heights
 
-        # Axes & labels
+        # Axis labels
         ax.set_xticks(x)
         ax.set_xticklabels(datasets, rotation=0)
         if normalize:
-            ax.set_ylabel("Percentage")
+            if ylabel is not None:
+                ax.set_ylabel(ylabel)
             ax.set_ylim(0, 1)
-            ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+            ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y*100:.0f}"))
         else:
-            ax.set_ylabel("Count")
-        ax.set_title(title)
+            if ylabel is not None:
+                ax.set_ylabel(ylabel)
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+
+        if title:
+            ax.set_title(title)
         ax.set_xlim(-0.5, len(datasets) - 0.5)
         ax.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.5)
 
-        # Legend outside on the right
         handles = [plt.Line2D([0], [0], color=color_map[cat], lw=6) for cat in categories]
         ax.legend(handles, categories, title="Category", bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0.)
 
@@ -548,12 +545,12 @@ def plot_bar(
     df: pd.DataFrame,
     axis_column: str,
     value_column: str,
-    title: str,
+    title: str | None = None,
     hue_column: Optional[str] = None,
     ylabel: str = "Count",
     xlabel: str = "Dataset",
     rotation: int = 45,
-    palette: Optional[str] = "muted",
+    palette: Optional[str] = None,
     save_svg_path: str | Path | None = None,  # you already added this
     export_format: str = "svg",  # "svg" or "pdf"
 ) -> None:
@@ -607,20 +604,28 @@ def plot_bar(
             return None
 
         plt.figure(figsize=(6.5, 4.0))
-        if hue_column is None:
-            hue_column = axis_column
 
         try:
-            sns.barplot(
-                data=clean_df,
-                x=axis_column,
-                y=value_column,
-                hue=hue_column,
-                dodge=False,
-                palette=palette,
-                legend=False,
-                errorbar=None,
-            )
+            if hue_column is None:
+                # Single-color bars
+                sns.barplot(
+                    data=clean_df,
+                    x=axis_column,
+                    y=value_column,
+                    errorbar=None,
+                )
+            else:
+                # Grouped by hue, multi-colored
+                sns.barplot(
+                    data=clean_df,
+                    x=axis_column,
+                    y=value_column,
+                    hue=hue_column,
+                    dodge=False,
+                    palette=palette,
+                    legend=False,
+                    errorbar=None,
+                )
         except Exception as e:
             logger.exception("plot_bar: seaborn.barplot failed, falling back to matplotlib: %s", e)
             # Fallback: aggregate by (axis, hue) mean
@@ -661,7 +666,8 @@ def plot_bar(
                 plt.savefig(
                     svg_path,
                     format=fmt,
-                    transparent=True,
+                    transparent=False, 
+                    facecolor="white",
                     bbox_inches="tight",
                     metadata={"Creator": "plot_histogram_by_group"},
                 )
@@ -679,7 +685,8 @@ def plot_histogram_by_group(
     df: pd.DataFrame,
     value_column: str,
     group_column: str,
-    title: str,
+    title: str | None = None,
+    xlabel: str | None = None,
     ylabel: str = "Count",
     bin_width: float | None = None,
     bin_count: int | None = None,
@@ -784,27 +791,27 @@ def plot_histogram_by_group(
         else:
             bins = bin_count if bin_count is not None else 30
 
-        with illustrator_text_context(prefer_font=prefer_font, keep_text=editable_text):
-            fig, ax = plt.subplots(figsize=(5, 4))
-            try:
-                sns.histplot(
-                    data=work,
-                    x=value_column,
-                    hue=group_column,
-                    bins=bins,
-                    multiple=multiple,
-                    kde=False,
-                    ax=ax,
-                    palette=palette,
-                    edgecolor=None,
-                )
-            except Exception as e:
-                logger.exception("plot_histogram_by_group: seaborn.histplot failed: %s", e)
-                ax.hist(work[value_column].values, bins=bins)
+        fig, ax = plt.subplots(figsize=(5, 4))
+        try:
+            sns.histplot(
+                data=work,
+                x=value_column,
+                hue=group_column,
+                bins=bins,
+                multiple=multiple,
+                kde=False,
+                ax=ax,
+                palette=palette,
+                edgecolor=None,
+            )
+        except Exception as e:
+            logger.exception("plot_histogram_by_group: seaborn.histplot failed: %s", e)
+            ax.hist(work[value_column].values, bins=bins)
 
+        if title:
             ax.set_title(title)
-            ax.set_xlabel(value_column)
-            ax.set_ylabel(ylabel)
+        ax.set_xlabel(xlabel if xlabel is not None else value_column)
+        ax.set_ylabel(ylabel)
 
         # Optional axis limits
         if x_axis_boundaries is not None:
@@ -838,7 +845,8 @@ def plot_histogram_by_group(
                 plt.savefig(
                     svg_path,
                     format=fmt,
-                    transparent=True,
+                    transparent=False, 
+                    facecolor="white",
                     bbox_inches="tight",
                     metadata={"Creator": "plot_histogram_by_group"},
                 )
@@ -907,7 +915,6 @@ def plot_scatter_size_coded(
     plt.colorbar(sc, label="Number of Cells")
     plt.xlabel(x_col)
     plt.ylabel(y_col)
-    plt.title("Size coded Scatter: Overlap Density")
     plt.grid(True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
     plt.show()
@@ -947,7 +954,6 @@ def plot_scatter_hexbin(
     plt.colorbar(hb, label="Count in Bin")
     plt.xlabel(x_col)
     plt.ylabel(y_col)
-    plt.title("Hexbin Density: Individual vs Sequential Occurrences")
     plt.grid(True, linestyle='--', linewidth=0.5)
     plt.tight_layout()
     plt.show()
@@ -957,7 +963,7 @@ def plot_violin(
     df: pd.DataFrame,
     x: str | None,
     y: str,
-    title: str,
+    title: str | None = None,
     hue: str | None = None,
     order: list[str] | None = None,
     hue_order: list[str] | None = None,
@@ -1168,7 +1174,8 @@ def plot_violin(
                 logger.exception("plot_violin: point overlay failed: %s", e)
 
         # --- Labels / axes ---
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
         ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
         ax.set_ylabel(ylabel if ylabel is not None else y)
 
@@ -1212,7 +1219,7 @@ def plot_violin(
                     bbox_inches="tight",
                     facecolor="white",
                     edgecolor="white",
-                    transparent=True,
+                    transparent=False,
                     metadata={"Creator": "plot_violin"},
                 )
                 logger.info("plot_violin: figure saved to %s (%s)", out_path, fmt)
@@ -1230,8 +1237,8 @@ def plot_points_mean_std(
     df: pd.DataFrame,
     x: str | None,
     y: str,
-    title: str,
     *,
+    title: str | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
     show_points: bool = True,
@@ -1395,7 +1402,8 @@ def plot_points_mean_std(
 
         # Labels / limits / scales
         try:
-            ax.set_title(title)
+            if title:
+                ax.set_title(title)
             ax.set_xlabel(xlabel if xlabel is not None else (x if x is not None else ""))
             ax.set_ylabel(ylabel if ylabel is not None else y)
             if x_tick_rotation:
@@ -1421,7 +1429,8 @@ def plot_points_mean_std(
                 plt.savefig(
                     out_path,
                     format=fmt,
-                    transparent=True,
+                    transparent=False, 
+                    facecolor="white",
                     bbox_inches="tight",
                     metadata={"Creator": "plot_points_mean_std"},
                 )
@@ -1438,8 +1447,8 @@ def plot_points_mean_std_continuous(
     df: pd.DataFrame,
     x: str,
     y: str,
-    title: str,
     *,
+    title: str | None = None,
     xlabel: Optional[str] = None,
     ylabel: Optional[str] = None,
     hue: Optional[str] = None,           # optional — used only for raw scatter coloring
@@ -1516,7 +1525,7 @@ def plot_points_mean_std_continuous(
             except Exception as e:
                 logger.exception("plot_points_mean_std_continuous: outlier filtering failed — continuing without: %s", e)
 
-        sns.set(style=style)
+        #sns.set(style=style)
         fig, ax = plt.subplots(figsize=figsize)
 
         # ----- Raw points -----
@@ -1596,7 +1605,8 @@ def plot_points_mean_std_continuous(
                 except Exception as e:
                     logger.exception("plot_points_mean_std_continuous: removing legend failed: %s", e)
 
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
         ax.set_xlabel(xlabel if xlabel is not None else x)
         ax.set_ylabel(ylabel if ylabel is not None else y)
 
@@ -1646,13 +1656,14 @@ def plot_xy_with_regression(
     palette: str = "muted",
     scatter_kws: dict[str, object] | None = None,
     line_kws: dict[str, object] | None = None,
-    title: str = "Influence of the number of cells over cells global events activity",
+    title: str | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
     xlim: tuple[float, float] | None = None,
     ylim: tuple[float, float] | None = None,
     style: str = "whitegrid",
     dropna: bool = True,
+    show_trend_line: bool = True,
     # --- NEW: outlier filtering ---
     filter_outliers: bool = False,
     outliers_bounds: tuple[float, float] | None = None,
@@ -1673,7 +1684,7 @@ def plot_xy_with_regression(
         export_format: "svg" or "pdf" (default: svg).
     """
     try:
-        sns.set(style=style)
+        #sns.set(style=style)
 
         if scatter_kws is None:
             scatter_kws = {"alpha": 0.6, "s": 80, "color": "blue", "edgecolor": "black"}
@@ -1746,7 +1757,6 @@ def plot_xy_with_regression(
                 )
 
             g.set_axis_labels(xlabel or x_col, ylabel or y_col)
-            g.fig.suptitle(title, fontsize=14, y=1.02)
             if xlim: g.set(xlim=xlim)
             if ylim: g.set(ylim=ylim)
             plt.tight_layout()
@@ -1760,7 +1770,7 @@ def plot_xy_with_regression(
                     if fmt not in {"svg", "pdf"}:
                         fmt = "svg"
                     plt.savefig(
-                        out_path, format=fmt, transparent=True,
+                        out_path, format=fmt, transparent=False, facecolor="white",
                         bbox_inches="tight", metadata={"Creator": "plot_box_median_iqr_with_trend"}
                     )
                     logger.info("Saved figure to %s", out_path)
@@ -1794,13 +1804,13 @@ def plot_xy_with_regression(
             medianprops={"color": "grey", "linewidth": 2},
         )
 
-        if len(bin_centers) >= 2:
+        if show_trend_line and len(bin_centers) >= 2:
             try:
                 coeffs = np.polyfit(bin_centers.values, bin_medians.values, deg=max(1, order))
                 x_fit = np.linspace(bin_centers.min(), bin_centers.max(), 200)
                 y_fit = np.polyval(coeffs, x_fit)
                 idx_fit = np.interp(x_fit, bin_centers.values, np.arange(len(bin_centers)))
-                ax.plot(idx_fit, y_fit, **line_kws, zorder=3)
+                ax.plot(idx_fit, y_fit, **(line_kws or {"linewidth": 2, "linestyle": "--", "color": "red"}), zorder=3)
             except Exception as e:
                 logger.exception("plot_box_median_iqr_with_trend: regression fit failed: %s", e)
 
@@ -1814,7 +1824,8 @@ def plot_xy_with_regression(
                 bbox=r_bbox,
             )
 
-        ax.set_title(title, fontsize=14)
+        if title:
+            ax.set_title(title)
         ax.set_xlabel(xlabel or f"{x_col} (binned)")
         ax.set_ylabel(ylabel or y_col)
         ax.legend(loc="best")
@@ -1830,7 +1841,7 @@ def plot_xy_with_regression(
                 if fmt not in {"svg", "pdf"}:
                     fmt = "svg"
                 plt.savefig(
-                    out_path, format=fmt, transparent=True,
+                    out_path, format=fmt, transparent=False, facecolor="white",
                     bbox_inches="tight", metadata={"Creator": "plot_box_median_iqr_with_trend"}
                 )
                 logger.info("Saved figure to %s", out_path)
@@ -1847,8 +1858,8 @@ def plot_heatmap(
     df: pd.DataFrame,
     x: str,
     y: str,
-    title: str = "",
     *,
+    title: str | None = None,
     value: str | None = None,
     stat: Literal["count", "mean", "sum", "median"] = "count",
     bins_x: int | np.ndarray = 30,
@@ -2032,7 +2043,8 @@ def plot_heatmap(
             square=square,
             ax=ax,
         )
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
         ax.set_xlabel(x)
         ax.set_ylabel(y)
 
@@ -2055,7 +2067,8 @@ def plot_heatmap(
                 plt.savefig(
                     out_path,
                     format=fmt,
-                    transparent=True,
+                    transparent=False, 
+                    facecolor="white",
                     bbox_inches="tight",
                     metadata={"Creator": "plot_points_mean_std"},
                 )
@@ -2120,7 +2133,7 @@ def plot_early_peakers_heatmap(
     event_ids: list[str] | None = None,
     total_events: int | None = None,
     output_svg: str | Path = "early_peakers_heatmap.svg",
-    title: str = "Early Peakers Participation",
+    title: str | None = None,
     show_labels: bool = False,
     return_labels: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, list[str], list[str]] | None:
@@ -2249,7 +2262,8 @@ def plot_early_peakers_heatmap(
 
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.set_title(title)
+        if title:
+            ax.set_title(title)
 
         plt.subplots_adjust(left=0, right=1, top=0.95, bottom=0)
         plt.margins(0)
@@ -2277,7 +2291,7 @@ def plot_binned_boxpoints(
     bins: list[float],
     x_label: str | None = None,
     y_label: str | None = None,
-    title: str = "Binned distribution",
+    title: str | None = None,
     point_color: str = "black",
     box_color: str = "lightgray",
     jitter: float = 0.25,
@@ -2445,7 +2459,8 @@ def plot_scatter_with_binned_boxplots(
             plt.savefig(
                 out_path,
                 format=fmt,
-                transparent=True,
+                transparent=False, 
+                facecolor="white",
                 bbox_inches="tight",
                 metadata={"Creator": "plot_scatter_with_binned_boxplots"},
             )

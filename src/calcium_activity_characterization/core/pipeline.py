@@ -278,7 +278,7 @@ class CalciumPipeline:
                 for y, x in cell.pixel_coords:
                     if 0 <= y < mask_shape[0] and 0 <= x < mask_shape[1]:
                         cell_mask[y, x] = True
-                outline |= find_boundaries(cell_mask, mode="inner")
+                outline |= find_boundaries(cell_mask, mode="thick")
 
             return outline
 
@@ -292,7 +292,7 @@ class CalciumPipeline:
         mask: np.ndarray,
         output_path: Path,
         *,
-        line_color: str = "blue",
+        line_color: str = "cyan",
         point_color: str = "red",
         line_width: float = 1.0,
         line_alpha: float = 0.9,

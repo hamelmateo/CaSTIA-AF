@@ -336,7 +336,7 @@ def plot_spatial_neighbor_graph(
     if mask is not None:
         plt.imshow(mask, cmap="gray")
 
-    nx.draw(graph, pos, node_size=20, node_color='red', edge_color='blue', with_labels=False)
+    nx.draw(graph, pos, node_size=20, node_color='red', edge_color='yellow', with_labels=False)
     #plt.axis("equal")
     #plt.title("Spatial Neighbor Graph")
 

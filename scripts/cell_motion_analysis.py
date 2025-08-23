@@ -141,6 +141,7 @@ def segment_hoechst_pair(
         graph=graph0,
         roi_scale=img_cfg.roi_scale,
         img_shape=mask0.shape,
+        roi_centered=True,
         border_margin=GLOBAL_CONFIG.cell_filtering.border_margin
     )
 
@@ -155,6 +156,7 @@ def segment_hoechst_pair(
         graph=graph1,
         roi_scale=img_cfg.roi_scale,
         img_shape=mask1.shape,
+        roi_centered=True,
         border_margin=GLOBAL_CONFIG.cell_filtering.border_margin
     )
 
@@ -294,8 +296,8 @@ def create_cellmotion_overlay_from_cells(
                 path,
                 edgecolor="red",
                 facecolor=[0.5, 0.5, 0.5],
-                hatch="///",
-                linewidth=0.5,
+                hatch="/////////",
+                linewidth=0.2,
                 zorder=3,
                 label="Overlap"
             )
