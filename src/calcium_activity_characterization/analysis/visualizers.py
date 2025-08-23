@@ -6,7 +6,7 @@ import seaborn as sns
 from matplotlib.image import imread
 from pathlib import Path
 from matplotlib import cm
-from typing import Optional, Callable, Union, Literal, Iterable
+from typing import Any, Optional, Callable, Union, Literal, Iterable
 from calcium_activity_characterization.logger import logger
 from calcium_activity_characterization.analysis.metrics import detect_asymmetric_iqr_outliers
 from contextlib import contextmanager
@@ -1107,7 +1107,7 @@ def plot_violin(
         # --- Box overlay (median/IQR + Tukey whiskers), matching colors/lines ---
         if overlay_box:
             try:
-                box_width = max(0.05, min(0.95, width * 0.15))
+                box_width = max(0.05, min(0.95, width * 0.10))
 
                 # If we want the box face(s) to match the violin(s), let the palette set the colors.
                 # (Don't pass a facecolor in boxprops; we set alpha separately.)
@@ -1634,111 +1634,214 @@ def plot_xy_with_regression(
     r_text_format: str = "{method_cap} r = {corr:.2f}",
     r_position: tuple[float, float] = (0.05, 0.95),
     r_fontsize: int = 12,
-    r_bbox: Optional[dict[str, any]] = None,
+    r_bbox: dict[str, object] | None = None,
     order: int = 1,
     ci: int = 95,
     robust: bool = False,
     truncate: bool = True,
-    hue: Optional[str] = None,
+    hue: str | None = None,
     height: float = 8.0,
     aspect: float = 1.0,
-    markers: Union[str, tuple[str, ...]] = "o",
+    markers: str | tuple[str, ...] = "o",
     palette: str = "muted",
-    scatter_kws: Optional[dict[str, any]] = None,
-    line_kws: Optional[dict[str, any]] = None,
+    scatter_kws: dict[str, object] | None = None,
+    line_kws: dict[str, object] | None = None,
     title: str = "Influence of the number of cells over cells global events activity",
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    xlim: Optional[tuple[float, float]] = None,
-    ylim: Optional[tuple[float, float]] = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
     style: str = "whitegrid",
-    dropna: bool = True
+    dropna: bool = True,
+    # --- NEW: outlier filtering ---
+    filter_outliers: bool = False,
+    outliers_bounds: tuple[float, float] | None = None,
+    outliers_bygroup: str | None = None,
+    # --- NEW: boxplot binning ---
+    binning: Literal["none", "fixed", "quantile"] = "none",
+    n_bins: int = 6,
+    # --- NEW: save options ---
+    save_path: str | Path | None = None,
+    export_format: str = "svg",
 ) -> None:
     """
-    Creates a scatter + regression plot between two numeric columns and annotates with correlation.
-    Displays the plot directly without returning anything.
+    Scatter + regression OR boxplot-by-bins + regression on bin medians.
+    Adds outlier filtering. Can save figure to .svg/.pdf.
 
     Args:
-        data: Input DataFrame containing x and y columns.
-        x_col: Column name for x-axis values.
-        y_col: Column name for y-axis values.
-        corr_method: Correlation method ('pearson', 'spearman', 'kendall').
-        annotate_r: Whether to annotate the correlation.
-        r_text_format: Text format for correlation.
-        r_position: Position of correlation text in Axes coordinates.
-        r_fontsize: Font size for annotation text.
-        r_bbox: Bounding box style for annotation.
-        order: Polynomial order for regression line.
-        ci: Confidence interval for regression.
-        robust: Whether to use robust regression.
-        truncate: Truncate regression line to data range.
-        hue: Optional column name for color grouping.
-        height: Figure height.
-        aspect: Aspect ratio (width = height * aspect).
-        markers: Marker style(s).
-        palette: Seaborn palette name.
-        scatter_kws: Keyword arguments for scatter plot.
-        line_kws: Keyword arguments for regression line.
-        title: Plot title.
-        xlabel: Optional override for x-axis label.
-        ylabel: Optional override for y-axis label.
-        xlim: Optional x-axis limits.
-        ylim: Optional y-axis limits.
-        style: Seaborn style.
-        dropna: Drop NA values before plotting.
+        save_path: If given, save the figure to this path.
+        export_format: "svg" or "pdf" (default: svg).
     """
-    sns.set(style=style)
+    try:
+        sns.set(style=style)
 
-    if scatter_kws is None:
-        scatter_kws = {"alpha": 0.6, "s": 80, "color": "blue", "edgecolor": "black"}
-    if line_kws is None:
-        line_kws = {"color": "red", "linewidth": 2, "linestyle": "--"}
-    if r_bbox is None:
-        r_bbox = dict(boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white")
+        if scatter_kws is None:
+            scatter_kws = {"alpha": 0.6, "s": 80, "color": "blue", "edgecolor": "black"}
+        if line_kws is None:
+            line_kws = {"linewidth": 2, "linestyle": "--", "color": "red"}
+        if r_bbox is None:
+            r_bbox = dict(boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white")
 
-    if dropna:
-        data = data.dropna(subset=[x_col, y_col])
+        # --- input cleaning ---
+        req = [x_col, y_col]
+        missing = [c for c in req if c not in data.columns]
+        if missing:
+            logger.error("plot_box_median_iqr_with_trend: missing columns: %s", missing)
+            return
 
-    corr = data[x_col].corr(data[y_col], method=corr_method)
+        work = data.copy()
+        work[x_col] = pd.to_numeric(work[x_col], errors="coerce")
+        work[y_col] = pd.to_numeric(work[y_col], errors="coerce")
+        if dropna:
+            work = work.dropna(subset=req)
+        if work.empty:
+            logger.warning("plot_box_median_iqr_with_trend: no valid rows to plot")
+            return
 
-    g = sns.lmplot(
-        data=data,
-        x=x_col,
-        y=y_col,
-        hue=hue,
-        height=height,
-        aspect=aspect,
-        ci=ci,
-        robust=robust,
-        order=order,
-        truncate=truncate,
-        scatter_kws=scatter_kws,
-        line_kws=line_kws,
-        markers=markers,
-        palette=palette
-    )
+        # --- outlier filtering ---
+        if filter_outliers and "detect_asymmetric_iqr_outliers" in globals():
+            try:
+                ql, qu = outliers_bounds if outliers_bounds else (0.25, 0.75)
+                filtered_df, outliers, lb, ub = detect_asymmetric_iqr_outliers(
+                    work, y_col, ql, qu, outliers_bygroup
+                )
+                logger.info(
+                    "plot_box_median_iqr_with_trend: removed %d/%d outliers (%.3g, %.3g)",
+                    len(outliers), work.shape[0], lb, ub
+                )
+                work = filtered_df
+            except Exception as e:
+                logger.exception("plot_box_median_iqr_with_trend: outlier filtering failed: %s", e)
 
-    if annotate_r:
-        g.ax.text(
-            r_position[0],
-            r_position[1],
-            r_text_format.format(method_cap=corr_method.capitalize(), corr=corr),
-            transform=g.ax.transAxes,
-            fontsize=r_fontsize,
-            verticalalignment='top',
-            bbox=r_bbox
+        # === Mode A: scatter (lmplot) ===
+        if binning == "none":
+            corr = work[x_col].corr(work[y_col], method=corr_method)
+
+            g = sns.lmplot(
+                data=work,
+                x=x_col,
+                y=y_col,
+                hue=hue,
+                height=height,
+                aspect=aspect,
+                ci=ci,
+                robust=robust,
+                order=order,
+                truncate=truncate,
+                scatter_kws=scatter_kws,
+                line_kws=line_kws,
+                markers=markers,
+                palette=palette,
+                n_boot=1000,
+            )
+
+            if annotate_r:
+                g.ax.text(
+                    r_position[0], r_position[1],
+                    r_text_format.format(method_cap=corr_method.capitalize(), corr=corr),
+                    transform=g.ax.transAxes,
+                    fontsize=r_fontsize,
+                    va="top",
+                    bbox=r_bbox,
+                )
+
+            g.set_axis_labels(xlabel or x_col, ylabel or y_col)
+            g.fig.suptitle(title, fontsize=14, y=1.02)
+            if xlim: g.set(xlim=xlim)
+            if ylim: g.set(ylim=ylim)
+            plt.tight_layout()
+
+            # --- save fig ---
+            if save_path:
+                try:
+                    out_path = Path(save_path)
+                    out_path.parent.mkdir(parents=True, exist_ok=True)
+                    fmt = export_format.lower()
+                    if fmt not in {"svg", "pdf"}:
+                        fmt = "svg"
+                    plt.savefig(
+                        out_path, format=fmt, transparent=True,
+                        bbox_inches="tight", metadata={"Creator": "plot_box_median_iqr_with_trend"}
+                    )
+                    logger.info("Saved figure to %s", out_path)
+                except Exception as e:
+                    logger.exception("plot_box_median_iqr_with_trend: failed to save: %s", e)
+
+            plt.show()
+            return
+
+        # === Mode B: boxplot + regression ===
+        if binning == "fixed":
+            work["_bin"] = pd.cut(work[x_col], bins=n_bins)
+        elif binning == "quantile":
+            work["_bin"] = pd.qcut(work[x_col], q=n_bins, duplicates="drop")
+        else:
+            logger.error("plot_box_median_iqr_with_trend: invalid binning mode %s", binning)
+            return
+
+        bin_centers = work.groupby("_bin", observed=True)[x_col].mean()
+        bin_medians = work.groupby("_bin", observed=True)[y_col].median()
+        corr = work[x_col].corr(work[y_col], method=corr_method)
+
+        plt.figure(figsize=(height * aspect, height))
+        ax = sns.boxplot(
+            data=work,
+            x="_bin", y=y_col,
+            color="#5a7dbf", showfliers=False,
+            boxprops={"facecolor": "#5a7dbf", "alpha": 0.7},
+            whiskerprops={"color": "grey", "linewidth": 2},
+            capprops={"color": "grey", "linewidth": 2},
+            medianprops={"color": "grey", "linewidth": 2},
         )
 
-    g.set_axis_labels(xlabel if xlabel else x_col, ylabel if ylabel else y_col)
-    g.fig.suptitle(title, fontsize=14, y=1.02)
+        if len(bin_centers) >= 2:
+            try:
+                coeffs = np.polyfit(bin_centers.values, bin_medians.values, deg=max(1, order))
+                x_fit = np.linspace(bin_centers.min(), bin_centers.max(), 200)
+                y_fit = np.polyval(coeffs, x_fit)
+                idx_fit = np.interp(x_fit, bin_centers.values, np.arange(len(bin_centers)))
+                ax.plot(idx_fit, y_fit, **line_kws, zorder=3)
+            except Exception as e:
+                logger.exception("plot_box_median_iqr_with_trend: regression fit failed: %s", e)
 
-    if xlim:
-        g.set(xlim=xlim)
-    if ylim:
-        g.set(ylim=ylim)
+        if annotate_r:
+            ax.text(
+                r_position[0], r_position[1],
+                r_text_format.format(method_cap=corr_method.capitalize(), corr=corr),
+                transform=ax.transAxes,
+                fontsize=r_fontsize,
+                va="top",
+                bbox=r_bbox,
+            )
 
-    plt.tight_layout()
-    plt.show()
+        ax.set_title(title, fontsize=14)
+        ax.set_xlabel(xlabel or f"{x_col} (binned)")
+        ax.set_ylabel(ylabel or y_col)
+        ax.legend(loc="best")
+        if ylim: ax.set_ylim(ylim)
+        plt.tight_layout()
+
+        # --- save fig ---
+        if save_path:
+            try:
+                out_path = Path(save_path)
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt not in {"svg", "pdf"}:
+                    fmt = "svg"
+                plt.savefig(
+                    out_path, format=fmt, transparent=True,
+                    bbox_inches="tight", metadata={"Creator": "plot_box_median_iqr_with_trend"}
+                )
+                logger.info("Saved figure to %s", out_path)
+            except Exception as e:
+                logger.exception("plot_box_median_iqr_with_trend: failed to save: %s", e)
+
+        plt.show()
+
+    except Exception as e:
+        logger.exception("plot_box_median_iqr_with_trend failed: %s", e)
+
 
 def plot_heatmap(
     df: pd.DataFrame,
@@ -2165,3 +2268,189 @@ def plot_early_peakers_heatmap(
     except Exception as e:
         logger.exception("Failed to create/save early peakers heatmap: %s", e)
         return None
+
+
+def plot_binned_boxpoints(
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    bins: list[float],
+    x_label: str | None = None,
+    y_label: str | None = None,
+    title: str = "Binned distribution",
+    point_color: str = "black",
+    box_color: str = "lightgray",
+    jitter: float = 0.25,
+    show_counts: bool = True
+) -> None:
+    """
+    Plot values from a DataFrame binned by a column using boxplots with overlaid scatter points.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+        x_col (str): Column name to bin (e.g., cell density).
+        y_col (str): Column name to plot (e.g., event duration).
+        bins (list[float]): Bin edges for grouping x-values.
+        x_label (str | None): Label for x-axis (defaults to x_col if None).
+        y_label (str | None): Label for y-axis (defaults to y_col if None).
+        title (str): Plot title.
+        point_color (str): Color of scatter points.
+        box_color (str): Color of boxplots.
+        jitter (float): Jitter factor for scatter points.
+        show_counts (bool): Whether to annotate the number of points in each bin.
+    """
+    data = df[[x_col, y_col]].dropna().copy()
+    data["bin"] = pd.cut(data[x_col], bins=bins, include_lowest=True)
+
+    # Count per bin
+    counts = data["bin"].value_counts().sort_index()
+
+    plt.figure(figsize=(8, 6))
+
+    # Boxplot
+    sns.boxplot(x="bin", y=y_col, data=data, color=box_color, showfliers=False)
+
+    # Scatter points
+    sns.stripplot(x="bin", y=y_col, data=data, color=point_color, jitter=jitter, size=5)
+
+    # Annotate counts
+    if show_counts:
+        ymax = data[y_col].max()
+        for i, (interval, n) in enumerate(counts.items()):
+            plt.text(i, ymax * 1.02, f"n={n}", ha="center", va="bottom", fontsize=10)
+
+    plt.xlabel(x_label if x_label else x_col)
+    plt.ylabel(y_label if y_label else y_col)
+    plt.title(title)
+    plt.tight_layout()
+    plt.show()
+
+def plot_scatter_with_binned_boxplots(
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    bins: list[float],
+    *,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    title: str | None = None,
+    show_counts: bool = True,
+    show_bin_edges: bool = True,
+    show_bin_means: bool = True,
+    scatter_kwargs: dict[str, any] | None = None,
+    box_kwargs: dict[str, any] | None = None,
+    mean_kwargs: dict[str, any] | None = None,
+    figsize: tuple[float, float] = (9, 6),
+    # --- NEW ---
+    save_path: str | Path | None = None,
+    export_format: str = "svg",
+) -> None:
+    """
+    Plot all (x,y) points on a continuous axis and overlay binned boxplots.
+    Optionally save the figure to SVG or PDF.
+
+    Args:
+        df: DataFrame containing x and y.
+        x_col, y_col: Column names.
+        bins: Bin edges.
+        save_path: If provided, saves the figure to this path.
+        export_format: 'svg' (default) or 'pdf'.
+    """
+    data = df[[x_col, y_col]].dropna().copy()
+    if len(bins) < 2:
+        raise ValueError("`bins` must contain at least two edges.")
+    if not np.all(np.diff(bins) > 0):
+        raise ValueError("`bins` must be strictly increasing.")
+
+    # Defaults
+    scatter_kwargs = {"s": 28, "alpha": 1.0, "edgecolors": "none", "color": "black", "zorder": 3} | (scatter_kwargs or {})
+    box_kwargs = {
+        "patch_artist": True,
+        "showfliers": False,
+        "medianprops": dict(color="black", linewidth=3, alpha=0.5),
+        "boxprops": dict(facecolor="#5a7dbf", edgecolor="black", alpha=0.5),
+        "whiskerprops": dict(color="black", linewidth=1.5, alpha=0.5),
+        "capprops": dict(color="black", linewidth=1.5, alpha=0.5),
+        "zorder": 1,
+    } | (box_kwargs or {})
+    mean_kwargs = {"marker": "o", "linestyle": "-", "linewidth": 1.5, "markersize": 5, "color": "red"} | (mean_kwargs or {})
+
+    # Bin assignment
+    edges = np.asarray(bins, dtype=float)
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    widths = np.diff(edges) * 0.9
+
+    data["__bin"] = pd.cut(data[x_col], bins=edges, include_lowest=True)
+    cats = data["__bin"].cat.categories
+    y_lists = [(data.loc[data["__bin"] == cat, y_col]).tolist() for cat in cats]
+    ns = [len(ys) for ys in y_lists]
+    means = [float(np.mean(ys)) if ys else np.nan for ys in y_lists]
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # 1) Scatter
+    ax.scatter(data[x_col].to_numpy(), data[y_col].to_numpy(), **scatter_kwargs)
+
+    # 2) Boxplots
+    nonempty_mask = [len(ys) > 0 for ys in y_lists]
+    nonempty_positions = [c for c, m in zip(centers, nonempty_mask) if m]
+    nonempty_widths = [w for w, m in zip(widths, nonempty_mask) if m]
+    nonempty_y = [ys for ys, m in zip(y_lists, nonempty_mask) if m]
+
+    if nonempty_y:
+        ax.boxplot(
+            nonempty_y,
+            positions=nonempty_positions,
+            widths=nonempty_widths,
+            manage_ticks=False,
+            **box_kwargs,
+        )
+
+    # 3) Bin means
+    if show_bin_means:
+        ax.plot(centers, means, **mean_kwargs)
+
+    # 4) Counts
+    if show_counts:
+        yvals = data[y_col].to_numpy()
+        ymin, ymax = np.nanmin(yvals), np.nanmax(yvals)
+        y_text = ymax + 0.03 * (ymax - ymin if ymax > ymin else 1.0)
+        for x_pos, n in zip(centers, ns):
+            ax.text(x_pos, y_text, f"n={n}", ha="center", va="bottom", fontsize=9)
+
+    # 5) Bin edges
+    if show_bin_edges:
+        for e in edges:
+            ax.axvline(e, color="#b0b0b0", linewidth=1, linestyle="--", zorder=0)
+
+    # Labels/limits
+    span = edges[-1] - edges[0]
+    ax.set_xlim(edges[0] - 0.02 * span, edges[-1] + 0.02 * span)
+    ax.set_xlabel(x_label or x_col)
+    ax.set_ylabel(y_label or y_col)
+    if title:
+        ax.set_title(title)
+
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    # --- NEW: save figure ---
+    if save_path:
+        try:
+            out_path = Path(save_path)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            fmt = export_format.lower()
+            if fmt not in {"svg", "pdf"}:
+                fmt = "svg"
+            plt.savefig(
+                out_path,
+                format=fmt,
+                transparent=True,
+                bbox_inches="tight",
+                metadata={"Creator": "plot_scatter_with_binned_boxplots"},
+            )
+            print(f"Saved figure to {out_path}")
+        except Exception as e:
+            print(f"Failed to save figure to {save_path}: {e}")
+
+    plt.show()
